@@ -1,5 +1,11 @@
 import type { CmsData } from "@/types/cms";
-import { buildDefaultData, buildDefaultOperations, PRESEEDED_MEDIA_URLS } from "./defaultData";
+import {
+  buildDefaultData,
+  buildDefaultOperations,
+  buildFieldNotes,
+  FIELD_NOTES_CATEGORIES,
+  PRESEEDED_MEDIA_URLS,
+} from "./defaultData";
 import { supabase, isSupabaseConnected } from "./supabase";
 
 // ---------------------------------------------------------------------------
@@ -111,6 +117,32 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
       !m.url && PRESEEDED_MEDIA_URLS[m.id] ? { ...m, url: PRESEEDED_MEDIA_URLS[m.id] } : m,
     );
   }
+
+  // Add the permanent Field Notes guide library once, without overwriting
+  // any owner-authored articles or categories already in the CMS.
+  const savedCategories = Array.isArray(parsed.blogCategories) ? parsed.blogCategories : [];
+  merged.blogCategories = [
+    ...savedCategories,
+    ...FIELD_NOTES_CATEGORIES.filter(
+      (category) => !savedCategories.some((saved) => saved.slug === category.slug),
+    ),
+  ];
+
+  const categoryIdBySlug = new Map(
+    merged.blogCategories.map((category) => [category.slug, category.id]),
+  );
+  const fieldNotes = buildFieldNotes().map((post) => ({
+    ...post,
+    categoryIds: post.categoryIds.map((categoryId) => {
+      const category = FIELD_NOTES_CATEGORIES.find((item) => item.id === categoryId);
+      return category ? categoryIdBySlug.get(category.slug) || categoryId : categoryId;
+    }),
+  }));
+  const savedPosts = Array.isArray(parsed.blogPosts) ? parsed.blogPosts : [];
+  merged.blogPosts = [
+    ...savedPosts,
+    ...fieldNotes.filter((post) => !savedPosts.some((saved) => saved.slug === post.slug)),
+  ];
 
   // Ensure operations block exists (added later in the schema)
   const defaultOps = buildDefaultOperations();
