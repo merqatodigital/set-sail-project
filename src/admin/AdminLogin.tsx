@@ -7,11 +7,15 @@ import { Button, Input } from "@/components/ui";
 
 export default function AdminLogin() {
   const { login, error } = useAuth();
-  const [value, setValue] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(value);
+    setSubmitting(true);
+    await login(email.trim(), password);
+    setSubmitting(false);
   };
 
   return (
@@ -34,21 +38,29 @@ export default function AdminLogin() {
             <Lock className="h-6 w-6 text-[#C6A15B]" strokeWidth={1.5} />
           </div>
           <h1 className="font-serif text-2xl text-[#26221C]">Marina Terrace Admin</h1>
-          <p className="mt-1 text-sm text-[#26221C]/50">Enter your passkey to manage the website.</p>
+          <p className="mt-1 text-sm text-[#26221C]/50">Sign in to manage the website.</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
           <Input
-            type="password"
-            inputMode="numeric"
+            type="email"
             autoFocus
-            placeholder="Enter passkey"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            className="text-center text-lg tracking-[0.3em]"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+          />
+          <Input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
           />
           {error && <p className="text-center text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" size="lg">Unlock Dashboard</Button>
+          <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+            {submitting ? "Signing in…" : "Sign in"}
+          </Button>
         </form>
 
         <div className="mt-6 text-center">
