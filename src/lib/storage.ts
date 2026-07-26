@@ -234,62 +234,9 @@ export async function resetCms(): Promise<CmsData> {
 }
 
 // ---------------------------------------------------------------------------
-// Auth (temporary passkey)
+// Auth now lives entirely in src/context/AuthContext.tsx via real Supabase
+// Auth (supabase.auth.*). The previous client-side passkey (compared in the
+// browser, with a public default committed to this repo) has been removed —
+// see the admin_auth_and_rls_lockdown migration for the corresponding
+// Postgres-side lockdown.
 // ---------------------------------------------------------------------------
-// This is intentionally simple: a passkey stored in localStorage compared on
-// the client. It exists so the owner can access /admin today without any
-// backend. To upgrade to Supabase Auth later:
-//   1. Replace `checkPasskey` with `supabase.auth.signInWithPassword(...)`
-//   2. Replace `isAdminAuthed` with a Supabase session check
-//   3. Keep the same `AuthContext` shape so no UI changes are required.
-// ---------------------------------------------------------------------------
-
-const PASSKEY_STORAGE_KEY = "marina-terrace-admin-passkey";
-const SESSION_KEY = "marina-terrace-admin-session";
-const ATTEMPT_KEY = "marina-terrace-admin-attempts";
-const LOCKOUT_KEY = "marina-terrace-admin-lockout-until";
-export const DEFAULT_PASSKEY = "5309";
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
-
-export function getStoredPasskey(): string {
-  return window.localStorage.getItem(PASSKEY_STORAGE_KEY) || DEFAULT_PASSKEY;
-}
-
-export function setStoredPasskey(passkey: string) {
-  window.localStorage.setItem(PASSKEY_STORAGE_KEY, passkey);
-}
-
-export function getRemainingLockoutMs(): number {
-  const until = Number(window.localStorage.getItem(LOCKOUT_KEY) || 0);
-  return Math.max(0, until - Date.now());
-}
-
-export function clearAuthLockout() {
-  window.localStorage.removeItem(ATTEMPT_KEY);
-  window.localStorage.removeItem(LOCKOUT_KEY);
-}
-
-export function registerFailedAttempt(): number {
-  const nextAttempts = Number(window.localStorage.getItem(ATTEMPT_KEY) || 0) + 1;
-  window.localStorage.setItem(ATTEMPT_KEY, String(nextAttempts));
-  if (nextAttempts >= MAX_ATTEMPTS) {
-    window.localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS));
-    window.localStorage.setItem(ATTEMPT_KEY, "0");
-    return LOCKOUT_MS;
-  }
-  return 0;
-}
-
-export function checkPasskey(input: string): boolean {
-  return input.trim() === getStoredPasskey();
-}
-
-export function setAdminSession(active: boolean) {
-  if (active) window.sessionStorage.setItem(SESSION_KEY, "1");
-  else window.sessionStorage.removeItem(SESSION_KEY);
-}
-
-export function isAdminAuthed(): boolean {
-  return window.sessionStorage.getItem(SESSION_KEY) === "1";
-}

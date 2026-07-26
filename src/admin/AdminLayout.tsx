@@ -110,8 +110,8 @@ export default function AdminLayout() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     // Send the user back to the public homepage on sign-out so they're not
     // stranded on the login screen with no way to return to the main site.
     navigate("/", { replace: true });

@@ -131,12 +131,38 @@ both the edge function and the direct-key path retry that same model without
 tools before moving to the next one in the fallback chain — so an
 unsupported model degrades to plain chat instead of failing outright.
 
-## `tala_leads` — a note on who can read it
+## Admin access — real Supabase Auth (as of the `admin_auth_and_rls_lockdown` migration)
 
-Like `cms_data`, this table's SELECT policy is open to `anon` — the admin
-panel authenticates with a local passkey, not Supabase Auth, so there's no
-real session-based way to restrict it to "admin only" yet. INSERT is open too
-(TALA needs to write from a visitor's browser) but UPDATE/DELETE are not
-granted to `anon`, so a visitor can only ever add a lead, never alter or wipe
-one. Worth tightening with real Supabase Auth before this handles anything
-more sensitive than "someone's name and a WhatsApp number."
+The admin panel used to gate `/admin` with a passkey compared in the browser
+(default `5309`, committed in plain text to this repo). Postgres never saw
+that check, so every admin write reached Supabase as the same `anon` role as
+any site visitor — and `cms_data` (site content **and** all operations data:
+bookings, payroll, revenue) was `anon`-writable with no restriction at all.
+
+This is now real Supabase email/password auth (`src/context/AuthContext.tsx`),
+checked against a `user_roles` table via `has_role(auth.uid(), 'admin')` in
+RLS policies. `cms_data` writes, and reads of `tala_leads` / `tala_audit_log`
+/ `tala_goals` / `tala_tasks` / `tala_briefings` / `tala_wins`, now require an
+authenticated admin session. Guests can still submit a lead
+(`tala_leads` INSERT) and TALA can still log a turn (`tala_audit_log`
+INSERT) anonymously from the public chat widget — those stay open by design.
+
+**To create the first admin user**, after the migration is applied and the
+app is deployed with this AuthContext:
+
+1. Supabase Dashboard → Authentication → Users → Add user (email + password).
+2. Copy that user's UID.
+3. SQL Editor:
+   ```sql
+   insert into public.user_roles (user_id, role)
+   values ('<uid>', 'admin');
+   ```
+4. Reload `/admin` and sign in with that email/password.
+
+**Known follow-up, not fixed here:** operations data (bookings, payroll,
+revenue) still lives inside the same public-`SELECT`-able `cms_data` JSON
+blob as site content, because splitting it into a separate admin-only table
+is a larger schema change than an RLS-policy fix. Anyone with the public
+anon key can still *read* that data even though they can no longer *write*
+it. Splitting operations into their own tables (mirroring the BAIA repo's
+`resorts`/`booking_leads` pattern) is the right next step.

@@ -32,8 +32,9 @@ import PaymentsManager from "./pages/PaymentsManager";
 import RentalsManager from "./pages/RentalsManager";
 
 export default function AdminApp() {
-  const { isAuthed } = useAuth();
+  const { isAuthed, loading } = useAuth();
 
+  if (loading) return null;
   if (!isAuthed) return <AdminLogin />;
 
   return (
