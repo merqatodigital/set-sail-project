@@ -38,6 +38,12 @@ export const PLACEHOLDER_MEDIA = [
   { id: "img_og", label: "Open Graph Cover", folder: "SEO" },
 ];
 
+export const FIELD_NOTES_CATEGORIES: CmsData["blogCategories"] = [];
+
+export function buildFieldNotes(): CmsData["blogPosts"] {
+  return [];
+}
+
 export function buildDefaultMedia(): CmsData["media"] {
   return PLACEHOLDER_MEDIA.map((m) => ({
     id: m.id,
