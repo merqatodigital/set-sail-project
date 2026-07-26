@@ -1,4 +1,164 @@
-Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊n6›:-jZ.∂õ≠ñ)ﬁ≥Vñ◊˜'BGóR≤&∆ˆt6FVv˜'í¬&∆ˆu˜7B¬6◊4FF“g&ˆ“$˜GóW2ˆ6◊2#∞†¶6ˆÁ7BVñB“á¢7G&ñÊrí”‚G∑’ÚG¥÷FÇÁ&ÊFˆ“ÇíÁFı7G&ñÊrÉ3bíÁ6∆ñ6RÉ"¬íó÷∞†¢ÚÚ∆6VÜˆ∆FW"&÷VFñ"VÁG&ñW2‚&V¬Ü˜Fˆw&áívñ∆¬&W∆6RFÜW6R∆FW"(	@¢ÚÚV6ÇÜ2FW67&óFófR∆&V¬6ÚFÜR˜vÊW"∂Ê˜w2WÜ7F«ívÜBFÚW∆ˆB‡¢ÚÚ&R◊6VVFVBFVfV«Bñ÷vW2FÜB6ÜóvóFÇFÜR6óFR‚FÜW6R&R∆6VBñ‡¢ÚÚ˜V&∆ñ2ˆñ÷vW26ÚFÜWí∆ˆBvóFÇ¶W&Ú6ˆÊfñwW&Fñˆ„≤˜vÊW'26‚&W∆6P¢ÚÚÁíˆbFÜV“g&ˆ“FÜRF÷ñ‚÷VFñ∆ñ'&'í‡¶Wá˜'B6ˆÁ7B$U4TTDTEÙ‘TDîıU$≈3¢&V6˜&C«7G&ñÊr¬7G&ñÊs‚“∞¢ñ÷uˆÜW&Û¢"ˆñ÷vW2ˆÜW&Ú◊&ˆˆgF˜Êßr"¿¢ñ÷u˜v˜&∑76S¢"ˆñ÷vW2˜&ˆˆgF˜◊v˜&∑76RÊßr"¿¢ñ÷uˆ&VG&ˆˆ”¢"ˆñ÷vW2˜&ˆˆ“◊VÊÚ÷÷ñ‚Êßr"¿¢ñ÷uˆ∆ófñÊs¢"ˆñ÷vW2˜&ˆˆ“◊VÊÚ÷FWFñ«2Êßr"¿¢ñ÷uˆ&Fá&ˆˆ”¢"ˆñ÷vW2˜&ˆˆ“◊VÊÚ÷&VBÊßr"¿¢ñ÷uˆ&∆6ˆÁì¢"ˆñ÷vW2˜&ˆˆ“÷GVR÷÷ñ‚Êßr"¿¢ñ÷uˆ6ˆ÷◊VÊóGì¢"ˆñ÷vW2˜&ˆˆ“◊G&R÷÷ñ‚Êßr"¿¢ñ÷uˆGVUˆ÷ñÊñ&#¢"ˆñ÷vW2˜&ˆˆ“÷GVR÷÷ñÊñ&"Êßr"¿ß”∞†¶Wá˜'B6ˆÁ7Bƒ4TÑÙƒDU%Ù‘TDî“∞¢≤ñC¢&ñ÷uˆÜW&Ú"¬∆&V√¢$ÜW&Úñ÷vR"¬fˆ∆FW#¢$Üˆ÷WvR"“¿¢≤ñC¢&ñ÷u˜v˜&∑76R"¬∆&V√¢%&ˆˆgF˜v˜&∑76R"¬fˆ∆FW#¢%v˜&∑76R"“¿¢≤ñC¢&ñ÷uˆˆ6V‚"¬∆&V√¢$ˆ6V‚fñWr"¬fˆ∆FW#¢%v˜&∑76R"“¿¢≤ñC¢&ñ÷uˆ∂óF6ÜV‚"¬∆&V√¢$wVW7B∂óF6ÜV‚"¬fˆ∆FW#¢$∂óF6ÜV‚"“¿¢≤ñC¢&ñ÷u˜7VÁ6WB"¬∆&V√¢%7VÁ6WBv˜&∑76R"¬fˆ∆FW#¢%v˜&∑76R"“¿¢≤ñC¢&ñ÷uˆ&VG&ˆˆ“"¬∆&V√¢$&VG&ˆˆ“"¬fˆ∆FW#¢%7Fí"“¿¢≤ñC¢&ñ÷uˆ∆ófñÊr"¬∆&V√¢$∆ófñÊr&ˆˆ“"¬fˆ∆FW#¢%7Fí"“¿¢≤ñC¢&ñ÷uˆ&Fá&ˆˆ“"¬∆&V√¢$&Fá&ˆˆ“"¬fˆ∆FW#¢%7Fí"“¿¢≤ñC¢&ñ÷uˆ&∆6ˆÁí"¬∆&V√¢$&∆6ˆÁí"¬fˆ∆FW#¢%7Fí"“¿¢≤ñC¢&ñ÷uˆ6ˆ÷◊VÊóGí"¬∆&V√¢$6ˆ÷◊VÊóGí"¬fˆ∆FW#¢$Üˆ÷WvR"“¿¢≤ñC¢&ñ÷u˜FW7Fñ÷ˆÊñ≈Û"¬∆&V√¢$wVW7B˜'G&óB(	B&ñ"¬fˆ∆FW#¢%FW7Fñ÷ˆÊñ«2"“¿¢≤ñC¢&ñ÷u˜FW7Fñ÷ˆÊñ≈Û""¬∆&V√¢$wVW7B˜'G&óB(	BÊˆÇ"¬fˆ∆FW#¢%FW7Fñ÷ˆÊñ«2"“¿¢≤ñC¢&ñ÷u˜FW7Fñ÷ˆÊñ≈Û2"¬∆&V√¢$wVW7B˜'G&óB(	B∆ñV‚"¬fˆ∆FW#¢%FW7Fñ÷ˆÊñ«2"“¿¢≤ñC¢&ñ÷uˆ&∆ˆuÛ"¬∆&V√¢$&∆ˆr(	BFñvóF¬Êˆ÷BwVñFR"¬fˆ∆FW#¢$&∆ˆr"“¿¢≤ñC¢&ñ÷uˆ&∆ˆuÛ""¬∆&V√¢$&∆ˆr(	B∆v‚G&fV¬"¬fˆ∆FW#¢$&∆ˆr"“¿¢≤ñC¢&ñ÷uˆ&∆ˆuÛ2"¬∆&V√¢$&∆ˆr(	B&V÷˜FRv˜&≤Fó2"¬fˆ∆FW#¢$&∆ˆr"“¿¢≤ñC¢&ñ÷uˆˆr"¬∆&V√¢$˜V‚w&Ç6˜fW""¬fˆ∆FW#¢%4TÚ"“¿•”∞†¶Wá˜'BgVÊ7Fñˆ‚'Vñ∆DFVfV«D÷VFñÇì¢6◊4FF≤&÷VFñ%“∞¢&WGW&‚ƒ4TÑÙƒDU%Ù‘TDîÊ÷ÇÜ“í”‚á∞¢ñC¢“ÊñB¿¢Ê÷S¢“Ê∆&V¬¿¢W&√¢$U4TTDTEÙ‘TDîıU$≈5∂“ÊñE“«¬""¿¢GóS¢&ñ÷vR"26ˆÁ7B¿¢fˆ∆FW#¢“Êfˆ∆FW"¿¢7&VFVDC¢ÊWrFFRÇíÁFÙï4ı7G&ñÊrÇí¿¢6ó¶S¢¿¢∆&V√¢“Ê∆&V¬¿¢“íì∞ß–†¢ÚÚFÜW6R&RFÜRW&÷ÊVÁB¬W6VgV¬vW2FÜBvófR÷&ñÊFW'&6RˆñÁBˆ`¢ÚÚfñWr‚FÜWíFV∆ñ&W&FV«í&VB2fó'7B÷ÜÊBfñV∆BÊ˜FW2¬Ê˜B4TÚfñ∆∆W"‡¢ÚÚ7F&∆RîG2ÊB6«Vw2∆WBFÜR7F˜&vR÷ñw&Fñˆ‚FBFÜV“FÚWÜó7FñÊr4’2FF¢ÚÚvóFÜ˜WBGW∆ñ6FñÊrFÜV“ˆ‚WfW'ífó6óB‡¶Wá˜'B6ˆÁ7BdîTƒEÙ‰ıDU5Ù4DTtı$îU3¢&∆ˆt6FVv˜'ïµ““∞¢≤ñC¢&6E˜&V÷˜FUˆ∆ñfR"¬Ê÷S¢%&V÷˜FR∆ñfR"¬6«Vs¢'&V÷˜FR÷∆ñfR"“¿¢≤ñC¢&6E˜6Â˜fñ6VÁFR"¬Ê÷S¢%6‚fñ6VÁFR"¬6«Vs¢'6‚◊fñ6VÁFR"“¿¢≤ñC¢&6Eˆ6ˆ÷◊VÊóGí"¬Ê÷S¢$6ˆ÷◊VÊóGí"¬6«Vs¢&6ˆ÷◊VÊóGí"“¿•”∞†¶Wá˜'BgVÊ7Fñˆ‚'Vñ∆DfñV∆DÊ˜FW2ÜÊ˜r“ÊWrFFRÇíÁFÙï4ı7G&ñÊrÇíì¢&∆ˆu˜7Eµ“∞¢&WGW&‚∞¢∞¢ñC¢&fñV∆EˆÊ˜FUˆ'Vñ∆FñÊuˆ6ˆ÷◊VÊóGí"¿¢FóF∆S¢%váív^(	ó&R'Vñ∆FñÊr&V÷˜FR’v˜&≤6ˆ÷◊VÊóGíñ‚6‚fñ6VÁFR"¿¢6«Vs¢&'Vñ∆FñÊr÷◊&V÷˜FR◊v˜&≤÷6ˆ÷◊VÊóGí÷ñ‚◊6‚◊fñ6VÁFR"¿¢WÜ6W'C†¢$÷&ñÊFW'&6Ró2÷˜&RFÜ‚∆6RFÚ6∆VW&WGvVV‚ó6∆ÊB÷Ü˜ñÊrG&ó2‚óBó2FÜRfó'7BÜˆ÷R&6Rf˜"6∆˜vW"¬÷˜&R6ˆÊÊV7FVBvíFÚ∆ófRÊBv˜&≤ñ‚∆v‚‚"¿¢6ˆÁFVÁC¢«Â6‚fñ6VÁFRFˆW2Ê˜BÊVVBFÚ&V6ˆ÷RÊ˜FÜW"7&˜vFVBFñvóF¬÷Êˆ÷BFW7FñÊFñˆ‚‚FÜRˆñÁBó2Ê˜BFÚfñ∆¬WfW'í&ˆˆ“¬GW&‚WfW'í6l:íñÁFÚ6˜v˜&∂ñÊr76R¬˜"ñ◊˜'BFÜR6÷R∆ñfW7Gñ∆RFÜBÜ2«&VGí6ÜÊvVB∆6W2∆ñ∂R6ÊvwRÊB'G2ˆbV¬ÊñFÚ„¬˜‡£«ÂFÜRˆñÁBó2FÚ7&VFR6÷∆¬¬FÜ˜VváFgV¬6ˆ÷◊VÊóGíf˜"V˜∆RvÜÚvÁBVÊ˜VvÇñÊg&7G'V7GW&RFÚFÚ÷VÊñÊvgV¬v˜&≤¬VÊ˜VvÇVñWBFÚFÜñÊ≤¬ÊB&V¬&V∆FñˆÁ6ÜóvóFÇFÜR∆6RvÜW&RFÜWí&R7FññÊr„¬˜‡£∆É#‰÷&ñÊFW'&6Ró2FÜR7F'FñÊrˆñÁC¬ˆÉ#‡£«ÂvR&R'Vñ∆FñÊr&6Rf˜"&V÷˜FRv˜&∂W'2¬ñÊFWVÊFVÁB7&VF˜'2¬6˜W∆W2¬fñ∆óñÊÚg&VV∆Ê6W'2¬f˜VÊFW'2ÊBV˜∆Rñ‚G&Á6óFñˆ‚‚6ˆ÷R÷í7Fíf˜"vVV≤‚˜FÜW'2÷í7Fíf˜"÷ˆÁFÇ˜"∆ˆÊvW"‚vÜB6ˆÊÊV7G2FÜV“ó2Ê˜B¶ˆ"FóF∆S≤óBó2FÜRFW6ó&RFÚv˜&≤vV∆¬ÊB∆ófR÷˜&RFV∆ñ&W&FV«í„¬˜‡£«ÂFÜR&ˆˆgF˜v˜&∑76R¬∆ˆÊr◊7Fí&ˆˆ◊2ÊB6Ü&VB∂óF6ÜV‚&RFÜRáó6ñ6¬7F'FñÊrˆñÁG2‚FÜR∆&vW"ñFVó26ˆ÷◊VÊóGíFÜB÷∂W2óBV6ñW"FÚ'&ófR∆ˆÊR¬∆V&‚g&ˆ“FÜRV˜∆R«&VGíÜW&R¬÷VWB6ˆ∆∆&˜&F˜'2¬ÊBF∂R'Bñ‚6‚fñ6VÁFR&W7V7FgV∆«í„¬˜‡£∆É#ÂvÜBvR÷V‚'í6ˆ÷◊VÊóGì¬ˆÉ#‡£«V√„∆∆ìÂVñWB¬6ˆÁ6ñFW&FRv˜&∂ñÊrÜ˜W'2ÊB6Ü&VB&W7V7Bf˜"fˆ7W2„¬ˆ∆ì„∆∆ìÂ6ñ◊∆RFñÊÊW'2¬7VÁ6WB6ˆÁfW'6FñˆÁ2ÊBñÁG&ˆGV7FñˆÁ2&WGvVV‚V˜∆RFˆñÊrñÁFW&W7FñÊrv˜&≤„¬ˆ∆ì„∆∆ìÂ&7Fñ6¬∆ˆ6¬∂Ê˜v∆VFvR6Ü&VBÜˆÊW7F«ì¢G&Á7˜'B¬vVFÜW"¬6ˆÊÊV7FófóGíÊBWfW'ñFí&˜WFñÊW2„¬ˆ∆ì„∆∆ì‰WfVÁG2ÊB&ˆ¶V7G2FÜBñÊ6«VFR∆ˆ6¬V˜∆RñÁ7FVBˆbG&VFñÊr6‚fñ6VÁFR2&6∂G&˜„¬ˆ∆ì„∆∆ì‰6÷∆∆W"fˆ˜G&ñÁC¢∆ˆÊvW"7Fó2¬fWvW"'W6ÜVBóFñÊW&&ñW2ÊB÷˜&R6&Rf˜"FÜR∆6RÜ˜7FñÊrW2„¬ˆ∆ì„¬˜V√‡£∆É#ÂvÜÚFÜó2ó2f˜#¬ˆÉ#‡£«ÂFÜó2ó2f˜"V˜∆RvÜÚFÚÊ˜BÊVVB'GíÜ˜7FV¬˜"6˜'˜&FR6˜v˜&∂ñÊrf7F˜'í‚óBó2f˜"V˜∆RvÜÚvÁBv˜&∂ñÊr&6RvóFÇ6Ü&7FW#¢VÊ˜VvÇ6ˆÊÊV7Fñˆ‚¬VÊ˜VvÇ6∆“¬ÊBV˜∆RÊV&'ívÜV‚FÜWívÁBFÚ6Ü&R÷V¬¬&ˆ¶V7B˜"vˆˆB∆ˆ6¬&V6ˆ÷÷VÊFFñˆ‚„¬˜‡£«‰ñbFÜB6˜VÊG2∆ñ∂Rñ˜R¬fˆ∆∆˜rFÜRfñV∆BÊ˜FW2¬6≤VW7FñˆÁ2¬ÊBFV∆¬W2vÜBñ˜RÊVVBFÚv˜&≤ÊB∆ófRvV∆¬ñ‚6‚fñ6VÁFR‚vR&R'Vñ∆FñÊrFÜó2vóFÇFÜRV˜∆RvÜÚ6Üˆ˜6RFÚ7VÊBFñ÷RÜW&R„¬˜Ê¿¢fVGW&VDñ÷vTñC¢&ñ÷uˆ6ˆ÷◊VÊóGí"¿¢ñ÷vW3¢≤&ñ÷uˆ6ˆ÷◊VÊóGí%“¿¢6FVv˜'îñG3¢≤&6Eˆ6ˆ÷◊VÊóGí"¬&6E˜6Â˜fñ6VÁFR%“¿¢Fw3¢≤'6‚fñ6VÁFR"¬&6ˆ÷◊VÊóGí"¬'&V÷˜FRv˜&≤"¬'∆v‚%“¿¢7FGW3¢'V&∆ó6ÜVB"¿¢V&∆ó6ÑC¢###b”r”#eCÉ££„¢"¿¢6VıFóF∆S¢$'Vñ∆FñÊr&V÷˜FR’v˜&≤6ˆ÷◊VÊóGíñ‚6‚fñ6VÁFR¬∆v‚¬÷&ñÊFW'&6R"¿¢6VÙFW67&óFñˆ„†¢%váí÷&ñÊFW'&6Ró2'Vñ∆FñÊr6∆˜vW"¬÷˜&R6ˆÊÊV7FVB&V÷˜FR◊v˜&≤6ˆ÷◊VÊóGíñ‚6‚fñ6VÁFR¬∆v‚‚"¿¢7&VFVDC¢Ê˜r¿¢WFFVDC¢Ê˜r¿¢“¿¢∞¢ñC¢&fñV∆EˆÊ˜FU˜&V÷˜FU˜v˜&µˆ6ÜV6∂∆ó7B"¿¢FóF∆S¢$&Vf˜&Rñ˜Rv˜&≤g&ˆ“Üñ∆óñÊRó6∆ÊC¢&V¬6ÜV6∂∆ó7B"¿¢6«Vs¢'&V÷˜FR◊v˜&≤◊Üñ∆óñÊR÷ó6∆ÊB÷6ÜV6∂∆ó7B"¿¢WÜ6W'C†¢$&V6ÇfñWró2Ê˜B&V÷˜FR◊v˜&≤6WGW‚ÜW&Ró2vÜBFÚfW&ñgí&Vf˜&R6Üˆ˜6ñÊrÁíó6∆ÊB&6Rñ‚FÜRÜñ∆óñÊW2‚"¿¢6ˆÁFVÁC¢«‰&VWFñgV¬&ˆˆ“ÊBví‘fí7ñ÷&ˆ¬ˆ‚&ˆˆ∂ñÊr6óFR&RÊ˜BVÊ˜VvÇvÜV‚ñ˜RÜfR6∆ñVÁB6∆¬¬FVF∆ñÊR˜"FV“vóFñÊrñ‚Ê˜FÜW"Fñ÷R¶ˆÊR‚ó6∆ÊBv˜&≤6‚&RWáG&˜&FñÊ'í¬'WBóBv˜&∑2&W7BvÜV‚ñ˜R∆‚f˜"FÜR&7Fñ6¬FWFñ«2&Vf˜&Rñ˜R'&ófR„¬˜‡£∆É#‰6≤f˜"7W'&VÁB6ˆÊÊV7FófóGí&ˆˆc¬ˆÉ#‡£«‰FÚÊ˜B&V«íˆ‚‚ˆ∆B&WfñWr˜"vVÊW&ñ2&ˆ÷ó6Rˆb(	∆f7Bví‘fíÓ(	“6≤vÜW&RFÜR6ˆÊÊV7Fñˆ‚6ˆ÷W2g&ˆ“¬vÜWFÜW"óB&V6ÜW2FÜR&ˆˆ“ÊBv˜&∑76R¬ÊBvÜB&6∑WWÜó7G2vÜV‚&˜fñFW"˜"˜vW"6˜W&6RÜ2&ˆ&∆V“‚&V6VÁB7VVBFW7Bó2W6VgV¬¬'WB6Úó2‚ÜˆÊW7BÁ7vW"&˜WBfñFVÚ6∆«2¬W∆ˆG2ÊB'W7íÜ˜W'2„¬˜‡£∆É#ÂVÊFW'7FÊBFÜR˜vW"∆„¬ˆÉ#‡£«Â˜vW"ñÁFW''WFñˆÁ26‚ÜV‚ñ‚÷Áíó6∆ÊBF˜vÁ2‚6≤vÜWFÜW"FÜR66ˆ÷÷ˆFFñˆ‚Ü2&6∑W˜vW"¬vÜBóB6˜fW'2¬ÊBvÜWFÜW"FÜRñÁFW&ÊWB&V÷ñÁ2W6&∆RGW&ñÊr‚˜WFvR‚ñbñ˜W"v˜&≤ó2Fñ÷R◊6VÁ6óFófR¬G&fV¬vóFÇ6Ü&vVB˜vW"&Ê≤ÊB∂VW∆ˆ6¬÷ˆ&ñ∆R÷FF˜Fñˆ‚&VGí„¬˜‡£∆É#‰6ÜV6≤FÜRv˜&∑76R¬Ê˜BßW7BFÜR&VG&ˆˆ”¬ˆÉ#‡£«‰vˆˆB∆ˆÊr◊7Fí&6RÜ26ˆ÷WvÜW&Rñ˜R6‚6óB6ˆ÷f˜'F&«íf˜"fWrÜ˜W'2¬F∂R6∆¬vóFÜ˜WBFó7GW&&ñÊr˜FÜW'2¬6Ü&vRFWfñ6W2ÊBW66RÜVB˜"v∆&RvÜV‚ÊVVFVB‚FW6≤ñ‚∆ó7FñÊrÜ˜FÚó27F'C≤6ˆÁ6ñFW&VBv˜&∑76RÊB6∆“v˜&≤7V«GW&R&R&WGFW"„¬˜‡£∆É#ÂFÜñÊ≤&˜WBFÜR&áóFÜ“ˆb∆ˆÊvW"7Fì¬ˆÉ#‡£«V√„∆∆ìÂvÜW&Rvñ∆¬ñ˜R'Wíw&ˆ6W&ñW2ÊBG&ñÊ∂ñÊrvFW#Û¬ˆ∆ì„∆∆ì‰6‚ñ˜R6ˆˆ≤¬FÚ∆VÊG'íÊB∂VWÊ˜&÷¬&˜WFñÊSÛ¬ˆ∆ì„∆∆ì‰Ü˜rvñ∆¬ñ˜RvWB&˜VÊBvóFÜ˜WBGW&ÊñÊrWfW'íW'&ÊBñÁFÚ÷¶˜"G&óÛ¬ˆ∆ì„∆∆ìÂvÜW&R6‚ñ˜R7VÊBVñWBWfVÊñÊrgFW"v˜&≥Û¬ˆ∆ì„∆∆ìÂvÜÚ6‚ñ˜R6≤f˜"&7Fñ6¬∆ˆ6¬ÜV«vÜV‚∆Á26ÜÊvSÛ¬ˆ∆ì„¬˜V√‡£∆É#‰6Üˆ˜6RÜˆÊW7Gí˜fW"W&fV7Fñˆ„¬ˆÉ#‡£«‰ÊÚó6∆ÊB&6Ró2W&fV7BWfW'íFí‚FÜR&ñváB∆6Ró2FÜRˆÊRFÜBFV∆«2ñ˜RFÜRG'WFÇ&˜WBóG26WGW¬Ü2v˜&∂&∆R&6∑W∆‚¬ÊBvófW2ñ˜RVÊ˜VvÇ7W˜'BFÚ∂VWFˆñÊrvˆˆBv˜&≤vÜñ∆Rñ˜RVÊ¶˜í&VñÊr6ˆ÷WvÜW&RFñffW&VÁB„¬˜Ê¿¢fVGW&VDñ÷vTñC¢&ñ÷u˜v˜&∑76R"¿¢ñ÷vW3¢≤&ñ÷u˜v˜&∑76R%“¿¢6FVv˜'îñG3¢≤&6E˜&V÷˜FUˆ∆ñfR%“¿¢Fw3¢≤'&V÷˜FRv˜&≤"¬'vñfí"¬&ó6∆ÊB∆ñfR"¬&∆ˆÊr7Fí%“¿¢7FGW3¢'V&∆ó6ÜVB"¿¢V&∆ó6ÑC¢###b”r”#UCÉ££„¢"¿¢6VıFóF∆S¢%&V÷˜FRv˜&≤g&ˆ“Üñ∆óñÊRó6∆ÊC¢vÜBFÚ6ÜV6≤fó'7B¬÷&ñÊFW'&6R"¿¢6VÙFW67&óFñˆ„†¢$&7Fñ6¬6ÜV6∂∆ó7Bf˜"&V÷˜FRv˜&∂W'26Üˆ˜6ñÊr‚ó6∆ÊB&6Rñ‚FÜRÜñ∆óñÊW3¢6ˆÊÊV7FófóGí¬˜vW"¬v˜&∑76RÊBFñ«í∆ñfR‚"¿¢7&VFVDC¢Ê˜r¿¢WFFVDC¢Ê˜r¿¢“¿¢∞¢ñC¢&fñV∆EˆÊ˜FU˜6Â˜fñ6VÁFUˆ˜%ˆV≈ˆÊñFÚ"¿¢FóF∆S¢%6‚fñ6VÁFR˜"V¬ÊñFÛÚ6Üˆ˜6ñÊrFÜR&ñváB∆v‚&6Rf˜"∆ˆÊvW"7Fí"¿¢6«Vs¢'6‚◊fñ6VÁFR÷˜"÷V¬÷ÊñFÚ÷f˜"÷÷∆ˆÊvW"◊7Fí"¿¢WÜ6W'C†¢%FÜWí&R&˜FÇñ‚Ê˜'FÜW&‚∆v‚¬'WBFÜWíˆffW"fW'íFñffW&VÁB&áóFÜ◊2‚FÜR&WGFW"6Üˆñ6RFWVÊG2ˆ‚Ü˜rñ˜RvÁBFÚ∆ófR&WGvVV‚v˜&∂Fó2‚"¿¢6ˆÁFVÁC¢«ÂFÜW&Ró2ÊÚVÊófW'6¬(	∆&W7N(	“∆v‚&6R‚V¬ÊñFÚÊB6‚fñ6VÁFRˆffW"FñffW&VÁBWáW&ñVÊ6W2¬ÊB6Üˆ˜6ñÊrvV∆¬ó2∆W72&˜WB&Ê∂ñÊrFÜ‚&˜WBVÊFW'7FÊFñÊrvÜB∂ñÊBˆbFó2ñ˜RvÁBFÚÜfR„¬˜‡£∆É#‰6Üˆ˜6RV¬ÊñFÚvÜV‚ñ˜RvÁB÷˜fV÷VÁC¬ˆÉ#‡£«‰V¬ÊñFÚÜ2&ñvvW"6ˆÊ6VÁG&Fñˆ‚ˆb&W7FW&ÁG2¬F˜W'2¬fó6óF˜'2ÊBG&fV¬VÊW&wí‚óB6‚&Rw&VB6Üˆñ6RvÜV‚ñ˜W"&ñ˜&óGíó2÷VWFñÊr∆˜G2ˆbG&fV∆∆W'2Vñ6∂«í¬&VñÊr6∆˜6RFÚFVÁ6RF˜W&ó6“66VÊRÊB6∂ñÊr6Ü˜'BG&ó2ñÁFÚ∆ñ÷óFVBFñ÷R„¬˜‡£∆É#‰6Üˆ˜6R6‚fñ6VÁFRvÜV‚ñ˜RvÁB&6S¬ˆÉ#‡£«Â6‚fñ6VÁFRó2&WGFW"7VóFVBFÚ6∆˜vW"&áóFÜ“‚óBvófW2ñ˜R&ˆˆ“FÚ÷∂R&˜WFñÊW3¢÷˜&ÊñÊrv˜&≤6W76ñˆ‚¬‚gFW&Êˆˆ‚7vñ“¬&VwV∆"∆6RFÚVB¬f÷ñ∆ñ"f6W2ÊBFñ÷RFÚvWB&WñˆÊBFÜRfó'7B÷FíÜñvÜ∆ñváG2‚óBó2W6VgV¬fóBf˜"V˜∆RvÜÚ&R7FññÊr∆ˆÊrVÊ˜VvÇFÚ6&R&˜WBÜ˜r∆6RfVV«2ˆ‚‚˜&FñÊ'íGVW6Fí„¬˜‡£∆É#ÂVW7FñˆÁ2v˜'FÇ6∂ñÊrñ˜W'6V∆c¬ˆÉ#‡£«V√„∆∆ì‰“íF∂ñÊrÜˆ∆ñFívóFÇ∆óGF∆Rv˜&≤¬˜"∆ófñÊr6ˆ÷WvÜW&RvÜñ∆Rív˜&≥Û¬ˆ∆ì„∆∆ì‰FÚívÁB'W7íF˜W&ó6“áV"˜"VñWFW"Fñ«í&áóFÜ”Û¬ˆ∆ì„∆∆ìÂvñ∆¬í&R6ˆ÷f˜'F&∆R'&ÊvñÊr&7Fñ6¬FÜñÊw27V6Ç2w&ˆ6W&ñW2¬G&Á7˜'BÊBv˜&∑76SÛ¬ˆ∆ì„∆∆ì‰FÚívÁB6ˆÁ7FÁBÊWrV˜∆R¬˜"6÷∆∆W"w&˜Wí÷í6VR÷˜&RFÜ‚ˆÊ6SÛ¬ˆ∆ì„∆∆ìÂvÜB6ˆÊÊV7FófóGíÊB˜vW"&6∑WFˆW2◊í7V6ñfñ266ˆ÷÷ˆFFñˆ‚&˜fñFSÛ¬ˆ∆ì„¬˜V√‡£∆É#ÂFÜR&7Fñ6¬Á7vW#¬ˆÉ#‡£«‰÷ÁíV˜∆R6‚VÊ¶˜í&˜FÇ‚7F'BvóFÇFÜR∆6RFÜBfóG2ñ˜W"v˜&∂ñÊrvVV≤¬FÜV‚G&fV¬ˆ‚ñ˜W"g&VRFó2‚ñbñ˜W"&ñ˜&óGíó26WGF∆ñÊrñÁFÚ6∆÷W"&˜WFñÊRvÜñ∆R∂VWñÊr6ˆÊÊV7Fñˆ‚FÚFÜRvFW"ÊB∆ˆ6¬∆ñfR¬6‚fñ6VÁFRó2v˜'FÇWGFñÊrˆ‚FÜR6Ü˜'F∆ó7B„¬˜‡£«‰&Vf˜&R&ˆˆ∂ñÊr¬6≤ñ˜W"6Ü˜6V‚66ˆ÷÷ˆFFñˆ‚f˜"FÜR7W'&VÁBFWFñ«2FÜB÷GFW"FÚñ˜W"v˜&≤‚6ˆÊFóFñˆÁ2ÊB6W'fñ6W26ÜÊvS≤vˆˆB∆ˆ6¬Gfñ6R6Ü˜V∆B&R7V6ñfñ2ÊB7W'&VÁB„¬˜Ê¿¢fVGW&VDñ÷vTñC¢&ñ÷uˆÜW&Ú"¿¢ñ÷vW3¢≤&ñ÷uˆÜW&Ú%“¿¢6FVv˜'îñG3¢≤&6E˜6Â˜fñ6VÁFR"¬&6E˜&V÷˜FUˆ∆ñfR%“¿¢Fw3¢≤'6‚fñ6VÁFR"¬&V¬ÊñFÚ"¬'∆v‚"¬&∆ˆÊr7Fí%“¿¢7FGW3¢'V&∆ó6ÜVB"¿¢V&∆ó6ÑC¢###b”r”#ECÉ££„¢"¿¢6VıFóF∆S¢%6‚fñ6VÁFRg2V¬ÊñFÚf˜"∆ˆÊvW"∆v‚7Fí¬÷&ñÊFW'&6R"¿¢6VÙFW67&óFñˆ„†¢$&7Fñ6¬6ˆ◊&ó6ˆ‚f˜"&V÷˜FRv˜&∂W'2ÊB∆ˆÊvW"◊7FíG&fV∆∆W'26Üˆ˜6ñÊr&WGvVV‚6‚fñ6VÁFRÊBV¬ÊñFÚ¬∆v‚‚"¿¢7&VFVDC¢Ê˜r¿¢WFFVDC¢Ê˜r¿¢“¿¢∞¢ñC¢&fñV∆EˆÊ˜FU˜FÜó'GïˆFó5ˆñÂ˜6Â˜fñ6VÁFR"¿¢FóF∆S¢$Ü˜rFÚ∆‚3‘Fí7Fíñ‚6‚fñ6VÁFRvóFÜ˜WB'W6ÜñÊróB"¿¢6«Vs¢&Ü˜r◊FÚ◊∆‚÷”3÷Fí◊7Fí÷ñ‚◊6‚◊fñ6VÁFR"¿¢WÜ6W'C†¢$÷ˆÁFÇvófW2ñ˜RFñ÷RFÚv˜&≤¬6WGF∆Rñ‚ÊB6VR6‚fñ6VÁFR&WñˆÊBf7BóFñÊW&'í‚FÜó2ó2Ü˜rFÚ÷∂RFÜBFñ÷RfVV¬∆ñ∂R∆ófñÊr¬Ê˜B76ñÊrFá&˜VvÇ‚"¿¢6ˆÁFVÁC¢«‰÷ˆÁFÇñ‚∆v‚ó2∆ˆÊrVÊ˜VvÇFÚ7F˜G&fV∆∆ñÊrWfW'íFíÊB7F'B∆ófñÊr6ˆ÷WvÜW&R‚FÜBó2vÜV‚FW7FñÊFñˆ‚&V6ˆ÷W2÷˜&RFÜ‚∆ó7BˆbFÜñÊw2FÚ6VS¢ñ˜R∆V&‚FÜR&W7BFñ÷RFÚv∆≤¬vÜW&RFÚ'WívÜBñ˜RÊVVB¬vÜñ6Çv˜&≤&˜WFñÊR7VóG2FÜRÜVB¬ÊBvÜñ6ÇV˜∆Rñ˜R∂VW'VÊÊñÊrñÁFÚ„¬˜‡£∆É#‰'&ófRvóFÇ∆ñváBfó'7B◊vVV≤∆„¬ˆÉ#‡£«‰vófRñ˜W'6V∆bfWrFó2FÚ∆V&‚FÜR&V&Vf˜&R6ˆ÷÷óGFñÊrFÚ‚÷&óFñ˜W2&˜WFñÊR‚fñÊBFÜRw&ˆ6W'í˜FñˆÁ2¬6WBW∆ˆ6¬FF&6∑W¬6≤&˜WBvFW"ÊB∆VÊG'í¬ÊBv˜&≤˜WBFÜR&7Fñ6¬&˜WFR&WGvVV‚vÜW&Rñ˜R6∆VW¬v˜&≤ÊBVB„¬˜‡£∆É#‰'Vñ∆B‚˜&FñÊ'ívVV≥¬ˆÉ#‡£«ÂFÜR÷˜7B6Fó6gññÊr∆ˆÊr7Fó2W7V∆«íÜfR6ñ◊∆R7G'V7GW&S¢fˆ7W6VBv˜&≤&∆ˆ6∑2¬fWr&V∆ñ&∆R÷V«2¬Fñ÷R˜WG6ñFR&Vf˜&R˜"gFW"FÜRÜVB¬ÊBˆÊR˜"GvÚVÁ66ÜVGV∆VBFó2‚ñ˜RFÚÊ˜BÊVVBFÚ(	∆FÚ∆vÓ(	“WfW'íFí‚∆VfR&ˆˆ“f˜"FÜR6÷∆¬FÜñÊw2FÜB÷∂R∆6RfVV¬f÷ñ∆ñ"„¬˜‡£∆É#ÂW6Rg&VRFó2FñffW&VÁF«ì¬ˆÉ#‡£«‰ñÁ7FVBˆb'W6ÜñÊrFÚWfW'íGG&7Fñˆ‚BˆÊ6R¬7&VB˜WBñ˜W"Wá∆˜&Fñˆ‚‚6Üˆ˜6R&V6ÇFí¬∆ˆ6¬÷V¬¬v∆≤¬÷&∂WBfó6óB˜"VñWBgFW&Êˆˆ‚‚6≤∆ˆ6«2ÊBV˜∆RvÜÚÜfR7VÁBFñ÷RÜW&RvÜBó2&˜&ñFR¬˜V‚ÊBv˜'FávÜñ∆RGW&ñÊrñ˜W"fó6óB„¬˜‡£∆É#‰&RvˆˆBFV◊˜&'íÊVñvÜ&˜W#¬ˆÉ#‡£«V√„∆∆ì‰∆V&‚fWr&6ñ2∆ˆ6¬6˜W'FW6ñW2ÊB&RFñVÁBvÜV‚∆Á2'V‚ˆ‚ó6∆ÊBFñ÷R„¬ˆ∆ì„∆∆ì‰'Wíg&ˆ“∆ˆ6¬'W6ñÊW76W2vÜV‚ñ˜R6‚„¬ˆ∆ì„∆∆ì‰∂VWÊˆó6RÊBv7FR∆˜r¬W7V6ñ∆«íÊV"&W6ñFVÁFñ¬&V2ÊBFÜR6ˆ7B„¬ˆ∆ì„∆∆ì‰FÚÊ˜B77V÷RWfW'í∆6Ró26ˆÁFVÁB6WB˜"6˜v˜&∂ñÊrfVÁVR„¬ˆ∆ì„∆∆ì‰6≤&Vf˜&RÜ˜Fˆw&ÜñÊrV˜∆R¬Üˆ÷W2˜"v˜&∂ñÊr76W2„¬ˆ∆ì„¬˜V√‡£«ÂFÜRf«VRˆb3÷Fí7Fíó2Ê˜BFÜBñ˜R6‚6VR÷˜&R‚óBó2FÜBñ˜R6‚6∆˜rF˜v‚VÊ˜VvÇFÚVÊFW'7FÊBvÜW&Rñ˜R&^(	FÊB∆VfRvóFÇ&WGFW"÷V÷˜&ñW2¬&WGFW"v˜&≤ÊB÷˜&R&W7V7FgV¬6ˆÊÊV7Fñˆ‚FÚFÜR6ˆ÷◊VÊóGíFÜBÜ˜7FVBñ˜R„¬˜Ê¿¢fVGW&VDñ÷vTñC¢&ñ÷uˆ∆ófñÊr"¿¢ñ÷vW3¢≤&ñ÷uˆ∆ófñÊr%“¿¢6FVv˜'îñG3¢≤&6E˜6Â˜fñ6VÁFR"¬&6Eˆ6ˆ÷◊VÊóGí%“¿¢Fw3¢≤#3Fí7Fí"¬'6∆˜rG&fV¬"¬'6‚fñ6VÁFR"¬'∆v‚%“¿¢7FGW3¢'V&∆ó6ÜVB"¿¢V&∆ó6ÑC¢###b”r”#5CÉ££„¢"¿¢6VıFóF∆S¢$Ü˜rFÚ∆‚3‘Fí7Fíñ‚6‚fñ6VÁFR¬∆v‚¬÷&ñÊFW'&6R"¿¢6VÙFW67&óFñˆ„†¢$&7Fñ6¬¬&W7V7FgV¬wVñFRFÚ∆ÊÊñÊr÷ˆÁFÇñ‚6‚fñ6VÁFR¬∆v‚vÜñ∆Rv˜&∂ñÊr&V÷˜FV«íÊB∆ófñÊr÷˜&R6∆˜v«í‚"¿¢7&VFVDC¢Ê˜r¿¢WFFVDC¢Ê˜r¿¢“¿¢”∞ß–†¶Wá˜'BgVÊ7Fñˆ‚'Vñ∆DFVfV«DFFÇì¢6◊4FF∞¢&WGW&‚∞¢Üˆ÷WvS¢∞¢6V7Fñˆ‰˜&FW#¢∞¢≤∂Wì¢&ÜW&Ú"¬∆&V√¢$ÜW&Ú"¬fó6ñ&∆S¢G'VR¬˜&FW#¢“¿¢≤∂Wì¢&fVGW&W2"¬∆&V√¢$fVGW&R7G&ó"¬fó6ñ&∆S¢G'VR¬˜&FW#¢“¿¢≤∂Wì¢'v˜&∑76R"¬∆&V√¢%v˜&∑76R"¬fó6ñ&∆S¢G'VR¬˜&FW#¢"“¿¢≤∂Wì¢&∂óF6ÜV‚"¬∆&V√¢$6ˆ÷◊VÊóGí∂óF6ÜV‚"¬fó6ñ&∆S¢G'VR¬˜&FW#¢2“¿¢≤∂Wì¢&fˆ7W2"¬∆&V√¢$Ê∆ˆrfˆ7W2"¬fó6ñ&∆S¢G'VR¬˜&FW#¢B“¿¢≤∂Wì¢'7Fí"¬∆&V√¢$∆ˆÊr7Fí"¬fó6ñ&∆S¢f«6R¬˜&FW#¢R“¿¢≤∂Wì¢&f6ñ∆óFñW2"¬∆&V√¢$f6ñ∆óFñW2"¬fó6ñ&∆S¢G'VR¬˜&FW#¢b“¿¢≤∂Wì¢'7VVB"¬∆&V√¢$ñÁFW&ÊWB7VVB"¬fó6ñ&∆S¢G'VR¬˜&FW#¢r“¿¢≤∂Wì¢'&ˆˆ◊2"¬∆&V√¢$˜FÜW"&ˆˆ◊2"¬fó6ñ&∆S¢G'VR¬˜&FW#¢Ç“¿¢≤∂Wì¢'&ñ6ñÊr"¬∆&V√¢%&ñ6ñÊr"¬fó6ñ&∆S¢G'VR¬˜&FW#¢í“¿¢≤∂Wì¢'FW7Fñ÷ˆÊñ«2"¬∆&V√¢%FW7Fñ÷ˆÊñ«2"¬fó6ñ&∆S¢G'VR¬˜&FW#¢“¿¢≤∂Wì¢&f2"¬∆&V√¢$d2"¬fó6ñ&∆S¢G'VR¬˜&FW#¢“¿¢≤∂Wì¢&7F"¬∆&V√¢$6∆˜6ñÊr5D"¬fó6ñ&∆S¢G'VR¬˜&FW#¢"“¿¢“¿¢ÜW&Û¢∞¢WñV'&˜s¢%ˆ&∆6ñˆ‚¬6‚fñ6VÁFR¬∆v‚"¿¢ÜVF∆ñÊS¢%ñ˜W"ˆ6V‚’fñWrˆffñ6Rñ‚∆v‚‚"¿¢7V'FWáC†¢$FVWv˜&≤¬7F&∆ñÊ≤ñÁFW&ÊWB¬‚˜V‚÷ó"&ˆˆgF˜v˜&∑76R¬&V÷óV“wVW7B∂óF6ÜV‚¬&˜WFóVR∆ˆÊr◊7Fí7VóFW2ÊB‚ñÁ7ó&ñÊr6ˆ÷◊VÊóGí(	BFW6ñvÊVB7V6ñfñ6∆«íf˜"&V÷˜FRv˜&∂W'2‚"¿¢∆ˆ6Fñˆ„¢%ˆ&∆6ñˆ‚¬6‚fñ6VÁFR¬∆v‚"¿¢&ñ÷'î'WGFˆ‰∆&V√¢$6ÜV6≤fñ∆&ñ∆óGíˆ‚vÜG4"¿¢&ñ÷'î'WGFˆ‰∆ñÊ≥¢&áGG3¢Ú˜vÊ÷RÛc3ìcs#c#3#r"¿¢6V6ˆÊF'î'WGFˆ‰∆&V√¢$&ˆˆ≤v˜&∑76RFí72"¿¢6V6ˆÊF'î'WGFˆ‰∆ñÊ≥¢"7&ñ6ñÊr"¿¢ñ÷vTñC¢&ñ÷uˆÜW&Ú"¿¢“¿¢fVGW&W3¢∞¢∞¢ñC¢VñBÇ&fVB"í¿¢ñ6ˆ„¢%vñfí"¿¢FóF∆S¢%&VGVÊFÁB7F&∆ñÊ≤ñÁFW&ÊWB"¿¢FW67&óFñˆ„†¢%&ñ÷'í7F&∆ñÊ≤6ˆÊÊV7Fñˆ‚vóFÇDrÛTrfñ∆˜fW"(	BÊWfW"∆˜6Rñ˜W"6ˆÊÊV7Fñˆ‚÷ñB÷6∆¬‚"¿¢“¿¢∞¢ñC¢VñBÇ&fVB"í¿¢ñ6ˆ„¢%«Vr"¿¢FóF∆S¢%˜vW"BWfW'í6VB"¿¢FW67&óFñˆ„†¢$ñÁFVw&FVB6Ü&vñÊr7&˜72FÜR&ˆˆgF˜¬«W2&6∑WvVÊW&F˜'2f˜"˜WFvW2‚"¿¢“¿¢∞¢ñC¢VñBÇ&fVB"í¿¢ñ6ˆ„¢%7V‚"¿¢FóF∆S¢$v∆&R‘g&VRv˜&∑76R"¿¢FW67&óFñˆ„†¢$6Áf26ÜFñÊr&∆ˆ6∑2Ü'6Ç7V‚‚6VG2˜6óFñˆÊVBf˜"'&VW¶RÊB67&VV‚fó6ñ&ñ∆óGí‚"¿¢“¿¢∞¢ñC¢VñBÇ&fVB"í¿¢ñ6ˆ„¢%fˆ«V÷S"¿¢FóF∆S¢%VñWBFVWv˜&≤VÁfó&ˆÊ÷VÁB"¿¢FW67&óFñˆ„¢$6∆“¬6ˆÁ6ñFW&FR6ˆ÷◊VÊóGíFÜB&˜FV7G2fˆ7W2GW&ñÊrv˜&∂ñÊrÜ˜W'2‚"¿¢“¿¢“¿¢∂óF6ÜV„¢∞¢WñV'&˜s¢%FÜRÁFí’&W7FW&ÁB"¿¢FóF∆S¢%ñ˜W"&V÷óV“6ˆ÷◊VÊóGí∂óF6ÜV‚"¿¢&w&É†¢$VFñÊr˜WBFá&VRFñ÷W2FívWG2ˆ∆Bf7B‚6ˆˆ≤g&W6Ç6VfˆˆBg&ˆ“FÜR˜'B¬W6RgV∆«íWVóVB6Ü&VB∂óF6ÜV‚¬ÊBÊWfW"v˜''í&˜WB6∆VÁW(	B˜W"∆ˆ6¬FV“ÜÊF∆W2Fó6ÜW2ÊB&W6WG26Úñ˜R6‚vWB&6≤FÚ∆ófñÊrvV∆¬‚"¿¢fVGW&W3¢∞¢∞¢ñC¢VñBÇ&∂b"í¿¢ñ6ˆ„¢$fó6Ç"¿¢FóF∆S¢$6ˆˆ≤g&ˆ“FÜR˜'B"¿¢FW67&óFñˆ„†¢%v∆≤F˜v‚FÚˆ&∆6ñˆ‚˜'Bf˜"FÜR÷˜&ÊñÊrw2g&W6Ç6F6Ç¬FÜV‚w&ñ∆¬óBW7Fó'2&Vf˜&R7VÁ6WB‚"¿¢“¿¢∞¢ñC¢VñBÇ&∂b"í¿¢6ﬁ⁄$z{-ÆÈ‹j◊ùe the laptop when the light changes. Sunset breeze, a record on the turntable.",
+import type { CmsData } from "@/types/cms";
+
+const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
+
+// Placeholder "media" entries. Real photography will replace these later ‚Äî
+// each has a descriptive label so the owner knows exactly what to upload.
+// Pre-seeded default images that ship with the site. These are placed in
+// /public/images so they load with zero configuration; owners can replace
+// any of them from the admin Media Library.
+export const PRESEEDED_MEDIA_URLS: Record<string, string> = {
+  img_hero: "/images/hero-rooftop.jpg",
+  img_workspace: "/images/rooftop-workspace.jpg",
+  img_bedroom: "/images/room-uno-main.jpg",
+  img_living: "/images/room-uno-details.jpg",
+  img_bathroom: "/images/room-uno-bed.jpg",
+  img_balcony: "/images/room-due-main.jpg",
+  img_community: "/images/room-tre-main.jpg",
+  img_due_minibar: "/images/room-due-minibar.jpg",
+};
+
+export const PLACEHOLDER_MEDIA = [
+  { id: "img_hero", label: "Hero Image", folder: "Homepage" },
+  { id: "img_workspace", label: "Rooftop Workspace", folder: "Workspace" },
+  { id: "img_ocean", label: "Ocean View", folder: "Workspace" },
+  { id: "img_kitchen", label: "Guest Kitchen", folder: "Kitchen" },
+  { id: "img_sunset", label: "Sunset Workspace", folder: "Workspace" },
+  { id: "img_bedroom", label: "Bedroom", folder: "Stay" },
+  { id: "img_living", label: "Living Room", folder: "Stay" },
+  { id: "img_bathroom", label: "Bathroom", folder: "Stay" },
+  { id: "img_balcony", label: "Balcony", folder: "Stay" },
+  { id: "img_community", label: "Community", folder: "Homepage" },
+  { id: "img_testimonial_1", label: "Guest Portrait ‚Äî Aria", folder: "Testimonials" },
+  { id: "img_testimonial_2", label: "Guest Portrait ‚Äî Noah", folder: "Testimonials" },
+  { id: "img_testimonial_3", label: "Guest Portrait ‚Äî Lien", folder: "Testimonials" },
+  { id: "img_blog_1", label: "Blog ‚Äî Digital Nomad Guide", folder: "Blog" },
+  { id: "img_blog_2", label: "Blog ‚Äî Palawan Travel", folder: "Blog" },
+  { id: "img_blog_3", label: "Blog ‚Äî Remote Work Tips", folder: "Blog" },
+  { id: "img_og", label: "Open Graph Cover", folder: "SEO" },
+];
+
+export function buildDefaultMedia(): CmsData["media"] {
+  return PLACEHOLDER_MEDIA.map((m) => ({
+    id: m.id,
+    name: m.label,
+    url: PRESEEDED_MEDIA_URLS[m.id] || "",
+    type: "image" as const,
+    folder: m.folder,
+    createdAt: new Date().toISOString(),
+    size: 0,
+    label: m.label,
+  }));
+}
+
+export function buildDefaultData(): CmsData {
+  return {
+    homepage: {
+      sectionOrder: [
+        { key: "hero", label: "Hero", visible: true, order: 0 },
+        { key: "features", label: "Feature Strip", visible: true, order: 1 },
+        { key: "workspace", label: "Workspace", visible: true, order: 2 },
+        { key: "kitchen", label: "Community Kitchen", visible: true, order: 3 },
+        { key: "focus", label: "Analog Focus", visible: true, order: 4 },
+        { key: "stay", label: "Long Stay", visible: false, order: 5 },
+        { key: "facilities", label: "Facilities", visible: true, order: 6 },
+        { key: "speed", label: "Internet Speed", visible: true, order: 7 },
+        { key: "rooms", label: "Other Rooms", visible: true, order: 8 },
+        { key: "pricing", label: "Pricing", visible: true, order: 9 },
+        { key: "testimonials", label: "Testimonials", visible: true, order: 10 },
+        { key: "faqs", label: "FAQs", visible: true, order: 11 },
+        { key: "cta", label: "Closing CTA", visible: true, order: 12 },
+      ],
+      hero: {
+        eyebrow: "Poblacion, San Vicente, Palawan",
+        headline: "Your Ocean-View Office in Palawan.",
+        subtext:
+          "Deep work, Starlink internet, an open-air rooftop workspace, premium guest kitchen, boutique long-stay suites and an inspiring community ‚Äî designed specifically for remote workers.",
+        location: "Poblacion, San Vicente, Palawan",
+        primaryButtonLabel: "Check Availability on WhatsApp",
+        primaryButtonLink: "https://wa.me/639672062327",
+        secondaryButtonLabel: "Book a Workspace Day Pass",
+        secondaryButtonLink: "#pricing",
+        imageId: "img_hero",
+      },
+      features: [
+        {
+          id: uid("feat"),
+          icon: "Wifi",
+          title: "Redundant Starlink Internet",
+          description:
+            "Primary Starlink connection with 4G/5G failover ‚Äî never lose your connection mid-call.",
+        },
+        {
+          id: uid("feat"),
+          icon: "Plug",
+          title: "Power at Every Seat",
+          description:
+            "Integrated charging across the rooftop, plus backup generators for outages.",
+        },
+        {
+          id: uid("feat"),
+          icon: "Sun",
+          title: "Glare-Free Workspace",
+          description:
+            "Canvas shading blocks harsh sun. Seats positioned for breeze and screen visibility.",
+        },
+        {
+          id: uid("feat"),
+          icon: "Volume1",
+          title: "Quiet Deep Work Environment",
+          description: "A calm, considerate community that protects focus during working hours.",
+        },
+      ],
+      kitchen: {
+        eyebrow: "The Anti-Restaurant",
+        title: "Your Premium Community Kitchen",
+        paragraph:
+          "Eating out three times a day gets old fast. Cook fresh seafood from the port, use a fully equipped shared kitchen, and never worry about cleanup ‚Äî our local team handles dishes and resets so you can get back to living well.",
+        features: [
+          {
+            id: uid("kf"),
+            icon: "Fish",
+            title: "Cook From the Port",
+            description:
+              "Walk down to Poblacion port for the morning's fresh catch, then grill it upstairs before sunset.",
+          },
+          {
+            id: uid("kf"),
+            icon: "Soup",
+            title: "Use the Shared Pantry",
+            description:
+              "Premium oils, real spices, and daily staples ‚Äî no need to buy full bottles.",
+          },
+          {
+            id: uid("kf"),
+            icon: "Sparkles",
+            title: "Skip the Clean-Up",
+            description:
+              "Cook without the sink duty. Our local team handles dishes and resets the kitchen.",
+          },
+        ],
+        imageId: "img_kitchen",
+      },
+      focus: {
+        eyebrow: "The Vibe",
+        title: "Analog Focus. Real Connections.",
+        paragraph:
+          "Productive mornings. Focused afternoons. Sunset sessions that close the laptop when the light changes. Community dinners and meaningful conversations with developers, writers, founders and creators actually getting work done.",
+        features: [
+          {
+            id: uid("ff"),
+            icon: "SunMedium",
+            title: "Daytime Productivity",
+            description:
+              "Quiet mornings, focused afternoons ‚Äî a community built around getting real work done.",
+          },
+          {
+            id: uid("ff"),
+            icon: "Sunset",
+            title: "The 5:00 PM Reset",
+            description:
+              "Close the laptop when the light changes. Sunset breeze, a record on the turntable.",
           },
         ],
         imageId: "img_sunset",
@@ -248,8 +408,52 @@ Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊n6›:-jZ.∂õ≠ñ)ﬁ≥Vñ◊˜'BGóR≤&∆ˆt6FVv˜'í¬&∆ˆu
         order: 0,
       },
     ],
-    blogCategories: FIELD_NOTES_CATEGORIES,
-    blogPosts: buildFieldNotes(),
+    blogCategories: [
+      { id: uid("cat"), name: "Remote Work", slug: "remote-work" },
+      { id: uid("cat"), name: "Palawan Travel", slug: "palawan-travel" },
+      { id: uid("cat"), name: "Community", slug: "community" },
+    ],
+    blogPosts: [
+      {
+        id: uid("post"),
+        title: "The Digital Nomad's Guide to San Vicente, Palawan",
+        slug: "digital-nomads-guide-san-vicente-palawan",
+        excerpt:
+          "Everything you need to know before landing in one of the Philippines' most underrated coastal towns for remote work.",
+        content:
+          "<p>San Vicente is quietly becoming one of the best-kept secrets for remote workers in Southeast Asia. With Long Beach on one side and a working fishing port on the other, Poblacion offers a rare mix of stillness and stimulation.</p><p>Here's what you need to know before you book your flight ‚Äî from the best time to visit, to how to get reliable internet, to where to eat fresh seafood every night of the week.</p><h3>Getting There</h3><p>Fly into Puerto Princesa, then take a 3.5 hour van ride north along a newly paved highway.</p><h3>Where to Work</h3><p>Marina Terrace's rooftop workspace is built specifically for people who need dependable internet and a calm environment.</p>",
+        featuredImageId: "img_blog_2",
+        images: ["img_blog_2"],
+        categoryIds: [],
+        tags: ["travel", "palawan", "guide"],
+        status: "published",
+        publishAt: new Date().toISOString(),
+        seoTitle: "The Digital Nomad's Guide to San Vicente, Palawan",
+        seoDescription:
+          "Everything you need to know before landing in San Vicente, Palawan as a remote worker.",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: uid("post"),
+        title: "5 Ways We Designed Marina Terrace for Deep Work",
+        slug: "designed-for-deep-work",
+        excerpt: "A behind-the-scenes look at the decisions behind our rooftop workspace.",
+        content:
+          "<p>From canvas shading to seat orientation, every decision on our rooftop was made with focus in mind. Here's a behind-the-scenes look at how we built it.</p>",
+        featuredImageId: "img_blog_3",
+        images: ["img_blog_3"],
+        categoryIds: [],
+        tags: ["workspace", "design"],
+        status: "published",
+        publishAt: new Date().toISOString(),
+        seoTitle: "5 Ways We Designed Marina Terrace for Deep Work",
+        seoDescription:
+          "A behind-the-scenes look at the decisions behind our rooftop coworking space.",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
     testimonials: [
       {
         id: uid("test"),
