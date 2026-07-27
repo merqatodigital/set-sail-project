@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Pencil, Calendar as CalIcon, DollarSign, Check, X } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal, Switch } from "@/components/ui";
 import { PageHeader, EmptyState, TabBar } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, KpiCard, StatusPill } from "../ops/OpsPrimitives";
+import { useOperations } from "../ops/useOperations";
+import {
+  upsertStaff, deleteStaff, upsertShift, deleteShift,
+  upsertPayRecord, deletePayRecord, upsertPayment,
+} from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, computeHours, generateReference, uid } from "../ops/opsUtils";
 import type { StaffMember, Shift, PayRecord, PaymentMethod } from "@/types/cms";
 
@@ -14,14 +18,14 @@ const emptyStaff = (): StaffMember => ({
 });
 
 export default function StaffManager() {
-  const { data, update } = useCms();
+  const { data: ops, refresh } = useOperations();
   const { notify } = useToast();
   const [tab, setTab] = useState<"staff" | "schedule" | "pay">("staff");
   const [editing, setEditing] = useState<StaffMember | null>(null);
 
-  const staff = data.operations.staff;
-  const shifts = data.operations.shifts;
-  const payRecords = data.operations.payRecords;
+  const staff = ops.staff;
+  const shifts = ops.shifts;
+  const payRecords = ops.payRecords;
   const activeStaff = staff.filter((s) => s.active);
 
   // KPIs
@@ -30,17 +34,20 @@ export default function StaffManager() {
     .reduce((s, x) => s + x.hoursWorked, 0);
   const unpaidTotal = payRecords.filter((p) => !p.paid).reduce((s, p) => s + p.amount, 0);
 
-  const saveStaff = (s: StaffMember) => {
+  const saveStaff = async (s: StaffMember) => {
     const exists = staff.some((x) => x.id === s.id);
-    const next = exists ? staff.map((x) => (x.id === s.id ? s : x)) : [...staff, s];
-    update((d) => ({ ...d, operations: { ...d.operations, staff: next } }));
+    const ok = await upsertStaff(s);
+    if (!ok) return notify("Could not save staff member", "info");
+    await refresh();
     notify(exists ? "Staff updated" : "Staff added");
     setEditing(null);
   };
 
-  const removeStaff = (s: StaffMember) => {
+  const removeStaff = async (s: StaffMember) => {
     if (!window.confirm(`Remove ${s.name}? Shift & pay history will remain.`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, staff: d.operations.staff.filter((x) => x.id !== s.id) } }));
+    const ok = await deleteStaff(s.id);
+    if (!ok) return notify("Could not remove staff member", "info");
+    await refresh();
     notify("Staff removed");
   };
 
@@ -70,8 +77,8 @@ export default function StaffManager() {
       />
 
       {tab === "staff" && <StaffTab staff={staff} onEdit={setEditing} onRemove={removeStaff} />}
-      {tab === "schedule" && <ScheduleTab staff={activeStaff} shifts={shifts} />}
-      {tab === "pay" && <PayTab staff={activeStaff} shifts={shifts} payRecords={payRecords} />}
+      {tab === "schedule" && <ScheduleTab staff={activeStaff} shifts={shifts} refresh={refresh} />}
+      {tab === "pay" && <PayTab staff={activeStaff} shifts={shifts} payRecords={payRecords} refresh={refresh} />}
 
       {editing && <StaffModal member={editing} onClose={() => setEditing(null)} onSave={saveStaff} />}
     </div>
@@ -123,8 +130,7 @@ function StaffTab({ staff, onEdit, onRemove }: { staff: StaffMember[]; onEdit: (
 }
 
 // ---- Schedule tab: quick shift entry + list --------------------------------
-function ScheduleTab({ staff, shifts }: { staff: StaffMember[]; shifts: Shift[] }) {
-  const { update } = useCms();
+function ScheduleTab({ staff, shifts, refresh }: { staff: StaffMember[]; shifts: Shift[]; refresh: () => Promise<void> }) {
   const { notify } = useToast();
   const [staffId, setStaffId] = useState(staff[0]?.id || "");
   const [date, setDate] = useState(todayISO());
@@ -132,17 +138,21 @@ function ScheduleTab({ staff, shifts }: { staff: StaffMember[]; shifts: Shift[] 
   const [endTime, setEnd] = useState("17:00");
   const [notes, setNotes] = useState("");
 
-  const addShift = () => {
+  const addShift = async () => {
     if (!staffId || !date) return;
     const hoursWorked = computeHours(startTime, endTime);
     const shift: Shift = { id: uid("shift"), staffId, date, startTime, endTime, hoursWorked, notes };
-    update((d) => ({ ...d, operations: { ...d.operations, shifts: [...d.operations.shifts, shift] } }));
+    const ok = await upsertShift(shift);
+    if (!ok) return notify("Could not log shift", "info");
+    await refresh();
     notify(`Shift logged (${hoursWorked}h)`);
     setNotes("");
   };
 
-  const removeShift = (id: string) => {
-    update((d) => ({ ...d, operations: { ...d.operations, shifts: d.operations.shifts.filter((s) => s.id !== id) } }));
+  const removeShift = async (id: string) => {
+    const ok = await deleteShift(id);
+    if (!ok) return notify("Could not remove shift", "info");
+    await refresh();
     notify("Shift removed");
   };
 
@@ -207,8 +217,9 @@ function ScheduleTab({ staff, shifts }: { staff: StaffMember[]; shifts: Shift[] 
 }
 
 // ---- Pay tab: generate + mark paid --------------------------------------
-function PayTab({ staff, shifts, payRecords }: { staff: StaffMember[]; shifts: Shift[]; payRecords: PayRecord[] }) {
-  const { update } = useCms();
+function PayTab({
+  staff, shifts, payRecords, refresh,
+}: { staff: StaffMember[]; shifts: Shift[]; payRecords: PayRecord[]; refresh: () => Promise<void> }) {
   const { notify } = useToast();
   const [periodStart, setStart] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 6);
@@ -230,7 +241,7 @@ function PayTab({ staff, shifts, payRecords }: { staff: StaffMember[]; shifts: S
     });
   }, [staff, shifts, periodStart, periodEnd]);
 
-  const generateAll = () => {
+  const generateAll = async () => {
     const created: PayRecord[] = summary
       .filter((s) => s.amount > 0)
       .map((s) => ({
@@ -239,31 +250,31 @@ function PayTab({ staff, shifts, payRecords }: { staff: StaffMember[]; shifts: S
         paid: false, paidAt: "", method: "cash", notes: "",
       }));
     if (created.length === 0) { notify("Nothing to pay in this period", "info"); return; }
-    update((d) => ({ ...d, operations: { ...d.operations, payRecords: [...d.operations.payRecords, ...created] } }));
+    const results = await Promise.all(created.map(upsertPayRecord));
+    if (results.some((ok) => !ok)) return notify("Could not generate all pay records", "info");
+    await refresh();
     notify(`${created.length} pay record(s) generated`);
   };
 
-  const markPaid = (pr: PayRecord, method: PaymentMethod) => {
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        payRecords: d.operations.payRecords.map((x) => (x.id === pr.id ? { ...x, paid: true, paidAt: todayISO(), method } : x)),
-        payments: [...d.operations.payments, {
-          id: uid("pay"), reference: generateReference("SAL"),
-          date: todayISO(), category: "expense", direction: "out",
-          amount: pr.amount, method, relatedId: pr.id,
-          description: `Salary: ${staff.find((s) => s.id === pr.staffId)?.name || "Staff"} (${pr.periodStart} → ${pr.periodEnd})`,
-          notes: "",
-        }],
-      },
-    }));
+  const markPaid = async (pr: PayRecord, method: PaymentMethod) => {
+    const payRecordOk = await upsertPayRecord({ ...pr, paid: true, paidAt: todayISO(), method });
+    const paymentOk = await upsertPayment({
+      id: uid("pay"), reference: generateReference("SAL"),
+      date: todayISO(), category: "expense", direction: "out",
+      amount: pr.amount, method, relatedId: pr.id,
+      description: `Salary: ${staff.find((s) => s.id === pr.staffId)?.name || "Staff"} (${pr.periodStart} → ${pr.periodEnd})`,
+      notes: "",
+    });
+    if (!payRecordOk || !paymentOk) return notify("Could not mark as paid", "info");
+    await refresh();
     notify("Marked paid");
   };
 
-  const removeRecord = (id: string) => {
+  const removeRecord = async (id: string) => {
     if (!window.confirm("Delete this pay record?")) return;
-    update((d) => ({ ...d, operations: { ...d.operations, payRecords: d.operations.payRecords.filter((p) => p.id !== id) } }));
+    const ok = await deletePayRecord(id);
+    if (!ok) return notify("Could not delete record", "info");
+    await refresh();
     notify("Deleted");
   };
 

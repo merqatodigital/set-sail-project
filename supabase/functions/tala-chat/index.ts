@@ -276,12 +276,24 @@ export async function handleRequest(req: Request): Promise<Response> {
     homepage?: {
       rooms?: Array<{ name: string; capacity: string; price: string; visible: boolean }>;
     };
-    operations?: {
-      bookings?: Array<{ roomType: string; checkIn: string; checkOut: string; status: string }>;
-    };
   };
   const rooms = cms.homepage?.rooms ?? [];
-  const bookings = cms.operations?.bookings ?? [];
+
+  // Bookings now live in their own admin-only table (see the
+  // operations_tables migration), not inside cms_data.operations — this
+  // function runs with the service-role key, so it reads it directly and
+  // bypasses RLS the same way the client-side admin console does via its
+  // own authenticated session.
+  const { data: bookingRows } = await supabase
+    .from("bookings")
+    .select("room_type, check_in, check_out, status")
+    .in("status", ["pending", "confirmed", "checked_in"]);
+  const bookings = (bookingRows ?? []).map((b) => ({
+    roomType: b.room_type as string,
+    checkIn: b.check_in as string,
+    checkOut: b.check_out as string,
+    status: b.status as string,
+  }));
 
   // ---- The same two tools as talaTools.ts, executed here server-side. ----
   const checkRoomAvailabilityTool = tool(

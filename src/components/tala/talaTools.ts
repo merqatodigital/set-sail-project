@@ -1,6 +1,17 @@
-import type { BookingSource, CmsData, Payment, PaymentMethod } from "@/types/cms";
+import type { Booking, BookingSource, CmsData, Payment, PaymentMethod, TourBooking } from "@/types/cms";
 import { supabase, isSupabaseConnected } from "@/lib/supabase";
 import { uid, generateReference, todayISO } from "@/admin/ops/opsUtils";
+import {
+  type OperationsSnapshot,
+  EMPTY_OPERATIONS_SNAPSHOT,
+  upsertBooking,
+  insertGuestBooking,
+  checkBookingConflicts,
+  upsertTourBooking,
+  upsertMotorbike,
+  upsertPayRecord,
+  upsertPayment,
+} from "@/lib/opsRepo";
 
 // ---------------------------------------------------------------------------
 // TALA's tools — this is what makes her an actual agent rather than a chat
@@ -9,18 +20,33 @@ import { uid, generateReference, todayISO } from "@/admin/ops/opsUtils";
 // reply is grounded in something that just happened, not just what's baked
 // into the prompt text.
 //
-// READ tools (guest + owner): run entirely in the browser against loaded cms.
-// WRITE tools (owner only): mutate cms_data via useCms().update so the change
-// is persisted the same way the admin managers save. They are hard-gated to
-// owner mode — the guest orb never passes owner:true, so it can't write.
+// READ tools (guest + owner): run against `cms` (public site content) or, for
+// booking conflicts, a narrow SECURITY DEFINER RPC that exposes no guest PII.
+// WRITE tools (owner only): mutate the operations tables via src/lib/opsRepo,
+// which requires an authenticated admin session per the operations_tables
+// migration's RLS — the guest orb never passes owner:true, so a guest's
+// browser (unauthenticated) can't write even if a compromised model tried.
 // ---------------------------------------------------------------------------
 
 export interface TalaToolContext {
   cms: CmsData;
-  /** Persist a cms mutation the same way the admin managers do. Owner only. */
-  update?: (updater: (draft: CmsData) => CmsData) => void;
+  /**
+   * Read-only snapshot of the operations tables — real data when opened from
+   * the authenticated admin console (owner mode), an empty stub for the
+   * public guest widget (which can't read these admin-only tables and
+   * doesn't need to: its one booking-adjacent tool uses the RPC below).
+   */
+  ops: OperationsSnapshot;
+  /** Reload `ops` after a write so the next tool call in the same turn sees it. */
+  refreshOps?: () => Promise<void>;
   owner?: boolean;
 }
+
+export const emptyTalaToolContext = (cms: CmsData): TalaToolContext => ({
+  cms,
+  ops: EMPTY_OPERATIONS_SNAPSHOT,
+  owner: false,
+});
 
 /** OpenAI/OpenRouter-compatible function-calling schema. */
 export const TALA_TOOL_SCHEMAS = [
@@ -287,7 +313,7 @@ function paymentMethod(value: unknown, fallback: PaymentMethod = "cash"): Paymen
   return allowed.includes(method as PaymentMethod) ? (method as PaymentMethod) : fallback;
 }
 
-function checkRoomAvailability(args: Record<string, unknown>, cms: CmsData) {
+async function checkRoomAvailability(args: Record<string, unknown>, cms: CmsData) {
   const checkIn = parseDate(args.checkIn);
   const checkOut = parseDate(args.checkOut);
   if (!checkIn || !checkOut || checkOut <= checkIn) {
@@ -308,27 +334,18 @@ function checkRoomAvailability(args: Record<string, unknown>, cms: CmsData) {
     return { error: `No room matching "${args.roomName}" was found.` };
   }
 
-  // Only bookings that actually hold a room block availability. Cancelled or
-  // already-departed guests don't. No guest names, contact info, or amounts
-  // are included in the result — TALA never needs or sees that to answer.
-  const blockingStatuses = new Set(["pending", "confirmed", "checked_in"]);
-  const bookings = cms.operations.bookings.filter((b) => blockingStatuses.has(b.status));
-
-  const overlaps = (bookingStart: string, bookingEnd: string) => {
-    const start = parseDate(bookingStart);
-    const end = parseDate(bookingEnd);
-    if (!start || !end) return false;
-    return start < checkOut && end > checkIn;
-  };
+  // Room-type + date-range only — no guest names, contact info, or amounts.
+  // The `bookings` table is admin-only now, so this goes through a public
+  // SECURITY DEFINER RPC that returns exactly this and nothing more. Already
+  // filtered server-side to pending/confirmed/checked_in and to this range.
+  const conflicts = await checkBookingConflicts(String(args.checkIn), String(args.checkOut));
 
   return {
     checkIn: args.checkIn,
     checkOut: args.checkOut,
     rooms: relevantRooms.map((room) => {
-      const conflicting = bookings.filter(
-        (b) =>
-          b.roomType.toLowerCase().includes(room.name.toLowerCase()) &&
-          overlaps(b.checkIn, b.checkOut),
+      const conflicting = conflicts.filter((c) =>
+        c.roomType.toLowerCase().includes(room.name.toLowerCase()),
       );
       return {
         name: room.name,
@@ -405,22 +422,18 @@ export async function captureGuestLead(
 }
 
 
-function findBooking(
-  cms: CmsData,
-  ref?: string,
-  guestName?: string,
-): CmsData["operations"]["bookings"][number] | undefined {
+function findBooking(ops: OperationsSnapshot, ref?: string, guestName?: string): Booking | undefined {
   const refL = str(ref).toLowerCase();
   const nameL = str(guestName).toLowerCase();
-  return cms.operations.bookings.find(
+  return ops.bookings.find(
     (b) =>
       (refL && b.reference.toLowerCase() === refL) ||
       (nameL && b.guestName.toLowerCase().includes(nameL)),
   );
 }
 
-function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
-  if (!ctx.owner || !ctx.update) {
+async function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
+  if (!ctx.owner) {
     return { error: "create_booking is owner-only and requires live owner mode." };
   }
   const checkIn = str(args.checkIn);
@@ -428,7 +441,7 @@ function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   if (!checkIn || !checkOut) {
     return { error: "checkIn and checkOut are required." };
   }
-  const booking: CmsData["operations"]["bookings"][number] = {
+  const booking: Booking = {
     id: uid("bkg"),
     reference: generateReference("MT"),
     guestId: "",
@@ -444,10 +457,9 @@ function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
     notes: str(args.notes),
     createdAt: new Date().toISOString(),
   };
-  ctx.update((d) => ({
-    ...d,
-    operations: { ...d.operations, bookings: [...d.operations.bookings, booking] },
-  }));
+  const ok = await upsertBooking(booking);
+  if (!ok) return { error: "Could not save the booking." };
+  await ctx.refreshOps?.();
   return {
     success: true,
     reference: booking.reference,
@@ -458,37 +470,28 @@ function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   };
 }
 
-function updateBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
-  if (!ctx.owner || !ctx.update) {
+async function updateBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
+  if (!ctx.owner) {
     return { error: "update_booking is owner-only and requires live owner mode." };
   }
-  const found = findBooking(ctx.cms, str(args.reference), str(args.guestName));
+  const found = findBooking(ctx.ops, str(args.reference), str(args.guestName));
   if (!found) {
     return { error: "No booking matched that reference or guest name." };
   }
-  const status = str(args.status) as CmsData["operations"]["bookings"][number]["status"];
+  const status = str(args.status) as Booking["status"];
   const allowed = ["pending", "confirmed", "checked_in", "checked_out", "cancelled"];
   if (!allowed.includes(status)) {
     return { error: `Invalid status '${status}'. Use one of: ${allowed.join(", ")}.` };
   }
-  ctx.update((d) => ({
-    ...d,
-    operations: {
-      ...d.operations,
-      bookings: d.operations.bookings.map((b) =>
-        b.id === found.id
-          ? {
-              ...b,
-              status,
-              amount: args.amount !== undefined ? num(args.amount, b.amount) : b.amount,
-              paidAmount:
-                args.paidAmount !== undefined ? num(args.paidAmount, b.paidAmount) : b.paidAmount,
-              notes: args.notes !== undefined ? str(args.notes) : b.notes,
-            }
-          : b,
-      ),
-    },
-  }));
+  const ok = await upsertBooking({
+    ...found,
+    status,
+    amount: args.amount !== undefined ? num(args.amount, found.amount) : found.amount,
+    paidAmount: args.paidAmount !== undefined ? num(args.paidAmount, found.paidAmount) : found.paidAmount,
+    notes: args.notes !== undefined ? str(args.notes) : found.notes,
+  });
+  if (!ok) return { error: "Could not update the booking." };
+  await ctx.refreshOps?.();
   return {
     success: true,
     reference: found.reference,
@@ -497,8 +500,8 @@ function updateBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   };
 }
 
-function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
-  if (!ctx.owner || !ctx.update) {
+async function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
+  if (!ctx.owner) {
     return { error: "create_tour_booking is owner-only and requires live owner mode." };
   }
   const tourName = str(args.tourName);
@@ -506,10 +509,8 @@ function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) 
   if (!tourName || !date) {
     return { error: "tourName and date are required." };
   }
-  const tour = ctx.cms.operations.tours.find((t) =>
-    t.name.toLowerCase().includes(tourName.toLowerCase()),
-  );
-  const booking: CmsData["operations"]["tourBookings"][number] = {
+  const tour = ctx.ops.tours.find((t) => t.name.toLowerCase().includes(tourName.toLowerCase()));
+  const booking: TourBooking = {
     id: uid("tb"),
     reference: generateReference("TR"),
     tourId: tour?.id ?? "",
@@ -524,13 +525,9 @@ function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) 
     notes: str(args.notes),
     createdAt: new Date().toISOString(),
   };
-  ctx.update((d) => ({
-    ...d,
-    operations: {
-      ...d.operations,
-      tourBookings: [...d.operations.tourBookings, booking],
-    },
-  }));
+  const ok = await upsertTourBooking(booking);
+  if (!ok) return { error: "Could not save the tour booking." };
+  await ctx.refreshOps?.();
   return {
     success: true,
     reference: booking.reference,
@@ -540,8 +537,8 @@ function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) 
   };
 }
 
-function updateRental(args: Record<string, unknown>, ctx: TalaToolContext) {
-  if (!ctx.owner || !ctx.update) {
+async function updateRental(args: Record<string, unknown>, ctx: TalaToolContext) {
+  if (!ctx.owner) {
     return { error: "update_rental is owner-only and requires live owner mode." };
   }
   const bikeName = str(args.bikeName);
@@ -549,29 +546,24 @@ function updateRental(args: Record<string, unknown>, ctx: TalaToolContext) {
   if (!["available", "rented", "maintenance"].includes(status)) {
     return { error: "status must be available, rented, or maintenance." };
   }
-  const bikes = ctx.cms.operations.motorbikes;
-  const match = bikes.find((b) => b.name.toLowerCase().includes(bikeName.toLowerCase()));
+  const match = ctx.ops.motorbikes.find((b) => b.name.toLowerCase().includes(bikeName.toLowerCase()));
   if (!match) {
     return { error: `No motorbike matching '${bikeName}'.` };
   }
-  ctx.update((d) => ({
-    ...d,
-    operations: {
-      ...d.operations,
-      motorbikes: d.operations.motorbikes.map((b) =>
-        b.id === match.id ? { ...b, status } : b,
-      ),
-    },
-  }));
+  const ok = await upsertMotorbike({ ...match, status });
+  if (!ok) return { error: "Could not update the motorbike." };
+  await ctx.refreshOps?.();
   return { success: true, bike: match.name, newStatus: status };
 }
 
 // Guest-safe DRAFT: TALA builds the booking but does NOT write it. The
 // widget renders the returned `draft` as a verification card; the guest taps
 // Confirm (a real human action) which persists the pending booking via
-// ctx.update. Because pending already blocks availability, no double-booking.
-// If an owner calls it (ctx.owner), it persists immediately.
-function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
+// confirmBookingDraft below (anon INSERT, status='pending' only — see the
+// "Guests can submit a pending booking" RLS policy). Because pending already
+// blocks availability, no double-booking. If an owner calls it, it persists
+// immediately as an admin-authenticated upsert.
+async function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   const checkIn = str(args.checkIn);
   const checkOut = str(args.checkOut);
   const roomType = str(args.roomType);
@@ -579,7 +571,7 @@ function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   if (!checkIn || !checkOut || !roomType || !guestName) {
     return { error: "Need guestName, roomType, checkIn and checkOut." };
   }
-  const booking: CmsData["operations"]["bookings"][number] = {
+  const booking: Booking = {
     id: uid("bkg"),
     reference: generateReference("MT"),
     guestId: "",
@@ -597,11 +589,10 @@ function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
   };
 
   // Owner (operator face) persists right away; guests only get a draft.
-  if (ctx.owner && ctx.update) {
-    ctx.update((d) => ({
-      ...d,
-      operations: { ...d.operations, bookings: [...d.operations.bookings, booking] },
-    }));
+  if (ctx.owner) {
+    const ok = await upsertBooking(booking);
+    if (!ok) return { error: "Could not save the booking." };
+    await ctx.refreshOps?.();
     return {
       success: true,
       status: "pending",
@@ -633,43 +624,31 @@ function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
 
 // Persists a guest-confirmed draft. Called by the widget's Confirm button
 // (the human action). Guests can only reach this through that button, never
-// via the model.
-export function confirmBookingDraft(
-  draft: {
-    id: string;
-    reference: string;
-    guestName: string;
-    roomType: string;
-    checkIn: string;
-    checkOut: string;
-    guests: number;
-    amount: number;
-    notes: string;
-  },
-  update: (fn: (d: CmsData) => CmsData) => void,
-  whatsapp?: CmsData["settings"]["whatsapp"],
-) {
-  update((d) => {
-    const exists = d.operations.bookings.some((b) => b.id === draft.id);
-    if (exists) return d;
-    return {
-      ...d,
-      operations: {
-        ...d.operations,
-        bookings: [
-          ...d.operations.bookings,
-          {
-            ...draft,
-            guestId: "",
-            paidAmount: 0,
-            status: "pending",
-            source: "other",
-            createdAt: new Date().toISOString(),
-          } as CmsData["operations"]["bookings"][number],
-        ],
-      },
-    };
-  });
+// via the model. Uses a plain INSERT (not upsert) because anon only has
+// INSERT on `bookings`, and only for status='pending' — see the
+// "Guests can submit a pending booking" RLS policy.
+export async function confirmBookingDraft(draft: {
+  id: string;
+  reference: string;
+  guestName: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  amount: number;
+  notes: string;
+}) {
+  const booking: Booking = {
+    ...draft,
+    guestId: "",
+    paidAmount: 0,
+    status: "pending",
+    source: "other",
+    createdAt: new Date().toISOString(),
+  };
+  const ok = await insertGuestBooking(booking);
+  if (!ok) return { error: "Could not save the booking." };
+
   // Every confirmed booking draft is also a captured lead (email + context
   // live in notes), so the team can follow up even before the owner approves.
   try {
@@ -690,7 +669,7 @@ export function confirmBookingDraft(
 
 // ---- Operator-only: payroll + payments --------------------------------
 function requireOwner(ctx: TalaToolContext) {
-  if (!ctx.owner || !ctx.update) {
+  if (!ctx.owner) {
     return "OPERATOR ONLY: open TALA from the admin Operations console to run payroll or record payments.";
   }
   return null;
@@ -704,20 +683,18 @@ function computeHours(startTime: string, endTime: string): number {
   return Math.max(0, Math.round(h * 100) / 100);
 }
 
-function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
+async function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
   const deny = requireOwner(ctx);
   if (deny) return { error: deny };
-  const update = ctx.update;
-  if (!update) return { error: "Owner update channel is unavailable." };
   const periodStart = str(args.periodStart);
   const periodEnd = str(args.periodEnd);
   if (!periodStart || !periodEnd) return { error: "Need periodStart and periodEnd." };
-  const { operations } = ctx.cms;
-  const staff = operations.staff.filter((s) => s.active);
-  const created: CmsData["operations"]["payRecords"][number][] = [];
+  const { ops } = ctx;
+  const staff = ops.staff.filter((s) => s.active);
+  const created: Parameters<typeof upsertPayRecord>[0][] = [];
   let total = 0;
   for (const member of staff) {
-    const memberShifts = operations.shifts.filter(
+    const memberShifts = ops.shifts.filter(
       (s) => s.staffId === member.id && s.date >= periodStart && s.date <= periodEnd,
     );
     const hours = memberShifts.reduce((sum, s) => sum + (s.hoursWorked || computeHours(s.startTime, s.endTime)), 0);
@@ -742,10 +719,9 @@ function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
     });
   }
   if (created.length === 0) return { success: true, created: 0, total: 0, message: "No billable shifts in that period." };
-  update((d) => ({
-    ...d,
-    operations: { ...d.operations, payRecords: [...d.operations.payRecords, ...created] },
-  }));
+  const results = await Promise.all(created.map(upsertPayRecord));
+  if (results.some((ok) => !ok)) return { error: "Could not save all payroll records." };
+  await ctx.refreshOps?.();
   return {
     success: true,
     created: created.length,
@@ -754,57 +730,37 @@ function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
   };
 }
 
-function markPayRecordPaid(args: Record<string, unknown>, ctx: TalaToolContext) {
+async function markPayRecordPaid(args: Record<string, unknown>, ctx: TalaToolContext) {
   const deny = requireOwner(ctx);
   if (deny) return { error: deny };
-  const update = ctx.update;
-  if (!update) return { error: "Owner update channel is unavailable." };
   const id = str(args.payRecordId);
   const method = paymentMethod(args.method);
   if (!id) return { error: "Need payRecordId." };
-  let done = false;
-  let amount = 0;
-  let name = "";
-  update((d) => {
-    const rec = d.operations.payRecords.find((p) => p.id === id);
-    if (!rec) return d;
-    done = true;
-    amount = rec.amount;
-    name = d.operations.staff.find((s) => s.id === rec.staffId)?.name || "Staff";
-    return {
-      ...d,
-      operations: {
-        ...d.operations,
-        payRecords: d.operations.payRecords.map((p) =>
-          p.id === id ? { ...p, paid: true, paidAt: new Date().toISOString().slice(0, 10), method } : p,
-        ),
-        payments: [
-          ...d.operations.payments,
-          {
-            id: uid("pay"),
-            reference: generateReference("SAL"),
-            date: new Date().toISOString().slice(0, 10),
-            category: "expense",
-            direction: "out",
-            amount,
-            method,
-            relatedId: id,
-            description: `Salary: ${name}`,
-            notes: "",
-          },
-        ],
-      },
-    };
+  const rec = ctx.ops.payRecords.find((p) => p.id === id);
+  if (!rec) return { error: "PayRecord not found." };
+  const name = ctx.ops.staff.find((s) => s.id === rec.staffId)?.name || "Staff";
+  const paidAt = new Date().toISOString().slice(0, 10);
+  const recordOk = await upsertPayRecord({ ...rec, paid: true, paidAt, method });
+  const paymentOk = await upsertPayment({
+    id: uid("pay"),
+    reference: generateReference("SAL"),
+    date: paidAt,
+    category: "expense",
+    direction: "out",
+    amount: rec.amount,
+    method,
+    relatedId: id,
+    description: `Salary: ${name}`,
+    notes: "",
   });
-  if (!done) return { error: "PayRecord not found." };
-  return { success: true, method, amount, message: `Marked paid: ₱${amount.toLocaleString()} via ${method}.` };
+  if (!recordOk || !paymentOk) return { error: "Could not mark the pay record as paid." };
+  await ctx.refreshOps?.();
+  return { success: true, method, amount: rec.amount, message: `Marked paid: ₱${rec.amount.toLocaleString()} via ${method}.` };
 }
 
-function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
+async function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
   const deny = requireOwner(ctx);
   if (deny) return { error: deny };
-  const update = ctx.update;
-  if (!update) return { error: "Owner update channel is unavailable." };
   const direction = str(args.direction);
   const category = str(args.category);
   const amount = num(args.amount, 0);
@@ -812,7 +768,7 @@ function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
   const description = str(args.description);
   if (!["in", "out"].includes(direction)) return { error: "direction must be 'in' or 'out'." };
   if (amount <= 0) return { error: "amount must be > 0." };
-  const payment: CmsData["operations"]["payments"][number] = {
+  const payment: Payment = {
     id: uid("pay"),
     reference: generateReference("PY"),
     date: new Date().toISOString().slice(0, 10),
@@ -824,10 +780,9 @@ function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
     description,
     notes: "",
   };
-  update((d) => ({
-    ...d,
-    operations: { ...d.operations, payments: [...d.operations.payments, payment] },
-  }));
+  const ok = await upsertPayment(payment);
+  if (!ok) return { error: "Could not save the payment." };
+  await ctx.refreshOps?.();
   return {
     success: true,
     reference: payment.reference,

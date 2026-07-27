@@ -22,8 +22,8 @@ import {
   TALA_CLASSIFY_PROMPT,
   type TalaClassification,
 } from "./talaGraph";
-import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
+import { EMPTY_OPERATIONS_SNAPSHOT, type OperationsSnapshot } from "@/lib/opsRepo";
 
 interface ToolCallWire {
   id: string;
@@ -226,6 +226,10 @@ export interface UseTalaChat {
       cms?: CmsData;
       /** Operator face only — allows TALA to write bookings/tours/rentals. */
       owner?: boolean;
+      /** Operator face only — current operations snapshot for owner tool reads. */
+      ops?: OperationsSnapshot;
+      /** Operator face only — reloads `ops` after a write so multi-hop tool calls see it. */
+      refreshOps?: () => Promise<void>;
     },
   ) => Promise<string | null>;
   /** Persists a guest-confirmed booking draft (the human Confirm action). */
@@ -256,9 +260,6 @@ export function useTalaChat(): UseTalaChat {
   const [lastRun, setLastRun] = useState<TalaRunInfo | null>(null);
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const inFlight = useRef(false);
-  // Use the shared CMS store so owner-mode writes persist exactly like the
-  // admin managers do (through CmsContext -> cms_data).
-  const { update: persistCms } = useCms();
   // Authoritative copy of the conversation. React state updaters are NOT
   // guaranteed to run synchronously at the setMessages() call site, so
   // building the outgoing request from inside one silently dropped the
@@ -270,7 +271,14 @@ export function useTalaChat(): UseTalaChat {
     async (
       text: string,
       systemPrompt: string,
-      options?: { model?: string; adminApiKey?: string; cms?: CmsData; owner?: boolean },
+      options?: {
+        model?: string;
+        adminApiKey?: string;
+        cms?: CmsData;
+        owner?: boolean;
+        ops?: OperationsSnapshot;
+        refreshOps?: () => Promise<void>;
+      },
     ): Promise<string | null> => {
       const trimmed = text.trim();
       if (!trimmed || inFlight.current) return null;
@@ -332,7 +340,8 @@ export function useTalaChat(): UseTalaChat {
                   { id: call.id, name: call.function.name, arguments: call.function.arguments },
                   {
                     cms: options.cms,
-                    update: options.owner ? persistCms : undefined,
+                    ops: options.ops ?? EMPTY_OPERATIONS_SNAPSHOT,
+                    refreshOps: options.refreshOps,
                     owner: !!options.owner,
                   } satisfies TalaToolContext,
                 )
@@ -374,7 +383,7 @@ export function useTalaChat(): UseTalaChat {
         setThinking(false);
       }
     },
-    [persistCms],
+    [],
   );
 
   const reset = useCallback(() => {
@@ -401,13 +410,10 @@ export function useTalaChat(): UseTalaChat {
       ]
         .filter(Boolean)
         .join(" · ");
-      confirmBookingDraft(
-        { ...pendingDraft, notes },
-        persistCms,
-      );
+      void confirmBookingDraft({ ...pendingDraft, notes });
       setPendingDraft(null);
     },
-    [pendingDraft, persistCms],
+    [pendingDraft],
   );
 
   return { messages, thinking, error, lastRun, send, reset, clearDraft, pendingDraft, confirmDraft };

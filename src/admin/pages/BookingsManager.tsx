@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Plus, Search, LogIn, LogOut, Pencil, Trash2, CircleDollarSign } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal } from "@/components/ui";
 import { PageHeader, EmptyState } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
+import { useOperations } from "../ops/useOperations";
+import { upsertBooking, deleteBooking, upsertPayment } from "@/lib/opsRepo";
 import {
   formatPHP, formatDate, todayISO, nightsBetween,
   generateReference, textSearch, uid,
@@ -29,13 +30,13 @@ const emptyBooking = (): Booking => ({
 });
 
 export default function BookingsManager() {
-  const { data, update } = useCms();
+  const { data: ops, refresh } = useOperations();
   const { notify } = useToast();
   const [editing, setEditing] = useState<Booking | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
 
-  const bookings = data.operations.bookings;
+  const bookings = ops.bookings;
   const filtered = useMemo(() => {
     let list = textSearch(bookings, search, ["guestName", "reference", "roomType"]);
     if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
@@ -51,54 +52,60 @@ export default function BookingsManager() {
     .filter((b) => new Date(b.createdAt) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, b) => s + b.paidAmount, 0);
 
-  const save = (booking: Booking) => {
+  const save = async (booking: Booking) => {
     const exists = bookings.some((b) => b.id === booking.id);
     const nights = nightsBetween(booking.checkIn, booking.checkOut);
     booking.notes = booking.notes || "";
-    const next = exists ? bookings.map((b) => (b.id === booking.id ? booking : b)) : [...bookings, booking];
-    update((d) => ({ ...d, operations: { ...d.operations, bookings: next } }));
+    const ok = await upsertBooking(booking);
+    if (!ok) {
+      notify("Could not save booking", "info");
+      return;
+    }
+    await refresh();
     notify(exists ? `Booking ${booking.reference} updated` : `Booking ${booking.reference} created (${nights} nights)`);
     setEditing(null);
   };
 
-  const setStatus = (id: string, status: BookingStatus) => {
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        bookings: d.operations.bookings.map((b) => (b.id === id ? { ...b, status } : b)),
-      },
-    }));
+  const setStatus = async (id: string, status: BookingStatus) => {
+    const b = bookings.find((x) => x.id === id);
+    if (!b) return;
+    const ok = await upsertBooking({ ...b, status });
+    if (!ok) {
+      notify("Could not update status", "info");
+      return;
+    }
+    await refresh();
     notify(`Booking ${status.replace("_", " ")}`);
   };
 
-  const remove = (b: Booking) => {
+  const remove = async (b: Booking) => {
     if (!window.confirm(`Delete booking ${b.reference}? This cannot be undone.`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, bookings: d.operations.bookings.filter((x) => x.id !== b.id) } }));
+    const ok = await deleteBooking(b.id);
+    if (!ok) {
+      notify("Could not delete booking", "info");
+      return;
+    }
+    await refresh();
     notify("Booking deleted");
   };
 
-  const recordPayment = (b: Booking) => {
+  const recordPayment = async (b: Booking) => {
     const raw = window.prompt(`Record payment for ${b.reference}\nOutstanding: ${formatPHP(b.amount - b.paidAmount)}\nAmount received (PHP):`, String(b.amount - b.paidAmount));
     if (!raw) return;
     const amt = parseFloat(raw);
     if (isNaN(amt) || amt <= 0) return;
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        bookings: d.operations.bookings.map((x) => (x.id === b.id ? { ...x, paidAmount: x.paidAmount + amt } : x)),
-        payments: [
-          ...d.operations.payments,
-          {
-            id: uid("pay"), reference: generateReference("PAY"),
-            date: todayISO(), category: "booking", direction: "in",
-            amount: amt, method: "cash", relatedId: b.id,
-            description: `Payment for ${b.reference} — ${b.guestName}`, notes: "",
-          },
-        ],
-      },
-    }));
+    const bookingOk = await upsertBooking({ ...b, paidAmount: b.paidAmount + amt });
+    const paymentOk = await upsertPayment({
+      id: uid("pay"), reference: generateReference("PAY"),
+      date: todayISO(), category: "booking", direction: "in",
+      amount: amt, method: "cash", relatedId: b.id,
+      description: `Payment for ${b.reference} — ${b.guestName}`, notes: "",
+    });
+    if (!bookingOk || !paymentOk) {
+      notify("Could not record payment", "info");
+      return;
+    }
+    await refresh();
     notify(`${formatPHP(amt)} recorded`);
   };
 

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Search, ArrowDownRight, ArrowUpRight, Download } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Field, Input, Textarea, Select, Modal } from "@/components/ui";
 import { PageHeader, EmptyState } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, KpiCard } from "../ops/OpsPrimitives";
+import { useOperations } from "../ops/useOperations";
+import { upsertPayment, deletePayment } from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, generateReference, textSearch, uid } from "../ops/opsUtils";
 import type { Payment, PaymentMethod } from "@/types/cms";
 
@@ -15,14 +16,14 @@ const emptyPayment = (): Payment => ({
 });
 
 export default function PaymentsManager() {
-  const { data, update } = useCms();
+  const { data: ops, refresh } = useOperations();
   const { notify } = useToast();
   const [editing, setEditing] = useState<Payment | null>(null);
   const [search, setSearch] = useState("");
   const [dirFilter, setDirFilter] = useState<"all" | "in" | "out">("all");
   const [range, setRange] = useState<7 | 30 | 90 | 365>(30);
 
-  const payments = data.operations.payments;
+  const payments = ops.payments;
 
   const filtered = useMemo(() => {
     let list = textSearch(payments, search, ["description", "reference", "notes"]);
@@ -36,17 +37,20 @@ export default function PaymentsManager() {
   const expenses = inRange.filter((p) => p.direction === "out").reduce((s, p) => s + p.amount, 0);
   const net = revenue - expenses;
 
-  const save = (p: Payment) => {
+  const save = async (p: Payment) => {
     const exists = payments.some((x) => x.id === p.id);
-    const next = exists ? payments.map((x) => (x.id === p.id ? p : x)) : [...payments, p];
-    update((d) => ({ ...d, operations: { ...d.operations, payments: next } }));
+    const ok = await upsertPayment(p);
+    if (!ok) return notify("Could not save payment", "info");
+    await refresh();
     notify(exists ? "Payment updated" : "Payment recorded");
     setEditing(null);
   };
 
-  const remove = (p: Payment) => {
+  const remove = async (p: Payment) => {
     if (!window.confirm(`Delete payment ${p.reference}?`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, payments: d.operations.payments.filter((x) => x.id !== p.id) } }));
+    const ok = await deletePayment(p.id);
+    if (!ok) return notify("Could not delete payment", "info");
+    await refresh();
     notify("Payment deleted");
   };
 
