@@ -297,11 +297,11 @@ export interface WhatsAppSettings {
    */
   cloudApi: {
     enabled: boolean;
-    templateLanguage: string; // e.g. "en_US" — must match what you set in Meta
+    templateLanguage: string; // not used by Twilio, kept for future
     templates: {
-      bookingReminder: string; // e.g. "booking_reminder" — {{1}} reference, {{2}} date
-      dailyBrief: string; // e.g. "daily_brief" — {{1}} summary text
-      lowStockAlert: string; // e.g. "low_stock_alert" — {{1}} item list
+      bookingReminder: string; // Twilio Content SID, e.g. "HXfda3c3d7e4dab5c1d9e2f3a4b5c6d7e8"
+      dailyBrief: string; // Twilio Content SID, e.g. "HX..." — {1} becomes the summary
+      lowStockAlert: string; // Twilio Content SID, e.g. "HX..." — {1} becomes item list
     };
   };
 }

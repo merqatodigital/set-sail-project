@@ -354,21 +354,17 @@ export default function WhatsAppManager() {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900/80">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            Your access token and phone number ID are <strong>not</strong> entered here — this page
-            is public-readable, like the rest of the site's content. Set them once as Supabase
-            secrets (Edge Functions → Secrets):{" "}
-            <code className="rounded bg-white px-1 py-0.5">WHATSAPP_ACCESS_TOKEN</code> and{" "}
-            <code className="rounded bg-white px-1 py-0.5">WHATSAPP_PHONE_NUMBER_ID</code>, from
-            your Meta for Developers app. Only the template names below (not secret) live in this
-            page.
+            Your Twilio credentials are <strong>not</strong> entered here — this page is
+            public-readable, like the rest of the site's content. Set them once as Supabase secrets
+            (Edge Functions → Secrets):{" "}
+            <code className="rounded bg-white px-1 py-0.5">TWILIO_ACCOUNT_SID</code> and{" "}
+            <code className="rounded bg-white px-1 py-0.5">TWILIO_AUTH_TOKEN</code>, from your
+            Twilio Console. Only the template IDs below (not secret) live in this page.
           </p>
         </div>
 
         <fieldset disabled={!wa.cloudApi.enabled} className="space-y-4 disabled:opacity-60">
-          <Field
-            label="Template Language"
-            hint="Must match exactly what you set when creating templates in Meta"
-          >
+          <Field label="Template Language" hint="For future use; not currently used by Twilio">
             <Input
               value={wa.cloudApi.templateLanguage}
               onChange={(e) => patchCloudApi({ templateLanguage: e.target.value })}
@@ -377,28 +373,31 @@ export default function WhatsAppManager() {
             />
           </Field>
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Booking Reminder Template" hint="Approved template name in Meta">
+            <Field
+              label="Booking Reminder — Content SID"
+              hint="From Twilio console, starts with HX"
+            >
               <Input
                 value={wa.cloudApi.templates.bookingReminder}
                 onChange={(e) => patchCloudApiTemplates({ bookingReminder: e.target.value })}
                 onBlur={() => notify("Saved")}
-                placeholder="booking_reminder"
+                placeholder="HXfda3c3d7e4dab5c1d9e2f3a4b5c6d7e8"
               />
             </Field>
-            <Field label="Daily Brief Template" hint="Approved template name in Meta">
+            <Field label="Daily Brief — Content SID" hint="From Twilio console, starts with HX">
               <Input
                 value={wa.cloudApi.templates.dailyBrief}
                 onChange={(e) => patchCloudApiTemplates({ dailyBrief: e.target.value })}
                 onBlur={() => notify("Saved")}
-                placeholder="daily_brief"
+                placeholder="HX..."
               />
             </Field>
-            <Field label="Low Stock Alert Template" hint="Approved template name in Meta">
+            <Field label="Low Stock Alert — Content SID" hint="From Twilio console, starts with HX">
               <Input
                 value={wa.cloudApi.templates.lowStockAlert}
                 onChange={(e) => patchCloudApiTemplates({ lowStockAlert: e.target.value })}
                 onBlur={() => notify("Saved")}
-                placeholder="low_stock_alert"
+                placeholder="HX..."
               />
             </Field>
           </div>
