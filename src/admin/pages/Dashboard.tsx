@@ -3,11 +3,13 @@ import { Tags, Images, Newspaper, Quote, HelpCircle, ArrowUpRight, ExternalLink,
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { formatPHP } from "../ops/opsUtils";
+import { useOperations } from "../ops/useOperations";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 
 export default function Dashboard() {
   const { data } = useCms();
-  const brief = computeBriefing(data);
+  const { data: ops, loading: opsLoading } = useOperations();
+  const brief = computeBriefing(ops);
 
   const stats = [
     { label: "Pricing Packages", value: data.pricing.length, icon: Tags, to: "/admin/pricing" },
@@ -84,7 +86,7 @@ export default function Dashboard() {
             <CalendarCheck className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{data.operations.bookings.filter((b) => b.status === "checked_in").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.bookings.filter((b) => b.status === "checked_in").length}</p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Guests In-House</p>
         </Link>
         <Link to="/admin/tours" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -92,7 +94,7 @@ export default function Dashboard() {
             <Ship className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{data.operations.tourBookings.filter((b) => b.status === "confirmed").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.tourBookings.filter((b) => b.status === "confirmed").length}</p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Upcoming Tours</p>
         </Link>
         <Link to="/admin/rentals" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -100,7 +102,7 @@ export default function Dashboard() {
             <Bike className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{data.operations.motorbikes.filter((b) => b.status === "rented").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.motorbikes.filter((b) => b.status === "rented").length}</p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Bikes Out</p>
         </Link>
         <Link to="/admin/payments" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -110,7 +112,7 @@ export default function Dashboard() {
           </div>
           <p className="mt-3 font-serif text-2xl text-[#26221C]">
             {formatPHP(
-              data.operations.payments
+              ops.payments
                 .filter((p) => p.direction === "in" && new Date(p.date).getTime() > Date.now() - 30 * 86400000)
                 .reduce((s, p) => s + p.amount, 0)
             )}

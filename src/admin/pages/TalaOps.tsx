@@ -21,6 +21,8 @@ import { PageHeader, TabBar } from "../shared/PageHeader";
 import { useTalaChat } from "@/components/tala/useTalaChat";
 import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
+import { useOperations } from "../ops/useOperations";
+import type { OperationsSnapshot } from "@/lib/opsRepo";
 import {
   addTalaBriefing,
   addTalaGoal,
@@ -49,6 +51,7 @@ export default function TalaOps() {
   const { notify } = useToast();
   const tala = useTalaChat();
   const [tab, setTab] = useState<Tab>("chat");
+  const { data: ops, refresh: refreshOps } = useOperations();
 
   return (
     <div>
@@ -68,8 +71,10 @@ export default function TalaOps() {
           { id: "leads", label: "Leads" },
         ]}
       />
-      {tab === "chat" && <ChatTab tala={tala} cms={data} notify={notify} />}
-      {tab === "briefing" && <BriefingTab cms={data} notify={notify} />}
+      {tab === "chat" && (
+        <ChatTab tala={tala} cms={data} ops={ops} refreshOps={refreshOps} notify={notify} />
+      )}
+      {tab === "briefing" && <BriefingTab cms={data} ops={ops} notify={notify} />}
       {tab === "goals" && <GoalsTab notify={notify} />}
       {tab === "tasks" && <TasksTab notify={notify} />}
       {tab === "wins" && <WinsTab cms={data} notify={notify} />}
@@ -96,10 +101,14 @@ function operatorPrompt(siteName: string): string {
 function ChatTab({
   tala,
   cms,
+  ops,
+  refreshOps,
   notify,
 }: {
   tala: ReturnType<typeof useTalaChat>;
   cms: import("@/types/cms").CmsData;
+  ops: OperationsSnapshot;
+  refreshOps: () => Promise<void>;
   notify: ReturnType<typeof useToast>["notify"];
 }) {
   const [draft, setDraft] = useState("");
@@ -115,9 +124,11 @@ function ChatTab({
       model: modelId,
       adminApiKey: adminKey,
       cms,
+      ops,
+      refreshOps,
       owner: true,
     });
-  }, [draft, tala, siteName, modelId, adminKey, cms]);
+  }, [draft, tala, siteName, modelId, adminKey, cms, ops, refreshOps]);
 
   return (
     <Card className="p-6">
@@ -191,9 +202,11 @@ function ChatTab({
 // ---------------------------------------------------------------------------
 function BriefingTab({
   cms,
+  ops,
   notify,
 }: {
   cms: import("@/types/cms").CmsData;
+  ops: OperationsSnapshot;
   notify: ReturnType<typeof useToast>["notify"];
 }) {
   const [briefings, setBriefings] = useState<TalaBriefing[] | null>(null);
@@ -212,7 +225,7 @@ function BriefingTab({
     let saved = await generateTalaBriefing();
     // Fallback: if the RPC isn't deployed yet, compute in-browser + insert.
     if (!saved) {
-      const snap = computeBriefing(cms);
+      const snap = computeBriefing(ops);
       saved = await addTalaBriefing({
         brief_date: snap.briefDate,
         summary: snap.summary,
@@ -226,7 +239,7 @@ function BriefingTab({
     } else {
       notify("Could not save briefing (Supabase not connected?).", "error");
     }
-  }, [cms, notify, load]);
+  }, [ops, notify, load]);
 
   const sendToWhatsApp = useCallback(
     async (b: TalaBriefing) => {

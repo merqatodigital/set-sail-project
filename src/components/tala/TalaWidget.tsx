@@ -21,6 +21,8 @@ import { useSpeechInput } from "./useSpeechInput";
 import { useTalaKnowledge } from "./useTalaKnowledge";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
+import { listPublicTours } from "@/lib/opsRepo";
+import type { Tour } from "@/types/cms";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
@@ -53,6 +55,10 @@ export function TalaWidget() {
     ignoreLocalVoice: true,
   });
   const knowledge = useTalaKnowledge();
+  const [publicTours, setPublicTours] = useState<Tour[]>([]);
+  useEffect(() => {
+    listPublicTours().then(setPublicTours);
+  }, []);
 
   // Fallback to the human team — always points at the primary WhatsApp number
   // configured in Admin → WhatsApp. Shows as a persistent button and again
@@ -285,7 +291,7 @@ export function TalaWidget() {
             {chat.pendingDraft && (
               <BookingFormCard
                 draft={chat.pendingDraft}
-                tours={(data.operations?.tours ?? []).map((t) => ({ name: t.name }))}
+                tours={publicTours.map((t) => ({ name: t.name }))}
                 onConfirm={(extra) => chat.confirmDraft(extra)}
                 onEdit={() => chat.clearDraft()}
               />

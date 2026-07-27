@@ -1,10 +1,14 @@
-import type { CmsData } from "@/types/cms";
+import type { OperationsSnapshot } from "@/lib/opsRepo";
 
 // ---------------------------------------------------------------------------
 // TALA morning briefing — COMPUTED, not LLM-generated (phase 1).
 // Reuses the exact same math as OperationsDashboard.tsx so the brief her
 // operator reads matches the numbers on the Overview. No new infrastructure:
 // runs in the browser when you click "Generate briefing" in the admin console.
+//
+// Operations data moved out of cms_data into its own admin-only tables (see
+// the operations_tables migration); this now takes that snapshot directly
+// instead of the full CmsData.
 //
 // Phase 2 (later): hand this snapshot to the tala-chat edge function and let
 // TALA turn it into a warm narrative. For now we compute it deterministically.
@@ -35,8 +39,7 @@ function php(n: number): string {
   return "₱" + Math.round(n).toLocaleString("en-PH");
 }
 
-export function computeBriefing(cms: CmsData): TalaBriefingSnapshot {
-  const ops = cms.operations;
+export function computeBriefing(ops: OperationsSnapshot): TalaBriefingSnapshot {
   const today = todayISO();
   const days30 = 30 * 86400000;
   const now = Date.now();
