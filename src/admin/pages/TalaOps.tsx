@@ -11,6 +11,7 @@ import {
   Lightbulb,
   Loader2,
   MessageCircle,
+  Package,
   Plus,
   Send,
   Sparkles,
@@ -97,7 +98,7 @@ function operatorPrompt(siteName: string): string {
     `You are TALA, the AI operations concierge for ${siteName} in San Vicente, Palawan.`,
     `You are speaking with the OWNER or STAFF (not a guest). Be direct, concise and useful.`,
     `You can reference bookings, tours, staff, payments and tasks. When asked for a morning update, give a tight rundown of today's arrivals, departures, tours, bikes out, in-house guests, and any unpaid payroll or money notes.`,
-    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, and log_payment (record revenue or expense). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
+    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, log_payment (record revenue or expense), check_inventory (stock levels — linens, towels, bathroom, food, gas, fuel), and adjust_inventory (log stock used or restocked). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
     `Never invent numbers — use what is in context. If you don't know, say so. Keep replies to 1-4 sentences unless detail is asked for.`,
   ].join("\n");
 }
@@ -283,7 +284,7 @@ function BriefingTab({
         <p className="mb-3 flex items-center gap-2 font-serif text-lg text-[#26221C]">
           <CloudSun className="h-4 w-4 text-[#C6A15B]" /> Right now in San Vicente
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg bg-[#FAF6EF] p-3">
             <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45">Weather</p>
             {weatherLoading ? (
@@ -322,6 +323,16 @@ function BriefingTab({
               {live.pendingBookings > 0
                 ? `${live.pendingBookings} booking${live.pendingBookings > 1 ? "s" : ""} to confirm`
                 : "Nothing pending"}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45 flex items-center gap-1">
+              <Package className="h-3 w-3" /> Stock
+            </p>
+            <p className="mt-1 text-sm font-medium text-[#26221C]">
+              {live.lowStockItems.length > 0
+                ? `Low: ${live.lowStockItems.join(", ")}`
+                : "All stocked up"}
             </p>
           </div>
         </div>

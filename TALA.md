@@ -179,11 +179,12 @@ TALA's operator tools go through now.
 Two layers, both reading the same tables:
 
 - **Scheduled** — a pg_cron job (`supabase/migrations/20260723093000_tala_daily_briefing_cron.sql`,
-  logic updated in `20260727090000` and `20260727100000` to read the new
-  operations tables instead of the old `cms_data.operations` JSON) runs
-  `generate_tala_briefing()` every day at 07:00 Asia/Manila and inserts a row
-  into `tala_briefings` — no click needed. Verify it's actually scheduled
-  with `select * from cron.job where jobname = 'tala_daily_briefing';` in the
+  logic updated in `20260727090000`, `20260727100000`, and `20260727120000`
+  to read the new operations + inventory tables instead of the old
+  `cms_data.operations` JSON) runs `generate_tala_briefing()` every day at
+  07:00 Asia/Manila and inserts a row into `tala_briefings` — no click
+  needed. Verify it's actually scheduled with
+  `select * from cron.job where jobname = 'tala_daily_briefing';` in the
   SQL Editor; re-run the `cron.schedule(...)` line at the bottom of that
   migration if the row is missing (can happen after a project pause/restore).
 - **Live** — Admin → TALA → Morning Brief also shows a "Right now" panel
@@ -191,4 +192,23 @@ Two layers, both reading the same tables:
   always current, not just generated once a day: live San Vicente weather
   (Open-Meteo, no key, fetched client-side — `src/lib/weather.ts`), which
   room types have nobody booked in tonight, bike availability/maintenance,
-  bookings still awaiting confirmation, and yesterday's logged wins.
+  bookings still awaiting confirmation, low-stock inventory, and yesterday's
+  logged wins.
+
+## Inventory (linens, towels, bathroom, food, gas, fuel…)
+
+`inventory_items` (migration `20260727110000_inventory.sql`) is a basic
+stock tracker, admin-only like the other operations tables. Manage it at
+Admin → Operations → Inventory (`src/admin/pages/InventoryManager.tsx`):
+
+- Add items one at a time, or bulk-import via CSV — **Template** downloads a
+  correctly-shaped starter file (`src/lib/inventoryCsv.ts`), **Bulk Upload**
+  reads one back. Re-uploading an edited export updates existing items by
+  name instead of duplicating them.
+- Each item has a `reorderThreshold`; anything at or below it shows up as
+  "low stock" — in this page, in the admin Dashboard tile, in TALA's "Right
+  now" panel, and in the scheduled morning brief.
+- TALA (operator mode only, via `src/components/tala/talaTools.ts`) can
+  `check_inventory` (look up stock or list everything running low) and
+  `adjust_inventory` (log stock used or restocked, by name — she never
+  creates new items, only adjusts existing ones added in the admin UI first).

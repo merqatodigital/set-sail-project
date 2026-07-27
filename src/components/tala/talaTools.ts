@@ -1,4 +1,11 @@
-import type { Booking, BookingSource, CmsData, Payment, PaymentMethod, TourBooking } from "@/types/cms";
+import type {
+  Booking,
+  BookingSource,
+  CmsData,
+  Payment,
+  PaymentMethod,
+  TourBooking,
+} from "@/types/cms";
 import { supabase, isSupabaseConnected } from "@/lib/supabase";
 import { uid, generateReference, todayISO } from "@/admin/ops/opsUtils";
 import {
@@ -11,6 +18,7 @@ import {
   upsertMotorbike,
   upsertPayRecord,
   upsertPayment,
+  upsertInventoryItem,
 } from "@/lib/opsRepo";
 
 // ---------------------------------------------------------------------------
@@ -112,7 +120,8 @@ export const TALA_TOOL_SCHEMAS = [
           amount: { type: "number", description: "Total amount in PHP." },
           source: {
             type: "string",
-            description: "Booking source: whatsapp, direct, airbnb, agoda, booking.com, walk_in, referral, other.",
+            description:
+              "Booking source: whatsapp, direct, airbnb, agoda, booking.com, walk_in, referral, other.",
           },
           notes: { type: "string", description: "Optional notes." },
         },
@@ -147,8 +156,7 @@ export const TALA_TOOL_SCHEMAS = [
     type: "function",
     function: {
       name: "create_tour_booking",
-      description:
-        "OWNER ONLY. Book a guest onto a tour departure. Requires owner mode.",
+      description: "OWNER ONLY. Book a guest onto a tour departure. Requires owner mode.",
       parameters: {
         type: "object",
         properties: {
@@ -203,7 +211,8 @@ export const TALA_TOOL_SCHEMAS = [
           guestName: { type: "string", description: "Guest's name." },
           roomType: {
             type: "string",
-            description: "Room or package name as listed, e.g. 'Superior Room UNO', 'Weekly Sprint', 'Day Pass'.",
+            description:
+              "Room or package name as listed, e.g. 'Superior Room UNO', 'Weekly Sprint', 'Day Pass'.",
           },
           checkIn: { type: "string", description: "Check-in date, ISO YYYY-MM-DD." },
           checkOut: { type: "string", description: "Check-out date, ISO YYYY-MM-DD." },
@@ -259,13 +268,68 @@ export const TALA_TOOL_SCHEMAS = [
         type: "object",
         properties: {
           direction: { type: "string", description: "'in' for revenue, 'out' for expense." },
-          category: { type: "string", description: "'booking' | 'tour' | 'rental' | 'other' | 'expense'." },
+          category: {
+            type: "string",
+            description: "'booking' | 'tour' | 'rental' | 'other' | 'expense'.",
+          },
           amount: { type: "number", description: "Amount in PHP." },
-          method: { type: "string", description: "Payment method: 'cash' | 'card' | 'gcash' | 'bank' | 'other'." },
+          method: {
+            type: "string",
+            description: "Payment method: 'cash' | 'card' | 'gcash' | 'bank' | 'other'.",
+          },
           description: { type: "string", description: "Short human description." },
           relatedId: { type: "string", description: "Optional related booking/tour/rental id." },
         },
         required: ["direction", "category", "amount", "method", "description"],
+      },
+    },
+  },
+  // ---- OPERATOR-ONLY: INVENTORY -------------------------------------------
+  {
+    type: "function",
+    function: {
+      name: "check_inventory",
+      description:
+        "OPERATOR ONLY. Look up current stock levels — linens, towels, bathroom supplies, food, gas (gasul/LPG), fuel, cleaning supplies, etc. Omit itemName to list everything running low; provide it to check a specific item.",
+      parameters: {
+        type: "object",
+        properties: {
+          itemName: {
+            type: "string",
+            description: "Optional: a specific item to look up, e.g. 'gasul' or 'bath towels'.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "adjust_inventory",
+      description:
+        "OPERATOR ONLY. Adjust stock for an existing item — use delta for 'used 2 gasul tanks' (negative) or 'restocked 20 towels' (positive), or setQuantity to state the new total directly. Never invents new items — the item must already exist (add it in Admin -> Inventory first).",
+      parameters: {
+        type: "object",
+        properties: {
+          itemName: {
+            type: "string",
+            description: "Item name (matches partially, case-insensitive).",
+          },
+          delta: {
+            type: "number",
+            description: "Amount to add (positive) or subtract (negative) from current stock.",
+          },
+          setQuantity: {
+            type: "number",
+            description: "Set stock to this exact value instead of adjusting by delta.",
+          },
+          reason: {
+            type: "string",
+            description: "Short note on why, e.g. 'used for 3 checkouts'.",
+          },
+        },
+        required: ["itemName"],
       },
     },
   },
@@ -387,12 +451,10 @@ async function logInterestedGuest(args: Record<string, unknown>) {
 // and deduped per session; failures are swallowed (never break the chat).
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 const PHONE_RE = /(?:\+?\d[\d\s()-]{7,}\d)/;
-const NAME_HINT_RE = /\b(i am|i'm|my name is|this is|it's|name's)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/;
+const NAME_HINT_RE =
+  /\b(i am|i'm|my name is|this is|it's|name's)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/;
 
-export async function captureGuestLead(
-  text: string,
-  sessionKey: string,
-): Promise<void> {
+export async function captureGuestLead(text: string, sessionKey: string): Promise<void> {
   try {
     if (!isSupabaseConnected() || !supabase) return;
     const email = text.match(EMAIL_RE)?.[0];
@@ -405,7 +467,10 @@ export async function captureGuestLead(
     // Dedup: only capture once per session + contact key.
     const dedupKey = `${sessionKey}:${email || phone || name || ""}`.toLowerCase();
     if ((captureGuestLead as unknown as { _seen?: Set<string> })._seen?.has(dedupKey)) return;
-    (((captureGuestLead as unknown as { _seen?: Set<string> })._seen ??= new Set<string>()) as Set<string>).add(dedupKey);
+    (
+      ((captureGuestLead as unknown as { _seen?: Set<string> })._seen ??=
+        new Set<string>()) as Set<string>
+    ).add(dedupKey);
 
     const parts: string[] = [];
     if (email) parts.push(`email ${email}`);
@@ -421,8 +486,11 @@ export async function captureGuestLead(
   }
 }
 
-
-function findBooking(ops: OperationsSnapshot, ref?: string, guestName?: string): Booking | undefined {
+function findBooking(
+  ops: OperationsSnapshot,
+  ref?: string,
+  guestName?: string,
+): Booking | undefined {
   const refL = str(ref).toLowerCase();
   const nameL = str(guestName).toLowerCase();
   return ops.bookings.find(
@@ -487,7 +555,8 @@ async function updateBooking(args: Record<string, unknown>, ctx: TalaToolContext
     ...found,
     status,
     amount: args.amount !== undefined ? num(args.amount, found.amount) : found.amount,
-    paidAmount: args.paidAmount !== undefined ? num(args.paidAmount, found.paidAmount) : found.paidAmount,
+    paidAmount:
+      args.paidAmount !== undefined ? num(args.paidAmount, found.paidAmount) : found.paidAmount,
     notes: args.notes !== undefined ? str(args.notes) : found.notes,
   });
   if (!ok) return { error: "Could not update the booking." };
@@ -546,7 +615,9 @@ async function updateRental(args: Record<string, unknown>, ctx: TalaToolContext)
   if (!["available", "rented", "maintenance"].includes(status)) {
     return { error: "status must be available, rented, or maintenance." };
   }
-  const match = ctx.ops.motorbikes.find((b) => b.name.toLowerCase().includes(bikeName.toLowerCase()));
+  const match = ctx.ops.motorbikes.find((b) =>
+    b.name.toLowerCase().includes(bikeName.toLowerCase()),
+  );
   if (!match) {
     return { error: `No motorbike matching '${bikeName}'.` };
   }
@@ -657,7 +728,10 @@ export async function confirmBookingDraft(draft: {
       void supabase.from("tala_leads").insert({
         name: draft.guestName,
         contact: email.slice(0, 200),
-        note: `Booking draft ${draft.reference} (${draft.roomType}, ${draft.checkIn}→${draft.checkOut}): ${draft.notes}`.slice(0, 1000),
+        note: `Booking draft ${draft.reference} (${draft.roomType}, ${draft.checkIn}→${draft.checkOut}): ${draft.notes}`.slice(
+          0,
+          1000,
+        ),
         source: "booking_draft",
       });
     }
@@ -678,7 +752,7 @@ function requireOwner(ctx: TalaToolContext) {
 function computeHours(startTime: string, endTime: string): number {
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
-  let h = (eh + em / 60) - (sh + sm / 60);
+  let h = eh + em / 60 - (sh + sm / 60);
   if (h < 0) h += 24;
   return Math.max(0, Math.round(h * 100) / 100);
 }
@@ -697,12 +771,17 @@ async function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
     const memberShifts = ops.shifts.filter(
       (s) => s.staffId === member.id && s.date >= periodStart && s.date <= periodEnd,
     );
-    const hours = memberShifts.reduce((sum, s) => sum + (s.hoursWorked || computeHours(s.startTime, s.endTime)), 0);
+    const hours = memberShifts.reduce(
+      (sum, s) => sum + (s.hoursWorked || computeHours(s.startTime, s.endTime)),
+      0,
+    );
     const days = new Set(memberShifts.map((s) => s.date)).size;
     const amount =
-      member.payType === "hourly" ? hours * member.payRate :
-      member.payType === "daily" ? days * member.payRate :
-      member.payRate;
+      member.payType === "hourly"
+        ? hours * member.payRate
+        : member.payType === "daily"
+          ? days * member.payRate
+          : member.payRate;
     if (amount <= 0) continue;
     total += amount;
     created.push({
@@ -718,7 +797,8 @@ async function runPayroll(args: Record<string, unknown>, ctx: TalaToolContext) {
       notes: `Generated by TALA for ${member.name}`,
     });
   }
-  if (created.length === 0) return { success: true, created: 0, total: 0, message: "No billable shifts in that period." };
+  if (created.length === 0)
+    return { success: true, created: 0, total: 0, message: "No billable shifts in that period." };
   const results = await Promise.all(created.map(upsertPayRecord));
   if (results.some((ok) => !ok)) return { error: "Could not save all payroll records." };
   await ctx.refreshOps?.();
@@ -755,7 +835,12 @@ async function markPayRecordPaid(args: Record<string, unknown>, ctx: TalaToolCon
   });
   if (!recordOk || !paymentOk) return { error: "Could not mark the pay record as paid." };
   await ctx.refreshOps?.();
-  return { success: true, method, amount: rec.amount, message: `Marked paid: ₱${rec.amount.toLocaleString()} via ${method}.` };
+  return {
+    success: true,
+    method,
+    amount: rec.amount,
+    message: `Marked paid: ₱${rec.amount.toLocaleString()} via ${method}.`,
+  };
 }
 
 async function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
@@ -772,7 +857,9 @@ async function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
     id: uid("pay"),
     reference: generateReference("PY"),
     date: new Date().toISOString().slice(0, 10),
-    category: (["booking", "tour", "rental", "other", "expense"].includes(category) ? category : "other") as Payment["category"],
+    category: (["booking", "tour", "rental", "other", "expense"].includes(category)
+      ? category
+      : "other") as Payment["category"],
     direction: direction as "in" | "out",
     amount,
     method,
@@ -787,6 +874,76 @@ async function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
     success: true,
     reference: payment.reference,
     message: `Logged ${direction === "in" ? "revenue" : "expense"}: ₱${amount.toLocaleString()} (${category}).`,
+  };
+}
+
+// ---- Operator-only: inventory ------------------------------------------
+async function checkInventory(args: Record<string, unknown>, ctx: TalaToolContext) {
+  const deny = requireOwner(ctx);
+  if (deny) return { error: deny };
+  const itemName = str(args.itemName);
+  if (itemName) {
+    const match = ctx.ops.inventory.find((i) =>
+      i.name.toLowerCase().includes(itemName.toLowerCase()),
+    );
+    if (!match) return { error: `No inventory item matching '${itemName}'.` };
+    return {
+      name: match.name,
+      category: match.category,
+      quantity: match.quantity,
+      unit: match.unit,
+      reorderThreshold: match.reorderThreshold,
+      low: match.reorderThreshold > 0 && match.quantity <= match.reorderThreshold,
+    };
+  }
+  const low = ctx.ops.inventory.filter(
+    (i) => i.reorderThreshold > 0 && i.quantity <= i.reorderThreshold,
+  );
+  return {
+    totalItems: ctx.ops.inventory.length,
+    lowStock: low.map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit })),
+    message:
+      low.length > 0
+        ? `${low.length} item(s) running low: ${low.map((i) => i.name).join(", ")}.`
+        : "Nothing is below its reorder threshold right now.",
+  };
+}
+
+async function adjustInventory(args: Record<string, unknown>, ctx: TalaToolContext) {
+  const deny = requireOwner(ctx);
+  if (deny) return { error: deny };
+  const itemName = str(args.itemName);
+  if (!itemName) return { error: "Need itemName." };
+  const match = ctx.ops.inventory.find((i) =>
+    i.name.toLowerCase().includes(itemName.toLowerCase()),
+  );
+  if (!match) {
+    return {
+      error: `No inventory item matching '${itemName}'. Add it in Admin -> Inventory first.`,
+    };
+  }
+  const hasSet = args.setQuantity !== undefined && args.setQuantity !== null;
+  const newQuantity = hasSet
+    ? Math.max(0, num(args.setQuantity, match.quantity))
+    : Math.max(0, match.quantity + num(args.delta, 0));
+  const reason = str(args.reason);
+  const ok = await upsertInventoryItem({
+    ...match,
+    quantity: newQuantity,
+    notes: reason
+      ? `${match.notes ? match.notes + " — " : ""}${reason}`.slice(0, 500)
+      : match.notes,
+  });
+  if (!ok) return { error: "Could not update inventory." };
+  await ctx.refreshOps?.();
+  const low = match.reorderThreshold > 0 && newQuantity <= match.reorderThreshold;
+  return {
+    success: true,
+    name: match.name,
+    quantity: newQuantity,
+    unit: match.unit,
+    low,
+    message: `${match.name}: now ${newQuantity} ${match.unit}${low ? " — running low, worth reordering." : "."}`,
   };
 }
 
@@ -823,6 +980,10 @@ export async function executeTalaTool(
       return markPayRecordPaid(args, ctx);
     case "log_payment":
       return logPayment(args, ctx);
+    case "check_inventory":
+      return checkInventory(args, ctx);
+    case "adjust_inventory":
+      return adjustInventory(args, ctx);
     default:
       return { error: `Unknown tool: ${call.name}` };
   }

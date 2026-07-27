@@ -62,7 +62,10 @@ function guestToRow(g: Guest) {
   };
 }
 export async function listGuests(): Promise<Guest[]> {
-  const { data, error } = await db().from("guests").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db()
+    .from("guests")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map(guestFromRow);
 }
@@ -112,7 +115,10 @@ function bookingToRow(b: Booking) {
   };
 }
 export async function listBookings(): Promise<Booking[]> {
-  const { data, error } = await db().from("bookings").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db()
+    .from("bookings")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map(bookingFromRow);
 }
@@ -131,7 +137,9 @@ export async function deleteBooking(id: string): Promise<boolean> {
  * UPDATE privilege just to plan the ON CONFLICT branch.
  */
 export async function insertGuestBooking(b: Booking): Promise<boolean> {
-  const { error } = await db().from("bookings").insert({ ...bookingToRow(b), status: "pending" });
+  const { error } = await db()
+    .from("bookings")
+    .insert({ ...bookingToRow(b), status: "pending" });
   return !error;
 }
 /**
@@ -185,7 +193,10 @@ function tourToRow(t: Tour) {
   };
 }
 export async function listTours(): Promise<Tour[]> {
-  const { data, error } = await db().from("tours_catalog").select("*").order("sort_order", { ascending: true });
+  const { data, error } = await db()
+    .from("tours_catalog")
+    .select("*")
+    .order("sort_order", { ascending: true });
   if (error || !data) return [];
   return data.map(tourFromRow);
 }
@@ -249,7 +260,10 @@ function tourBookingToRow(t: TourBooking) {
   };
 }
 export async function listTourBookings(): Promise<TourBooking[]> {
-  const { data, error } = await db().from("tour_bookings").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db()
+    .from("tour_bookings")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map(tourBookingFromRow);
 }
@@ -415,7 +429,10 @@ function paymentToRow(p: Payment) {
   };
 }
 export async function listPayments(): Promise<Payment[]> {
-  const { data, error } = await db().from("payments").select("*").order("date", { ascending: false });
+  const { data, error } = await db()
+    .from("payments")
+    .select("*")
+    .order("date", { ascending: false });
   if (error || !data) return [];
   return data.map(paymentFromRow);
 }
@@ -506,7 +523,10 @@ function rentalToRow(m: MotorbikeRental) {
   };
 }
 export async function listMotorbikeRentals(): Promise<MotorbikeRental[]> {
-  const { data, error } = await db().from("motorbike_rentals").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db()
+    .from("motorbike_rentals")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map(rentalFromRow);
 }
@@ -516,6 +536,89 @@ export async function upsertMotorbikeRental(m: MotorbikeRental): Promise<boolean
 }
 export async function deleteMotorbikeRental(id: string): Promise<boolean> {
   const { error } = await db().from("motorbike_rentals").delete().eq("id", id);
+  return !error;
+}
+
+// --- Inventory (linens, towels, bathroom, food, gas, fuel, etc.) -----------
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  unit: string;
+  quantity: number;
+  reorderThreshold: number;
+  unitCost: number;
+  notes: string;
+  updatedAt: string;
+}
+export type InventoryCategory =
+  | "linens"
+  | "towels"
+  | "bathroom"
+  | "food"
+  | "gas"
+  | "fuel"
+  | "cleaning"
+  | "other";
+export const INVENTORY_CATEGORIES: InventoryCategory[] = [
+  "linens",
+  "towels",
+  "bathroom",
+  "food",
+  "gas",
+  "fuel",
+  "cleaning",
+  "other",
+];
+function inventoryCategory(v: unknown): InventoryCategory {
+  return INVENTORY_CATEGORIES.includes(v as InventoryCategory) ? (v as InventoryCategory) : "other";
+}
+function inventoryFromRow(r: any): InventoryItem {
+  return {
+    id: r.id,
+    name: str(r.name),
+    category: inventoryCategory(r.category),
+    unit: str(r.unit, "pcs"),
+    quantity: num(r.quantity),
+    reorderThreshold: num(r.reorder_threshold),
+    unitCost: num(r.unit_cost),
+    notes: str(r.notes),
+    updatedAt: str(r.updated_at),
+  };
+}
+function inventoryToRow(i: InventoryItem) {
+  return {
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    unit: i.unit,
+    quantity: i.quantity,
+    reorder_threshold: i.reorderThreshold,
+    unit_cost: i.unitCost,
+    notes: i.notes,
+    updated_at: new Date().toISOString(),
+  };
+}
+export async function listInventory(): Promise<InventoryItem[]> {
+  const { data, error } = await db()
+    .from("inventory_items")
+    .select("*")
+    .order("category", { ascending: true });
+  if (error || !data) return [];
+  return data.map(inventoryFromRow);
+}
+export async function upsertInventoryItem(i: InventoryItem): Promise<boolean> {
+  const { error } = await db().from("inventory_items").upsert(inventoryToRow(i));
+  return !error;
+}
+export async function deleteInventoryItem(id: string): Promise<boolean> {
+  const { error } = await db().from("inventory_items").delete().eq("id", id);
+  return !error;
+}
+/** Bulk import (CSV upload) — one upsert call for the whole batch. */
+export async function bulkUpsertInventory(items: InventoryItem[]): Promise<boolean> {
+  if (!items.length) return true;
+  const { error } = await db().from("inventory_items").upsert(items.map(inventoryToRow));
   return !error;
 }
 
@@ -535,6 +638,7 @@ export interface OperationsSnapshot {
   payments: Payment[];
   motorbikes: Motorbike[];
   motorbikeRentals: MotorbikeRental[];
+  inventory: InventoryItem[];
 }
 
 /**
@@ -556,21 +660,46 @@ export const EMPTY_OPERATIONS_SNAPSHOT: OperationsSnapshot = {
   payments: [],
   motorbikes: [],
   motorbikeRentals: [],
+  inventory: [],
 };
 
 export async function loadOperationsSnapshot(): Promise<OperationsSnapshot> {
-  const [guests, bookings, tours, tourBookings, staff, shifts, payRecords, payments, motorbikes, motorbikeRentals] =
-    await Promise.all([
-      listGuests(),
-      listBookings(),
-      listTours(),
-      listTourBookings(),
-      listStaff(),
-      listShifts(),
-      listPayRecords(),
-      listPayments(),
-      listMotorbikes(),
-      listMotorbikeRentals(),
-    ]);
-  return { guests, bookings, tours, tourBookings, staff, shifts, payRecords, payments, motorbikes, motorbikeRentals };
+  const [
+    guests,
+    bookings,
+    tours,
+    tourBookings,
+    staff,
+    shifts,
+    payRecords,
+    payments,
+    motorbikes,
+    motorbikeRentals,
+    inventory,
+  ] = await Promise.all([
+    listGuests(),
+    listBookings(),
+    listTours(),
+    listTourBookings(),
+    listStaff(),
+    listShifts(),
+    listPayRecords(),
+    listPayments(),
+    listMotorbikes(),
+    listMotorbikeRentals(),
+    listInventory(),
+  ]);
+  return {
+    guests,
+    bookings,
+    tours,
+    tourBookings,
+    staff,
+    shifts,
+    payRecords,
+    payments,
+    motorbikes,
+    motorbikeRentals,
+    inventory,
+  };
 }

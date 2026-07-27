@@ -30,6 +30,7 @@ import ToursManager from "./pages/ToursManager";
 import StaffManager from "./pages/StaffManager";
 import PaymentsManager from "./pages/PaymentsManager";
 import RentalsManager from "./pages/RentalsManager";
+import InventoryManager from "./pages/InventoryManager";
 
 export default function AdminApp() {
   const { isAuthed, loading } = useAuth();
@@ -70,6 +71,7 @@ export default function AdminApp() {
         <Route path="staff" element={<StaffManager />} />
         <Route path="payments" element={<PaymentsManager />} />
         <Route path="rentals" element={<RentalsManager />} />
+        <Route path="inventory" element={<InventoryManager />} />
       </Route>
     </Routes>
   );

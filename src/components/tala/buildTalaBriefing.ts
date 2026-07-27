@@ -25,6 +25,7 @@ export interface TalaBriefingSnapshot {
   bikesMaintenance: number;
   pendingBookings: number;
   roomsOpenToday: string[];
+  lowStockItems: string[];
   revenue30: number;
   expenses30: number;
   bookings30: number;
@@ -64,6 +65,9 @@ export function computeBriefing(
   const bikesAvailable = ops.motorbikes.filter((b) => b.active && b.status === "available").length;
   const bikesMaintenance = ops.motorbikes.filter((b) => b.status === "maintenance").length;
   const pendingBookings = ops.bookings.filter((b) => b.status === "pending").length;
+  const lowStockItems = ops.inventory
+    .filter((i) => i.reorderThreshold > 0 && i.quantity <= i.reorderThreshold)
+    .map((i) => i.name);
 
   // Rooms with nobody actually staying tonight (an active, non-cancelled
   // booking spanning today counts as occupied) — these are sellable today.
@@ -110,6 +114,10 @@ export function computeBriefing(
     highlights.push(
       `${roomsOpenToday.length} room type${roomsOpenToday.length > 1 ? "s" : ""} open tonight`,
     );
+  if (lowStockItems.length)
+    highlights.push(
+      `${lowStockItems.length} item${lowStockItems.length > 1 ? "s" : ""} low on stock`,
+    );
   if (unpaidPayroll) highlights.push(`Unpaid payroll: ${php(unpaidPayroll)}`);
   if (revenue) highlights.push(`Revenue (30d): ${php(revenue)}`);
   if (expenses) highlights.push(`Expenses (30d): ${php(expenses)}`);
@@ -141,6 +149,7 @@ export function computeBriefing(
     );
   if (revenue || expenses) parts.push(`Last 30 days: ${php(revenue)} in, ${php(expenses)} out.`);
   if (unpaidPayroll) parts.push(`Heads up — ${php(unpaidPayroll)} in payroll is still unpaid.`);
+  if (lowStockItems.length) parts.push(`Running low on: ${lowStockItems.join(", ")}.`);
   parts.push(`${activeStaff} staff active.`);
 
   return {
@@ -154,6 +163,7 @@ export function computeBriefing(
     bikesMaintenance,
     pendingBookings,
     roomsOpenToday,
+    lowStockItems,
     revenue30: revenue,
     expenses30: expenses,
     bookings30,

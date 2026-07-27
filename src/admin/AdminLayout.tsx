@@ -35,6 +35,7 @@ import {
   Bot,
   BookOpen,
   Brain,
+  Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCms } from "@/context/CmsContext";
@@ -64,6 +65,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/rentals", label: "Motorbike Rentals", icon: Bike },
       { to: "/admin/staff", label: "Staff & Payroll", icon: Users },
       { to: "/admin/payments", label: "Payments", icon: CircleDollarSign },
+      { to: "/admin/inventory", label: "Inventory", icon: Package },
     ],
   },
   {

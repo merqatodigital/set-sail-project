@@ -13,6 +13,7 @@ import {
   CircleDollarSign,
   Bot,
   MessageCircle,
+  Package,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
@@ -85,7 +86,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
           <TalaStat value={String(brief.inHouse)} label="Guests In-House" />
           <TalaStat value={String(brief.arrivalsToday)} label="Arrivals Today" />
           <TalaStat value={String(brief.departuresToday)} label="Departures Today" />
@@ -109,6 +110,11 @@ export default function Dashboard() {
             label="Unpaid Payroll"
             alert={brief.unpaidPayroll > 0}
           />
+          <TalaStat
+            value={String(brief.lowStockItems.length)}
+            label="Low Stock Items"
+            alert={brief.lowStockItems.length > 0}
+          />
         </div>
 
         {brief.highlights.length > 0 && (
@@ -125,7 +131,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Link
           to="/admin/bookings"
           className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -184,6 +190,17 @@ export default function Dashboard() {
             )}
           </p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Revenue (30d)</p>
+        </Link>
+        <Link
+          to="/admin/inventory"
+          className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <div className="flex items-center justify-between">
+            <Package className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
+            <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
+          </div>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.inventory.length}</p>
+          <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Inventory Items</p>
         </Link>
       </div>
 
