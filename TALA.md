@@ -159,10 +159,36 @@ app is deployed with this AuthContext:
    ```
 4. Reload `/admin` and sign in with that email/password.
 
-**Known follow-up, not fixed here:** operations data (bookings, payroll,
-revenue) still lives inside the same public-`SELECT`-able `cms_data` JSON
-blob as site content, because splitting it into a separate admin-only table
-is a larger schema change than an RLS-policy fix. Anyone with the public
-anon key can still *read* that data even though they can no longer *write*
-it. Splitting operations into their own tables (mirroring the BAIA repo's
-`resorts`/`booking_leads` pattern) is the right next step.
+**Follow-up closed (`operations_tables` migration):** bookings, staff,
+payroll, payments, motorbike rentals, guests, and the tour catalog now live
+in their own tables (`bookings`, `staff_members`, `pay_records`, `payments`,
+`motorbike_rentals`, `guests`, `tour_bookings`, `tours_catalog`, `shifts`),
+each locked to `has_role(auth.uid(), 'admin')` for both read and write via
+RLS — not just writes. `cms_data` keeps site content only. Two narrow
+guest-facing exceptions remain by design: a `room_availability_conflicts`
+SECURITY DEFINER function (no PII, just room type + dates) backs TALA's
+`check_room_availability` tool, and guests can INSERT (never read/alter) a
+`status = 'pending'` booking when they confirm a draft. `tours_catalog` also
+has an anon-SELECT policy scoped to `active = true`, since the tour catalog
+is public marketing content, not operational data. See
+`src/lib/opsRepo.ts` for the typed repository layer every admin page and
+TALA's operator tools go through now.
+
+## The morning briefing, made "alive"
+
+Two layers, both reading the same tables:
+
+- **Scheduled** — a pg_cron job (`supabase/migrations/20260723093000_tala_daily_briefing_cron.sql`,
+  logic updated in `20260727090000` and `20260727100000` to read the new
+  operations tables instead of the old `cms_data.operations` JSON) runs
+  `generate_tala_briefing()` every day at 07:00 Asia/Manila and inserts a row
+  into `tala_briefings` — no click needed. Verify it's actually scheduled
+  with `select * from cron.job where jobname = 'tala_daily_briefing';` in the
+  SQL Editor; re-run the `cron.schedule(...)` line at the bottom of that
+  migration if the row is missing (can happen after a project pause/restore).
+- **Live** — Admin → TALA → Morning Brief also shows a "Right now" panel
+  (`computeBriefing()` in `src/components/tala/buildTalaBriefing.ts`) that's
+  always current, not just generated once a day: live San Vicente weather
+  (Open-Meteo, no key, fetched client-side — `src/lib/weather.ts`), which
+  room types have nobody booked in tonight, bike availability/maintenance,
+  bookings still awaiting confirmation, and yesterday's logged wins.

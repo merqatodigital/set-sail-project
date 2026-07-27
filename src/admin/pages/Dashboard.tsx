@@ -1,5 +1,19 @@
 import { Link } from "react-router-dom";
-import { Tags, Images, Newspaper, Quote, HelpCircle, ArrowUpRight, ExternalLink, CalendarCheck, Ship, Bike, CircleDollarSign, Bot, MessageCircle } from "lucide-react";
+import {
+  Tags,
+  Images,
+  Newspaper,
+  Quote,
+  HelpCircle,
+  ArrowUpRight,
+  ExternalLink,
+  CalendarCheck,
+  Ship,
+  Bike,
+  CircleDollarSign,
+  Bot,
+  MessageCircle,
+} from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { formatPHP } from "../ops/opsUtils";
@@ -9,13 +23,18 @@ import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 export default function Dashboard() {
   const { data } = useCms();
   const { data: ops, loading: opsLoading } = useOperations();
-  const brief = computeBriefing(ops);
+  const brief = computeBriefing(ops, data.homepage.rooms);
 
   const stats = [
     { label: "Pricing Packages", value: data.pricing.length, icon: Tags, to: "/admin/pricing" },
     { label: "Gallery Images", value: data.gallery.length, icon: Images, to: "/admin/gallery" },
     { label: "Blog Posts", value: data.blogPosts.length, icon: Newspaper, to: "/admin/blog" },
-    { label: "Testimonials", value: data.testimonials.length, icon: Quote, to: "/admin/testimonials" },
+    {
+      label: "Testimonials",
+      value: data.testimonials.length,
+      icon: Quote,
+      to: "/admin/testimonials",
+    },
     { label: "FAQs", value: data.faqs.length, icon: HelpCircle, to: "/admin/faqs" },
   ];
 
@@ -29,10 +48,17 @@ export default function Dashboard() {
         description="Your control center for the website and the day-to-day operations of Marina Terrace."
         actions={
           <>
-            <Link to="/admin/tala/ops" className="inline-flex items-center gap-1.5 rounded-full bg-[#C6A15B] px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#221D14] hover:bg-[#B8924B]">
+            <Link
+              to="/admin/tala/ops"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#C6A15B] px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#221D14] hover:bg-[#B8924B]"
+            >
               <Bot className="h-3.5 w-3.5" /> Talk to TALA
             </Link>
-            <Link to="/" target="_blank" className="inline-flex items-center gap-1.5 rounded-full bg-[#26221C] px-4 py-2 text-xs font-medium uppercase tracking-wide text-white hover:bg-[#3a3327]">
+            <Link
+              to="/"
+              target="_blank"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#26221C] px-4 py-2 text-xs font-medium uppercase tracking-wide text-white hover:bg-[#3a3327]"
+            >
               <ExternalLink className="h-3.5 w-3.5" /> View Live Site
             </Link>
           </>
@@ -51,17 +77,33 @@ export default function Dashboard() {
               <p className="text-xs text-white/45">Live read of the property right now</p>
             </div>
           </div>
-          <Link to="/admin/tala/ops" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15">
+          <Link
+            to="/admin/tala/ops"
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15"
+          >
             <MessageCircle className="h-3.5 w-3.5" /> Open console
           </Link>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           <TalaStat value={String(brief.inHouse)} label="Guests In-House" />
           <TalaStat value={String(brief.arrivalsToday)} label="Arrivals Today" />
           <TalaStat value={String(brief.departuresToday)} label="Departures Today" />
           <TalaStat value={String(brief.toursToday)} label="Tours Today" />
-          <TalaStat value={String(brief.bikesOut)} label="Bikes Out" />
+          <TalaStat
+            value={String(brief.roomsOpenToday.length)}
+            label="Room Types Open Tonight"
+            alert={brief.roomsOpenToday.length > 0}
+          />
+          <TalaStat
+            value={String(brief.pendingBookings)}
+            label="Awaiting Confirmation"
+            alert={brief.pendingBookings > 0}
+          />
+          <TalaStat
+            value={`${brief.bikesOut}/${brief.bikesOut + brief.bikesAvailable}`}
+            label="Bikes Out / Total"
+          />
           <TalaStat
             value={brief.unpaidPayroll > 0 ? formatPHP(brief.unpaidPayroll) : "₱0"}
             label="Unpaid Payroll"
@@ -72,7 +114,10 @@ export default function Dashboard() {
         {brief.highlights.length > 0 && (
           <p className="mt-4 text-sm text-white/70">
             {brief.highlights.slice(0, 3).map((h, i) => (
-              <span key={i} className="mr-2 inline-flex rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/80">
+              <span
+                key={i}
+                className="mr-2 inline-flex rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/80"
+              >
                 {h}
               </span>
             ))}
@@ -81,31 +126,49 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Link to="/admin/bookings" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <Link
+          to="/admin/bookings"
+          className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
           <div className="flex items-center justify-between">
             <CalendarCheck className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.bookings.filter((b) => b.status === "checked_in").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">
+            {ops.bookings.filter((b) => b.status === "checked_in").length}
+          </p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Guests In-House</p>
         </Link>
-        <Link to="/admin/tours" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <Link
+          to="/admin/tours"
+          className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
           <div className="flex items-center justify-between">
             <Ship className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.tourBookings.filter((b) => b.status === "confirmed").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">
+            {ops.tourBookings.filter((b) => b.status === "confirmed").length}
+          </p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Upcoming Tours</p>
         </Link>
-        <Link to="/admin/rentals" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <Link
+          to="/admin/rentals"
+          className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
           <div className="flex items-center justify-between">
             <Bike className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
           </div>
-          <p className="mt-3 font-serif text-2xl text-[#26221C]">{ops.motorbikes.filter((b) => b.status === "rented").length}</p>
+          <p className="mt-3 font-serif text-2xl text-[#26221C]">
+            {ops.motorbikes.filter((b) => b.status === "rented").length}
+          </p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Bikes Out</p>
         </Link>
-        <Link to="/admin/payments" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <Link
+          to="/admin/payments"
+          className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
           <div className="flex items-center justify-between">
             <CircleDollarSign className="h-5 w-5 text-[#C6A15B]" strokeWidth={1.5} />
             <ArrowUpRight className="h-4 w-4 text-[#26221C]/20 group-hover:text-[#C6A15B]" />
@@ -113,8 +176,11 @@ export default function Dashboard() {
           <p className="mt-3 font-serif text-2xl text-[#26221C]">
             {formatPHP(
               ops.payments
-                .filter((p) => p.direction === "in" && new Date(p.date).getTime() > Date.now() - 30 * 86400000)
-                .reduce((s, p) => s + p.amount, 0)
+                .filter(
+                  (p) =>
+                    p.direction === "in" && new Date(p.date).getTime() > Date.now() - 30 * 86400000,
+                )
+                .reduce((s, p) => s + p.amount, 0),
             )}
           </p>
           <p className="text-xs uppercase tracking-wide text-[#26221C]/45">Revenue (30d)</p>
