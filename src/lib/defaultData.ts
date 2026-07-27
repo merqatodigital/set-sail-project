@@ -607,6 +607,15 @@ export function buildDefaultData(): CmsData {
           webhookUrl: "",
           autoReplyMessage: "Salamat! A member of our team will get back to you shortly.",
         },
+        cloudApi: {
+          enabled: false,
+          templateLanguage: "en_US",
+          templates: {
+            bookingReminder: "",
+            dailyBrief: "",
+            lowStockAlert: "",
+          },
+        },
       },
       tala: {
         enabled: true,

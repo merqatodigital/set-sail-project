@@ -7,6 +7,7 @@ import type {
   TourBooking,
 } from "@/types/cms";
 import { supabase, isSupabaseConnected } from "@/lib/supabase";
+import { sendWhatsAppText } from "@/lib/whatsappSend";
 import { uid, generateReference, todayISO } from "@/admin/ops/opsUtils";
 import {
   type OperationsSnapshot,
@@ -113,6 +114,7 @@ export const TALA_TOOL_SCHEMAS = [
         type: "object",
         properties: {
           guestName: { type: "string", description: "Guest's name." },
+          guestPhone: { type: "string", description: "Guest's phone/WhatsApp number, if known." },
           roomType: { type: "string", description: "Room or package name, e.g. 'Weekly Sprint'." },
           checkIn: { type: "string", description: "Check-in date, ISO YYYY-MM-DD." },
           checkOut: { type: "string", description: "Check-out date, ISO YYYY-MM-DD." },
@@ -333,6 +335,26 @@ export const TALA_TOOL_SCHEMAS = [
       },
     },
   },
+  // ---- OPERATOR-ONLY: WHATSAPP --------------------------------------------
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_message",
+      description:
+        "OPERATOR ONLY. Send a real WhatsApp message to a phone number right now (via the WhatsApp Business Cloud API, not just opening a link). Free-form text only works if that person messaged this WhatsApp number in the last 24 hours — otherwise it will fail and you should tell the owner to use a template instead (e.g. the booking reminder button in Admin -> Bookings). Never sends to a number you invented — it must come from the owner or from booking/guest records.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: {
+            type: "string",
+            description: "Recipient phone number, with country code, e.g. '+63 917 123 4567'.",
+          },
+          message: { type: "string", description: "The message text to send." },
+        },
+        required: ["to", "message"],
+      },
+    },
+  },
 ] as const;
 
 export interface TalaToolCall {
@@ -514,6 +536,7 @@ async function createBooking(args: Record<string, unknown>, ctx: TalaToolContext
     reference: generateReference("MT"),
     guestId: "",
     guestName: str(args.guestName),
+    guestPhone: str(args.guestPhone),
     roomType: str(args.roomType, "Weekly Sprint"),
     checkIn,
     checkOut,
@@ -647,6 +670,7 @@ async function requestBooking(args: Record<string, unknown>, ctx: TalaToolContex
     reference: generateReference("MT"),
     guestId: "",
     guestName,
+    guestPhone: str(args.guestPhone),
     roomType,
     checkIn,
     checkOut,
@@ -712,6 +736,7 @@ export async function confirmBookingDraft(draft: {
   const booking: Booking = {
     ...draft,
     guestId: "",
+    guestPhone: "",
     paidAmount: 0,
     status: "pending",
     source: "other",
@@ -947,6 +972,23 @@ async function adjustInventory(args: Record<string, unknown>, ctx: TalaToolConte
   };
 }
 
+// ---- Operator-only: WhatsApp --------------------------------------------
+async function sendWhatsappMessage(args: Record<string, unknown>, ctx: TalaToolContext) {
+  const deny = requireOwner(ctx);
+  if (deny) return { error: deny };
+  const to = str(args.to);
+  const message = str(args.message);
+  if (!to || !message) return { error: "Need to and message." };
+  const result = await sendWhatsAppText(to, message);
+  if (!result.success) {
+    return {
+      error: result.error,
+      hint: "Free-form text only works within 24h of that person messaging this number first. For cold outreach (reminders, alerts), use an approved template instead — see Admin -> WhatsApp.",
+    };
+  }
+  return { success: true, message: `Sent to ${to}.` };
+}
+
 /** Runs one tool call and returns a JSON-serializable result for the model. */
 export async function executeTalaTool(
   call: TalaToolCall,
@@ -984,6 +1026,8 @@ export async function executeTalaTool(
       return checkInventory(args, ctx);
     case "adjust_inventory":
       return adjustInventory(args, ctx);
+    case "send_whatsapp_message":
+      return sendWhatsappMessage(args, ctx);
     default:
       return { error: `Unknown tool: ${call.name}` };
   }

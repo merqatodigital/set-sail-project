@@ -1,13 +1,26 @@
 import { useState } from "react";
 import {
-  Plus, Trash2, Star, MessageCircle, Bot, Sparkles, ExternalLink,
-  Copy, Check, Info,
+  Plus,
+  Trash2,
+  Star,
+  MessageCircle,
+  Bot,
+  Sparkles,
+  ExternalLink,
+  Copy,
+  Check,
+  Info,
+  Send,
+  Loader2,
+  CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Switch, Badge } from "@/components/ui";
 import { PageHeader } from "../shared/PageHeader";
 import { buildWhatsAppLink, normalizeNumber } from "@/lib/whatsapp";
+import { sendWhatsAppTemplate, sendWhatsAppText } from "@/lib/whatsappSend";
 import type { WhatsAppSettings, WhatsAppNumber } from "@/types/cms";
 
 export default function WhatsAppManager() {
@@ -22,6 +35,38 @@ export default function WhatsAppManager() {
   const patchChatbot = (patchObj: Partial<WhatsAppSettings["chatbot"]>) =>
     patch((d) => ({ ...d, chatbot: { ...d.chatbot, ...patchObj } }));
 
+  const patchCloudApi = (patchObj: Partial<WhatsAppSettings["cloudApi"]>) =>
+    patch((d) => ({ ...d, cloudApi: { ...d.cloudApi, ...patchObj } }));
+  const patchCloudApiTemplates = (patchObj: Partial<WhatsAppSettings["cloudApi"]["templates"]>) =>
+    patch((d) => ({
+      ...d,
+      cloudApi: { ...d.cloudApi, templates: { ...d.cloudApi.templates, ...patchObj } },
+    }));
+
+  // ---- Real send test (Cloud API) -----------------------------------------
+  const [testNumber, setTestNumber] = useState("");
+  const [testTemplate, setTestTemplate] = useState("");
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const sendTest = async () => {
+    if (!testNumber.trim()) return;
+    setTestSending(true);
+    setTestResult(null);
+    const result = testTemplate.trim()
+      ? await sendWhatsAppTemplate(testNumber, testTemplate.trim(), wa.cloudApi.templateLanguage)
+      : await sendWhatsAppText(
+          testNumber,
+          "This is a test message from TALA — WhatsApp Cloud API is connected.",
+        );
+    setTestSending(false);
+    setTestResult(
+      result.success
+        ? { ok: true, message: "Sent! Check that number's WhatsApp." }
+        : { ok: false, message: result.error || "Send failed." },
+    );
+  };
+
   // ---- Numbers CRUD -------------------------------------------------------
   const addNumber = () => {
     const newItem: WhatsAppNumber = {
@@ -35,7 +80,10 @@ export default function WhatsAppManager() {
   };
 
   const updateNumber = (id: string, updates: Partial<WhatsAppNumber>) => {
-    patch((d) => ({ ...d, numbers: d.numbers.map((n) => (n.id === id ? { ...n, ...updates } : n)) }));
+    patch((d) => ({
+      ...d,
+      numbers: d.numbers.map((n) => (n.id === id ? { ...n, ...updates } : n)),
+    }));
   };
 
   const removeNumber = (id: string) => {
@@ -82,7 +130,9 @@ export default function WhatsAppManager() {
               (nav, hero, pricing, footer, floating button).
             </p>
           </div>
-          <Button size="sm" onClick={addNumber}><Plus className="h-4 w-4" /> Add Number</Button>
+          <Button size="sm" onClick={addNumber}>
+            <Plus className="h-4 w-4" /> Add Number
+          </Button>
         </div>
 
         <div className="space-y-3">
@@ -124,7 +174,9 @@ export default function WhatsAppManager() {
                       onClick={() => removeNumber(n.id)}
                       disabled={wa.numbers.length <= 1}
                       className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#26221C]/15 text-[#26221C]/40 transition hover:border-red-200 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
-                      title={wa.numbers.length <= 1 ? "At least one number is required" : "Delete number"}
+                      title={
+                        wa.numbers.length <= 1 ? "At least one number is required" : "Delete number"
+                      }
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -132,7 +184,9 @@ export default function WhatsAppManager() {
                 </div>
                 {digits && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#26221C]/50">
-                    <span>Normalized: <code className="rounded bg-white px-1.5 py-0.5">{digits}</code></span>
+                    <span>
+                      Normalized: <code className="rounded bg-white px-1.5 py-0.5">{digits}</code>
+                    </span>
                     <span className="text-[#26221C]/20">·</span>
                     <a
                       href={`https://wa.me/${digits}`}
@@ -163,8 +217,8 @@ export default function WhatsAppManager() {
         </div>
         <p className="mb-5 text-sm text-[#26221C]/55">
           These messages are pre-filled when a visitor taps a WhatsApp button. Use{" "}
-          <code className="rounded bg-[#26221C]/5 px-1.5 py-0.5 text-xs">{"{package}"}</code>{" "}
-          in the booking template to auto-insert the package name.
+          <code className="rounded bg-[#26221C]/5 px-1.5 py-0.5 text-xs">{"{package}"}</code> in the
+          booking template to auto-insert the package name.
         </p>
         <div className="space-y-4">
           <Field label="Default Message" hint="Used by the nav, hero, footer and floating button">
@@ -204,17 +258,25 @@ export default function WhatsAppManager() {
             </div>
             <Switch
               checked={wa.showFloatingButton}
-              onChange={(v) => { patch((d) => ({ ...d, showFloatingButton: v })); notify(v ? "Floating button shown" : "Floating button hidden"); }}
+              onChange={(v) => {
+                patch((d) => ({ ...d, showFloatingButton: v }));
+                notify(v ? "Floating button shown" : "Floating button hidden");
+              }}
             />
           </label>
           <label className="flex items-center justify-between rounded-lg bg-[#FAF6EF] px-4 py-3">
             <div>
               <p className="text-sm font-medium text-[#26221C]">WhatsApp CTA in Navigation</p>
-              <p className="text-xs text-[#26221C]/50">The top-right WhatsApp button in the navbar.</p>
+              <p className="text-xs text-[#26221C]/50">
+                The top-right WhatsApp button in the navbar.
+              </p>
             </div>
             <Switch
               checked={wa.showInNavbar}
-              onChange={(v) => { patch((d) => ({ ...d, showInNavbar: v })); notify(v ? "Navbar CTA shown" : "Navbar CTA hidden"); }}
+              onChange={(v) => {
+                patch((d) => ({ ...d, showInNavbar: v }));
+                notify(v ? "Navbar CTA shown" : "Navbar CTA hidden");
+              }}
             />
           </label>
         </div>
@@ -227,12 +289,23 @@ export default function WhatsAppManager() {
           This is the exact link every WhatsApp button on the site is opening right now.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <code className="flex-1 truncate rounded-lg border border-[#26221C]/10 bg-[#FAF6EF] px-3 py-2.5 text-xs text-[#26221C]/70" title={testLink}>
+          <code
+            className="flex-1 truncate rounded-lg border border-[#26221C]/10 bg-[#FAF6EF] px-3 py-2.5 text-xs text-[#26221C]/70"
+            title={testLink}
+          >
             {testLink || "No primary number set"}
           </code>
           <div className="flex gap-2">
             <Button variant="outline" size="md" onClick={copyLink}>
-              {copied ? <><Check className="h-4 w-4" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4" /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" /> Copy
+                </>
+              )}
             </Button>
             <a
               href={testLink}
@@ -246,6 +319,126 @@ export default function WhatsAppManager() {
         </div>
       </Card>
 
+      {/* ---- Cloud API — real sending, active now ---- */}
+      <Card className="mb-6 p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#25D366]/15">
+              <Send className="h-5 w-5 text-[#1EBE57]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-serif text-lg text-[#26221C]">
+                  WhatsApp Cloud API — Real Sending
+                </p>
+                <Badge className="bg-green-100 text-green-700">
+                  <CheckCircle2 className="mr-1 inline h-2.5 w-2.5" /> Active
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm text-[#26221C]/55">
+                Lets TALA and the admin console actually send WhatsApp messages — booking reminders,
+                the daily brief, low-stock alerts — instead of only opening a link for you to send
+                by hand.
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={wa.cloudApi.enabled}
+            onChange={(v) => {
+              patchCloudApi({ enabled: v });
+              notify(v ? "Real WhatsApp sending enabled" : "Real WhatsApp sending disabled");
+            }}
+          />
+        </div>
+
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900/80">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Your access token and phone number ID are <strong>not</strong> entered here — this page
+            is public-readable, like the rest of the site's content. Set them once as Supabase
+            secrets (Edge Functions → Secrets):{" "}
+            <code className="rounded bg-white px-1 py-0.5">WHATSAPP_ACCESS_TOKEN</code> and{" "}
+            <code className="rounded bg-white px-1 py-0.5">WHATSAPP_PHONE_NUMBER_ID</code>, from
+            your Meta for Developers app. Only the template names below (not secret) live in this
+            page.
+          </p>
+        </div>
+
+        <fieldset disabled={!wa.cloudApi.enabled} className="space-y-4 disabled:opacity-60">
+          <Field
+            label="Template Language"
+            hint="Must match exactly what you set when creating templates in Meta"
+          >
+            <Input
+              value={wa.cloudApi.templateLanguage}
+              onChange={(e) => patchCloudApi({ templateLanguage: e.target.value })}
+              onBlur={() => notify("Saved")}
+              placeholder="en_US"
+            />
+          </Field>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Booking Reminder Template" hint="Approved template name in Meta">
+              <Input
+                value={wa.cloudApi.templates.bookingReminder}
+                onChange={(e) => patchCloudApiTemplates({ bookingReminder: e.target.value })}
+                onBlur={() => notify("Saved")}
+                placeholder="booking_reminder"
+              />
+            </Field>
+            <Field label="Daily Brief Template" hint="Approved template name in Meta">
+              <Input
+                value={wa.cloudApi.templates.dailyBrief}
+                onChange={(e) => patchCloudApiTemplates({ dailyBrief: e.target.value })}
+                onBlur={() => notify("Saved")}
+                placeholder="daily_brief"
+              />
+            </Field>
+            <Field label="Low Stock Alert Template" hint="Approved template name in Meta">
+              <Input
+                value={wa.cloudApi.templates.lowStockAlert}
+                onChange={(e) => patchCloudApiTemplates({ lowStockAlert: e.target.value })}
+                onBlur={() => notify("Saved")}
+                placeholder="low_stock_alert"
+              />
+            </Field>
+          </div>
+
+          <div className="rounded-lg border border-[#26221C]/10 bg-[#FAF6EF] p-4">
+            <p className="mb-3 text-sm font-medium text-[#26221C]">Send a test message</p>
+            <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr_auto]">
+              <Input
+                value={testNumber}
+                onChange={(e) => setTestNumber(e.target.value)}
+                placeholder="+63 917 123 4567"
+              />
+              <Input
+                value={testTemplate}
+                onChange={(e) => setTestTemplate(e.target.value)}
+                placeholder="Template name (leave blank for plain text)"
+              />
+              <Button onClick={sendTest} disabled={testSending || !testNumber.trim()}>
+                {testSending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Send Test
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-[#26221C]/50">
+              Leave the template field blank to send plain text — that only works if this number has
+              messaged you in the last 24 hours. To test cold outbound, use one of your approved
+              template names above.
+            </p>
+            {testResult && (
+              <p className={`mt-3 text-sm ${testResult.ok ? "text-green-700" : "text-red-600"}`}>
+                {testResult.message}
+              </p>
+            )}
+          </div>
+        </fieldset>
+      </Card>
+
       {/* ---- Chatbot (Coming Soon) ---- */}
       <Card className="p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -256,26 +449,31 @@ export default function WhatsAppManager() {
             <div>
               <div className="flex items-center gap-2">
                 <p className="font-serif text-lg text-[#26221C]">WhatsApp Chatbot</p>
-                <Badge className="bg-blue-100 text-blue-700"><Sparkles className="mr-1 inline h-2.5 w-2.5" /> Coming Soon</Badge>
+                <Badge className="bg-blue-100 text-blue-700">
+                  <Sparkles className="mr-1 inline h-2.5 w-2.5" /> Coming Soon
+                </Badge>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-[#26221C]/55">
-                Future integration for automatic replies, booking flows and after-hours responses via the
-                WhatsApp Business Cloud API or Twilio. Configure your credentials below now — activation
-                will be enabled in a later release.
+                Future integration for automatic replies, booking flows and after-hours responses
+                via the WhatsApp Business Cloud API or Twilio. Configure your credentials below now
+                — activation will be enabled in a later release.
               </p>
             </div>
           </div>
           <Switch
             checked={wa.chatbot.enabled}
-            onChange={(v) => { patchChatbot({ enabled: v }); notify(v ? "Chatbot enabled (pending integration)" : "Chatbot disabled"); }}
+            onChange={(v) => {
+              patchChatbot({ enabled: v });
+              notify(v ? "Chatbot enabled (pending integration)" : "Chatbot disabled");
+            }}
           />
         </div>
 
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-900/80">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            Your settings are stored securely and will activate automatically once the chatbot service is
-            connected. No message will be sent until that time.
+            Your settings are stored securely and will activate automatically once the chatbot
+            service is connected. No message will be sent until that time.
           </p>
         </div>
 
@@ -284,7 +482,11 @@ export default function WhatsAppManager() {
             <Field label="Provider">
               <Select
                 value={wa.chatbot.provider}
-                onChange={(e) => patchChatbot({ provider: e.target.value as WhatsAppSettings["chatbot"]["provider"] })}
+                onChange={(e) =>
+                  patchChatbot({
+                    provider: e.target.value as WhatsAppSettings["chatbot"]["provider"],
+                  })
+                }
               >
                 <option value="none">— Select —</option>
                 <option value="whatsapp-cloud">WhatsApp Business Cloud API</option>

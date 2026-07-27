@@ -28,6 +28,7 @@ import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 import { useOperations } from "../ops/useOperations";
 import type { OperationsSnapshot } from "@/lib/opsRepo";
 import { fetchSanVicenteWeather, type WeatherNow } from "@/lib/weather";
+import { sendWhatsAppTemplate } from "@/lib/whatsappSend";
 import {
   addTalaBriefing,
   addTalaGoal,
@@ -98,7 +99,7 @@ function operatorPrompt(siteName: string): string {
     `You are TALA, the AI operations concierge for ${siteName} in San Vicente, Palawan.`,
     `You are speaking with the OWNER or STAFF (not a guest). Be direct, concise and useful.`,
     `You can reference bookings, tours, staff, payments and tasks. When asked for a morning update, give a tight rundown of today's arrivals, departures, tours, bikes out, in-house guests, and any unpaid payroll or money notes.`,
-    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, log_payment (record revenue or expense), check_inventory (stock levels — linens, towels, bathroom, food, gas, fuel), and adjust_inventory (log stock used or restocked). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
+    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, log_payment (record revenue or expense), check_inventory (stock levels — linens, towels, bathroom, food, gas, fuel), adjust_inventory (log stock used or restocked), and send_whatsapp_message (send a real WhatsApp text right now — only works if that person messaged this number in the last 24h, otherwise tell the owner to use a template from Admin -> Bookings/WhatsApp instead). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
     `Never invent numbers — use what is in context. If you don't know, say so. Keep replies to 1-4 sentences unless detail is asked for.`,
   ].join("\n");
 }
@@ -261,11 +262,29 @@ function BriefingTab({
 
   const sendToWhatsApp = useCallback(
     async (b: TalaBriefing) => {
-      const link = buildBriefingWhatsAppLink(b, cms.settings.whatsapp);
       if (!cms.settings.whatsapp.numbers.length) {
         notify("No WhatsApp number set. Add one in Admin → WhatsApp.", "error");
         return;
       }
+      const cloudApi = cms.settings.whatsapp.cloudApi;
+      const templateName = cloudApi?.enabled ? cloudApi.templates.dailyBrief.trim() : "";
+      if (templateName) {
+        const primary =
+          cms.settings.whatsapp.numbers.find((n) => n.isPrimary) ??
+          cms.settings.whatsapp.numbers[0];
+        const to = primary.number;
+        const result = await sendWhatsAppTemplate(to, templateName, cloudApi.templateLanguage, [
+          b.summary,
+        ]);
+        if (result.success) {
+          await markBriefingWhatsappSent(b.id);
+          notify("Briefing sent over WhatsApp.", "success");
+          load();
+          return;
+        }
+        notify(`Cloud API send failed (${result.error}). Opening wa.me link instead.`, "error");
+      }
+      const link = buildBriefingWhatsAppLink(b, cms.settings.whatsapp);
       window.open(link, "_blank");
       await markBriefingWhatsappSent(b.id);
       notify("Opened WhatsApp with the briefing pre-filled.", "success");

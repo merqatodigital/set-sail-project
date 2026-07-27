@@ -212,3 +212,91 @@ Admin → Operations → Inventory (`src/admin/pages/InventoryManager.tsx`):
   `check_inventory` (look up stock or list everything running low) and
   `adjust_inventory` (log stock used or restocked, by name — she never
   creates new items, only adjusts existing ones added in the admin UI first).
+
+## WhatsApp — real sending (Meta Cloud API)
+
+Until now "Send to WhatsApp" just opened a `wa.me` link for a human to press
+send. This adds actual server-side delivery via the **WhatsApp Business
+Cloud API** (Meta direct — cheaper than going through Twilio), so TALA and
+the admin console can deliver messages without a human touching a phone.
+
+**Why this exists:** every message that reaches for `wa.me` still works
+exactly as before — this is additive, not a replacement, and it's off until
+you turn it on in Admin → WhatsApp.
+
+**Cost, in short:** replying to a guest who messaged you within the last
+24h (the "service window") is free. Messages *you* start cold — a booking
+reminder, the daily brief, a low-stock alert — need a pre-approved Meta
+message *template* and cost a few cents each (varies by country). There's
+a free test phone number with a handful of test-recipient numbers you can
+use to try all of this today, before your business number is verified.
+
+**Security:** the access token and phone number ID are secrets — they are
+**never** stored in `cms_data` (that whole payload is public-readable,
+same as the rest of the site's content). They live only as Supabase Edge
+Function secrets, same pattern as `OPENROUTER_API_KEY`. Only non-secret
+config — on/off, and which approved template name to use for each
+automated message — lives in `settings.whatsapp.cloudApi`.
+
+**One-time setup, in order (do this before merging/deploying this
+feature — the app will error on real sends without it):**
+
+1. Run this migration in the Supabase SQL Editor (adds the guest phone
+   field bookings need for reminders):
+
+   ```sql
+   ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS guest_phone TEXT NOT NULL DEFAULT '';
+   ```
+
+2. Create a Meta for Developers app at developers.facebook.com → add the
+   "WhatsApp" product. Meta gives you a **free test number** and lets you
+   add a handful of test-recipient numbers (verify by SMS code) — you can
+   send real messages to those numbers immediately, no business
+   verification needed, which is perfect for trying this out this low
+   season before switching to your real business number.
+3. In the WhatsApp product setup, note the **Phone Number ID** shown for
+   your (test or verified) number.
+4. Create a **System User** (Business Settings → Users → System Users)
+   with a **permanent access token**, scoped to `whatsapp_business_messaging`
+   and `whatsapp_business_management`.
+5. Set the two secrets (from your terminal, with the Supabase CLI):
+
+   ```
+   supabase secrets set WHATSAPP_ACCESS_TOKEN=your_permanent_token
+   supabase secrets set WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+   ```
+
+6. Create and get approval for your message templates in Meta Business
+   Manager (Business → Account tools → Message Templates) — e.g. a
+   `daily_brief` template with one body variable, a `booking_reminder`
+   template, a `low_stock_alert` template. Approval is usually minutes to
+   a couple of hours. Enter the exact approved template names + language
+   code in Admin → WhatsApp → "WhatsApp Cloud API — Real Sending".
+
+**What's wired up:**
+
+- `supabase/functions/whatsapp-send/` — the Edge Function that actually
+  calls Meta's Graph API. Requires either an authenticated admin (checked
+  via `has_role`) or the service-role key — unlike `tala-chat`, this one
+  costs real money per send, so it's never reachable by guest/anonymous
+  traffic.
+- `src/lib/whatsappSend.ts` — client wrapper (`sendWhatsAppText`,
+  `sendWhatsAppTemplate`) used by the admin UI and by TALA's tools.
+- Admin → WhatsApp → new "WhatsApp Cloud API — Real Sending" card: enable
+  toggle, template name/language fields, and a test-send box so you can
+  confirm delivery to one of your test numbers before relying on it.
+- Admin → Bookings → each pending/confirmed booking with a phone number
+  gets a WhatsApp reminder button.
+- Admin → TALA → Morning Brief → "Send to WhatsApp" now tries a real
+  template send first (using the `dailyBrief` template) when Cloud API is
+  enabled and configured, and falls back to the old `wa.me` link if it
+  isn't configured or the send fails.
+- TALA (operator mode) gained a `send_whatsapp_message` tool — only usable
+  for guests who messaged within the last 24h service window; she'll tell
+  you to use a template from the admin UI otherwise.
+
+**Not yet built:** the daily brief still needs a person to click "Send to
+WhatsApp" — it isn't sent automatically by the 7am cron job yet. Wiring
+that up would mean calling this Edge Function from SQL (via `pg_net`) or
+another trigger; that's a bigger architectural step and worth deciding on
+separately rather than bundling into this pass.

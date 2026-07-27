@@ -181,6 +181,14 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
           ...defaults.settings.whatsapp.chatbot,
           ...((parsed.settings as any).whatsapp?.chatbot || {}),
         },
+        cloudApi: {
+          ...defaults.settings.whatsapp.cloudApi,
+          ...((parsed.settings as any).whatsapp?.cloudApi || {}),
+          templates: {
+            ...defaults.settings.whatsapp.cloudApi.templates,
+            ...((parsed.settings as any).whatsapp?.cloudApi?.templates || {}),
+          },
+        },
       },
       theme: {
         ...defaults.settings.theme,
