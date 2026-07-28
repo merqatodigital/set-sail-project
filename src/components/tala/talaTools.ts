@@ -178,6 +178,161 @@ export const TALA_TOOL_SCHEMAS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_rooms",
+      description: "List all visible rooms/stays with name, capacity, price. Use when a guest asks what rooms are available.",
+      parameters: {
+        type: "object",
+        properties: {
+          roomName: { type: "string", description: "Optional: a specific room name to filter." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_bookings",
+      description: "List all bookings (operator face). Returns reference, guest, room type, status, dates.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_payments",
+      description: "List all recorded payments/revenues/expenses (operator face). Returns reference, date, category, direction, amount, method.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_guests",
+      description: "List all registered guests (operator face). Returns name, phone, email, check-in/out, status.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirm_booking",
+      description: "OWNER ONLY. Confirm a pending booking request (from tala_booking_requests) and mark it confirmed. Requires requestId.",
+      parameters: {
+        type: "object",
+        properties: {
+          requestId: { type: "string", description: "The id of the booking request to confirm." },
+        },
+        required: ["requestId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirm_tour",
+      description: "OWNER ONLY. Confirm a pending tour booking request (from tala_tour_requests). Requires requestId.",
+      parameters: {
+        type: "object",
+        properties: {
+          requestId: { type: "string", description: "The id of the tour request to confirm." },
+        },
+        required: ["requestId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirm_rental",
+      description: "OWNER ONLY. Confirm a pending motorbike rental request (from tala_rental_requests). Requires requestId.",
+      parameters: {
+        type: "object",
+        properties: {
+          requestId: { type: "string", description: "The id of the rental request to confirm." },
+        },
+        required: ["requestId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp",
+      description: "Build a wa.me deep link for the team / guest to send a WhatsApp message. Does not send automatically.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "Phone number, E.164 style, e.g. +639123456789." },
+          message: { type: "string", description: "The message text to send." },
+        },
+        required: ["to", "message"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_briefing",
+      description: "OWNER/GUEST. Generate today's morning briefing (arrivals, departures, tours) and store it. Returns the briefing.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_reminder",
+      description: "OWNER/GUEST. Create a task/reminder. Requires title, optional due date and category.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Reminder title, e.g. 'Confirm guest pickup'." },
+          due: { type: "string", description: "Due date YYYY-MM-DD, optional." },
+          category: { type: "string", description: "Category: booking, tour, staff, maintenance, general." },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remember_guest",
+      description: "Store a fact about a guest so TALA can recall it later. Requires guestKey (phone/email/name) and the fact.",
+      parameters: {
+        type: "object",
+        properties: {
+          guestKey: { type: "string", description: "Guest identifier: phone, email, or name." },
+          fact: { type: "string", description: "The fact to remember, e.g. 'allergic to shellfish'." },
+        },
+        required: ["guestKey", "fact"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "recall_guest",
+      description: "Recall stored facts about a guest. Requires guestKey.",
+      parameters: {
+        type: "object",
+        properties: {
+          guestKey: { type: "string", description: "Guest identifier: phone, email, or name." },
+        },
+        required: ["guestKey"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_daily_ops",
+      description: "OWNER/AUTO. Run a daily ops sweep — arrivals, departures, pending requests. Writes a briefing. Use for morning briefing or automatic check.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
   // ---- OWNER WRITE TOOLS (operator face only) -----------------------------
   {
     type: "function",
@@ -945,6 +1100,127 @@ function logPayment(args: Record<string, unknown>, ctx: TalaToolContext) {
   };
 }
 
+// ---- Guest-safe READ tools (frontend, mirror edge fn) ---------------
+async function listRoomsFrontend(_args: Record<string, unknown>) {
+  return { error: "Use the edge function for this tool." };
+}
+async function listBookingsFrontend(_args: Record<string, unknown>) {
+  return { error: "Use the edge function for this tool." };
+}
+async function listPaymentsFrontend(_args: Record<string, unknown>) {
+  return { error: "Use the edge function for this tool." };
+}
+async function listGuestsFrontend(_args: Record<string, unknown>) {
+  return { error: "Use the edge function for this tool." };
+}
+
+// ---- Operator confirmations (frontend, Supabase direct) --------------
+async function confirmBookingFrontend(args: Record<string, unknown>) {
+  const id = str(args.requestId);
+  if (!id) return { error: "requestId is required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { data: row, error: fetchErr } = await supabase
+    .from("tala_booking_requests")
+    .select("*")
+    .eq("id", id)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (fetchErr || !row) return { error: "Request not found or already handled." };
+  const ref = "MT-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+  const { error: upErr } = await supabase
+    .from("tala_booking_requests")
+    .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+    .eq("id", id);
+  if (upErr) return { error: "Couldn't confirm right now." };
+  return { success: true, reference: ref, message: "Booking confirmed with reference " + ref + "." };
+}
+async function confirmTourFrontend(args: Record<string, unknown>) {
+  const id = str(args.requestId);
+  if (!id) return { error: "requestId is required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { data: row } = await supabase.from("tala_tour_requests").select("*").eq("id", id).eq("status", "requested").maybeSingle();
+  if (!row) return { error: "Request not found or already handled." };
+  const ref = "TR-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+  const { error: upErr } = await supabase.from("tala_tour_requests").update({ status: "confirmed", confirmed_at: new Date().toISOString() }).eq("id", id);
+  if (upErr) return { error: "Couldn't confirm right now." };
+  return { success: true, reference: ref, message: "Tour booking confirmed with reference " + ref + "." };
+}
+async function confirmRentalFrontend(args: Record<string, unknown>) {
+  const id = str(args.requestId);
+  if (!id) return { error: "requestId is required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { data: row } = await supabase.from("tala_rental_requests").select("*").eq("id", id).eq("status", "requested").maybeSingle();
+  if (!row) return { error: "Request not found or already handled." };
+  const ref = "RN-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+  const { error: upErr } = await supabase.from("tala_rental_requests").update({ status: "confirmed", confirmed_at: new Date().toISOString() }).eq("id", id);
+  if (upErr) return { error: "Couldn't confirm right now." };
+  return { success: true, reference: ref, message: "Motorbike rental confirmed with reference " + ref + "." };
+}
+
+// ---- Proactivity (frontend) --------------------------------------------
+async function sendWhatsAppFrontend(args: Record<string, unknown>) {
+  const to = str(args.to);
+  const message = str(args.message);
+  if (!to) return { error: "A phone number is required." };
+  const phone = to.replace(/[^0-9+]/g, "").slice(0, 20);
+  const text = encodeURIComponent(message.slice(0, 1000));
+  return { success: true, url: "https://wa.me/" + phone + "?text=" + text, message: "Open this WhatsApp link to send the message." };
+}
+async function sendBriefingFrontend(_args: Record<string, unknown>) {
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: briefs } = await supabase.from("tala_briefings").select("*").eq("brief_date", today);
+  return { success: true, briefing: (briefs && briefs[0]) || null, message: "Briefing retrieved." };
+}
+async function setReminderFrontend(args: Record<string, unknown>) {
+  const title = str(args.title);
+  if (!title) return { error: "Title is required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { error } = await supabase.from("tala_tasks").insert({
+    title: title.slice(0, 300),
+    due: (str(args.due) ?? "").slice(0, 30),
+    category: str(args.category) ?? "general",
+    status: "pending",
+  });
+  if (error) return { error: "Couldn't save reminder." };
+  return { success: true, message: "Reminder set: " + title };
+}
+
+// ---- Memory (frontend) --------------------------------------------------
+async function rememberGuestFrontend(args: Record<string, unknown>) {
+  const guestKey = str(args.guestKey);
+  const fact = str(args.fact);
+  if (!guestKey || !fact) return { error: "guestKey and fact are required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { error } = await supabase
+    .from("tala_guest_memory")
+    .upsert({ guest_key: guestKey.slice(0, 200), fact: fact.slice(0, 1000), updated_at: new Date().toISOString() }, { onConflict: "guest_key" });
+  if (error) return { error: "Couldn't save memory." };
+  return { success: true, message: "Got it — I'll remember that." };
+}
+async function recallGuestFrontend(args: Record<string, unknown>) {
+  const guestKey = str(args.guestKey);
+  if (!guestKey) return { error: "guestKey is required." };
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const { data, error } = await supabase
+    .from("tala_guest_memory")
+    .select("fact, updated_at")
+    .eq("guest_key", guestKey.slice(0, 200))
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (error || !data?.length) return { facts: [], message: "I don't have any notes for this guest yet." };
+  return { facts: data.map((r: any) => r.fact), message: "Here's what I remember." };
+}
+
+// ---- Self-directed ops (frontend) --------------------------------------
+async function runDailyOpsFrontend(_args: Record<string, unknown>) {
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: briefs } = await supabase.from("tala_briefings").select("*").eq("brief_date", today);
+  return { success: true, briefing: (briefs && briefs[0]) || null, message: "Daily ops briefing retrieved." };
+}
+
+
 /** Runs one tool call and returns a JSON-serializable result for the model. */
 export async function executeTalaTool(
   call: TalaToolCall,
@@ -978,6 +1254,32 @@ export async function executeTalaTool(
       return markPayRecordPaid(args, ctx);
     case "log_payment":
       return logPayment(args, ctx);
+    case "list_rooms":
+      return listRoomsFrontend(args);
+    case "list_bookings":
+      return listBookingsFrontend(args);
+    case "list_payments":
+      return listPaymentsFrontend(args);
+    case "list_guests":
+      return listGuestsFrontend(args);
+    case "confirm_booking":
+      return confirmBookingFrontend(args);
+    case "confirm_tour":
+      return confirmTourFrontend(args);
+    case "confirm_rental":
+      return confirmRentalFrontend(args);
+    case "send_whatsapp":
+      return sendWhatsAppFrontend(args);
+    case "send_briefing":
+      return sendBriefingFrontend(args);
+    case "set_reminder":
+      return setReminderFrontend(args);
+    case "remember_guest":
+      return rememberGuestFrontend(args);
+    case "recall_guest":
+      return recallGuestFrontend(args);
+    case "run_daily_ops":
+      return runDailyOpsFrontend(args);
     default:
       return { error: `Unknown tool: ${call.name}` };
   }
