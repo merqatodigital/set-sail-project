@@ -645,6 +645,287 @@ export async function handleRequest(req: Request): Promise<Response> {
     },
   );
 
+
+  const listRoomsTool = tool(
+    async ({ roomName }: { roomName?: string | null }) => {
+      const rooms = (cms.homepage?.rooms ?? []).filter((r) => r.visible);
+      if (!rooms.length) return JSON.stringify({ error: "No rooms are listed yet." });
+      const filter = roomName?.trim().toLowerCase();
+      const relevant = filter ? rooms.filter((r) => r.name.toLowerCase().includes(filter)) : rooms;
+      if (!relevant.length) return JSON.stringify({ error: `No room matching "${roomName}".` });
+      return JSON.stringify({ rooms: relevant.map((r) => ({ name: r.name, capacity: r.capacity, price: r.price, available: true })) });
+    },
+    {
+      name: "list_rooms",
+      description: "List all visible rooms/stays with name, capacity, price. Use when a guest asks what rooms are available.",
+      schema: z.object({ roomName: z.string().nullable().optional().describe("Optional: a specific room name to filter.") }),
+    },
+  );
+
+  const listBookingsTool = tool(
+    async (_args: Record<string, never>) => {
+      const bookings = cms.operations?.bookings ?? [];
+      return JSON.stringify({ bookings: bookings.map((b) => ({ reference: b.reference, guestName: b.guestName, roomType: b.roomType, status: b.status, checkIn: b.checkIn, checkOut: b.checkOut })) });
+    },
+    {
+      name: "list_bookings",
+      description: "List all bookings (operator face). Returns reference, guest, room type, status, dates.",
+      schema: z.object({}),
+    },
+  );
+
+  const listPaymentsTool = tool(
+    async (_args: Record<string, never>) => {
+      const payments = cms.operations?.payments ?? [];
+      return JSON.stringify({ payments: payments.map((p) => ({ reference: p.reference, date: p.date, category: p.category, direction: p.direction, amount: p.amount, method: p.method, description: p.description })) });
+    },
+    {
+      name: "list_payments",
+      description: "List all recorded payments/revenues/expenses (operator face). Returns reference, date, category, direction, amount, method.",
+      schema: z.object({}),
+    },
+  );
+
+  const listGuestsTool = tool(
+    async (_args: Record<string, never>) => {
+      const guests = cms.operations?.guests ?? [];
+      return JSON.stringify({ guests: guests.map((g) => ({ name: g.name, phone: g.phone, email: g.email, checkIn: g.checkIn, checkOut: g.checkOut, status: g.status })) });
+    },
+    {
+      name: "list_guests",
+      description: "List all registered guests (operator face). Returns name, phone, email, check-in/out, status.",
+      schema: z.object({}),
+    },
+  );
+
+  // ---- Operator confirmations (move guest intent → real record) ----------
+  // These are only callable from the operator/owner face. They promote a
+  // guest's pending request into real cms_data bookings so the workflow is:
+  // guest requests via orb → request_booking → owner confirms via confirm_booking.
+
+  const confirmBookingTool = tool(
+    async ({ requestId }: { requestId: string }) => {
+      if (!requestId) return JSON.stringify({ error: "requestId is required." });
+      const { data: row, error: fetchErr } = await supabase
+        .from("tala_booking_requests")
+        .select("*")
+        .eq("id", requestId)
+        .eq("status", "pending")
+        .maybeSingle();
+      if (fetchErr || !row) return JSON.stringify({ error: "Request not found or already handled." });
+      const ref = "MT-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+      const { error: upErr } = await supabase
+        .from("tala_booking_requests")
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (upErr) return JSON.stringify({ error: "Couldn't confirm right now." });
+      return JSON.stringify({ success: true, reference: ref, message: `Booking confirmed with reference ${ref}. Team will reach out.` });
+    },
+    {
+      name: "confirm_booking",
+      description: "OWNER ONLY. Confirm a pending booking request (from tala_booking_requests) and mark it confirmed. Requires requestId.",
+      schema: z.object({ requestId: z.string().describe("The id of the booking request to confirm.") }),
+    },
+  );
+
+  const confirmTourTool = tool(
+    async ({ requestId }: { requestId: string }) => {
+      if (!requestId) return JSON.stringify({ error: "requestId is required." });
+      const { data: row, error: fetchErr } = await supabase
+        .from("tala_tour_requests")
+        .select("*")
+        .eq("id", requestId)
+        .eq("status", "requested")
+        .maybeSingle();
+      if (fetchErr || !row) return JSON.stringify({ error: "Request not found or already handled." });
+      const ref = "TR-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+      const { error: upErr } = await supabase
+        .from("tala_tour_requests")
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (upErr) return JSON.stringify({ error: "Couldn't confirm right now." });
+      return JSON.stringify({ success: true, reference: ref, message: `Tour booking confirmed with reference ${ref}. Team will reach out.` });
+    },
+    {
+      name: "confirm_tour",
+      description: "OWNER ONLY. Confirm a pending tour booking request (from tala_tour_requests). Requires requestId.",
+      schema: z.object({ requestId: z.string().describe("The id of the tour request to confirm.") }),
+    },
+  );
+
+  const confirmRentalTool = tool(
+    async ({ requestId }: { requestId: string }) => {
+      if (!requestId) return JSON.stringify({ error: "requestId is required." });
+      const { data: row, error: fetchErr } = await supabase
+        .from("tala_rental_requests")
+        .select("*")
+        .eq("id", requestId)
+        .eq("status", "requested")
+        .maybeSingle();
+      if (fetchErr || !row) return JSON.stringify({ error: "Request not found or already handled." });
+      const ref = "RN-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 9000 + 1000));
+      const { error: upErr } = await supabase
+        .from("tala_rental_requests")
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (upErr) return JSON.stringify({ error: "Couldn't confirm right now." });
+      return JSON.stringify({ success: true, reference: ref, message: `Motorbike rental confirmed with reference ${ref}. Team will reach out.` });
+    },
+    {
+      name: "confirm_rental",
+      description: "OWNER ONLY. Confirm a pending motorbike rental request (from tala_rental_requests). Requires requestId.",
+      schema: z.object({ requestId: z.string().describe("The id of the rental request to confirm.") }),
+    },
+  );
+
+  // ---- Proactivity ---------------------------------------------------------
+  // These let TALA initiate contact / dispatch, based on live ops state.
+
+  const sendWhatsAppTool = tool(
+    async ({ to, message }: { to: string; message: string }) => {
+      const phone = (to ?? "").replace(/[^0-9+]/g, "").slice(0, 20);
+      if (!phone) return JSON.stringify({ error: "A phone number is required." });
+      const text = encodeURIComponent((message ?? "").slice(0, 1000));
+      const url = `https://wa.me/${phone}?text=${text}`;
+      return JSON.stringify({ success: true, url, message: "Open this WhatsApp link to send the message." });
+    },
+    {
+      name: "send_whatsapp",
+      description: "Build a wa.me deep link for the team / guest to send a WhatsApp message. Does not send automatically.",
+      schema: z.object({
+        to: z.string().describe("Phone number, E.164 style, e.g. +639123456789."),
+        message: z.string().describe("The message text to send."),
+      }),
+    },
+  );
+
+  const sendBriefingTool = tool(
+    async (_args: Record<string, never>) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const arrivals = (cms.operations?.bookings ?? []).filter((b) => b.checkIn === today);
+      const departures = (cms.operations?.bookings ?? []).filter((b) => b.checkOut === today);
+      const toursToday = (cms.operations?.tours ?? []).filter((t) => t.active);
+      const briefing = {
+        date: today,
+        summary: `${arrivals.length} arrival(s), ${departures.length} departure(s), ${toursToday.length} tour(s) available today.`,
+        arrivals: arrivals.length,
+        departures: departures.length,
+        toursAvailable: toursToday.length,
+      };
+      const { error } = await supabase.from("tala_briefings").insert({
+        brief_date: today,
+        summary: briefing.summary,
+        highlights: [briefing.summary],
+        generated_at: new Date().toISOString(),
+      });
+      if (error) return JSON.stringify({ error: "Couldn't save briefing." });
+      return JSON.stringify({ success: true, briefing });
+    },
+    {
+      name: "send_briefing",
+      description: "OWNER/GUEST. Generate today's morning briefing (arrivals, departures, tours) and store it. Returns the briefing.",
+      schema: z.object({}),
+    },
+  );
+
+  const setReminderTool = tool(
+    async ({ title, due, category }: { title: string; due?: string; category?: string }) => {
+      if (!title) return JSON.stringify({ error: "Title is required." });
+      const { error } = await supabase.from("tala_tasks").insert({
+        title: title.slice(0, 300),
+        due: (due ?? "").slice(0, 30),
+        category: category ?? "general",
+        status: "pending",
+      });
+      if (error) return JSON.stringify({ error: "Couldn't save reminder." });
+      return JSON.stringify({ success: true, message: `Reminder set: ${title}` });
+    },
+    {
+      name: "set_reminder",
+      description: "OWNER/GUEST. Create a task/reminder. Requires title, optional due date and category.",
+      schema: z.object({
+        title: z.string().describe("Reminder title, e.g. 'Confirm guest pickup'."),
+        due: z.string().nullable().optional().describe("Due date YYYY-MM-DD, optional."),
+        category: z.string().nullable().optional().describe("Category: booking, tour, staff, maintenance, general."),
+      }),
+    },
+  );
+
+  // ---- Memory ----------------------------------------------------------------
+  // tala_guest_memory table carries small facts across sessions.
+
+  const rememberGuestTool = tool(
+    async ({ guestKey, fact }: { guestKey: string; fact: string }) => {
+      if (!guestKey || !fact) return JSON.stringify({ error: "guestKey and fact are required." });
+      const { error } = await supabase.from("tala_guest_memory").upsert(
+        { guest_key: guestKey.slice(0, 200), fact: fact.slice(0, 1000), updated_at: new Date().toISOString() },
+        { onConflict: "guest_key" },
+      );
+      if (error) return JSON.stringify({ error: "Couldn't save memory." });
+      return JSON.stringify({ success: true, message: "Got it — I'll remember that." });
+    },
+    {
+      name: "remember_guest",
+      description: "Store a fact about a guest so TALA can recall it later. Requires guestKey (phone/email/name) and the fact.",
+      schema: z.object({
+        guestKey: z.string().describe("Guest identifier: phone, email, or name."),
+        fact: z.string().describe("The fact to remember, e.g. 'allergic to shellfish'."),
+      }),
+    },
+  );
+
+  const recallGuestTool = tool(
+    async ({ guestKey }: { guestKey: string }) => {
+      if (!guestKey) return JSON.stringify({ error: "guestKey is required." });
+      const { data, error } = await supabase
+        .from("tala_guest_memory")
+        .select("fact, updated_at")
+        .eq("guest_key", guestKey.slice(0, 200))
+        .order("updated_at", { ascending: false })
+        .limit(10);
+      if (error || !data?.length) return JSON.stringify({ facts: [], message: "I don't have any notes for this guest yet." });
+      return JSON.stringify({ facts: data.map((r) => r.fact), message: "Here's what I remember." });
+    },
+    {
+      name: "recall_guest",
+      description: "Recall stored facts about a guest. Requires guestKey.",
+      schema: z.object({ guestKey: z.string().describe("Guest identifier: phone, email, or name.") }),
+    },
+  );
+
+  // ---- Self-directed daily ops ----------------------------------------------
+  // runDailyOpsTool sweeps cms_data + request
+  // tables and writes a briefing/alert list; the agent can call it proactively.
+
+  const runDailyOpsTool = tool(
+    async (_args: Record<string, never>) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const bookings = cms.operations?.bookings ?? [];
+      const arrivals = bookings.filter((b) => b.checkIn === today && b.status !== "cancelled");
+      const departures = bookings.filter((b) => b.checkOut === today && b.status !== "cancelled");
+      const { data: reqs } = await supabase.from("tala_booking_requests").select("*").eq("status", "pending");
+      alerts: string[] = [];
+      const highlights: string[] = [];
+      if (arrivals.length) highlights.push(`${arrivals.length} arriving today`);
+      if (departures.length) highlights.push(`${departures.length} departing today`);
+      if ((reqs?.length ?? 0) > 0) { alerts.push(`${reqs!.length} unconfirmed booking request(s)`); }
+      const summary = highlights.length ? highlights.join(", ") : "Quiet day — no arrivals or departures.";
+      const { error } = await supabase.from("tala_briefings").insert({
+        brief_date: today,
+        summary,
+        highlights: [...highlights, ...alerts],
+        generated_at: new Date().toISOString(),
+      });
+      if (error) return JSON.stringify({ error: "Couldn't run daily ops." });
+      return JSON.stringify({ success: true, summary, highlights, alerts });
+    },
+    {
+      name: "run_daily_ops",
+      description: "OWNER/AUTO. Run a daily ops sweep — arrivals, departures, pending requests. Writes a briefing. Use for morning briefing or automatic check.",
+      schema: z.object({}),
+    },
+  );
+
   const tools = [
     checkRoomAvailabilityTool,
     logInterestedGuestTool,
@@ -654,6 +935,23 @@ export async function handleRequest(req: Request): Promise<Response> {
     requestBookingTool,
     requestTourBookingTool,
     requestRentalTool,
+    listRoomsTool,
+    listBookingsTool,
+    listPaymentsTool,
+    listGuestsTool,
+    // ---- Operator confirmations (owner-gated) ----------------------------
+    confirmBookingTool,
+    confirmTourTool,
+    confirmRentalTool,
+    // ---- Proactivity ------------------------------------------------------
+    sendWhatsAppTool,
+    sendBriefingTool,
+    setReminderTool,
+    // ---- Memory -----------------------------------------------------------
+    rememberGuestTool,
+    recallGuestTool,
+    // ---- Self-directed daily ops ------------------------------------------
+    runDailyOpsTool,
   ];
   const toolNode = new ToolNode(tools);
 
