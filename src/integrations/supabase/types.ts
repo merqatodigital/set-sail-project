@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      bookings: {
+        Row: {
+          amount: number
+          check_in: string
+          check_out: string
+          created_at: string
+          guest_id: string
+          guest_name: string
+          guest_phone: string
+          guests: number
+          id: string
+          notes: string
+          paid_amount: number
+          reference: string
+          room_type: string
+          source: string
+          status: string
+        }
+        Insert: {
+          amount?: number
+          check_in?: string
+          check_out?: string
+          created_at?: string
+          guest_id?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          room_type?: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          check_in?: string
+          check_out?: string
+          created_at?: string
+          guest_id?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id?: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          room_type?: string
+          source?: string
+          status?: string
+        }
+        Relationships: []
+      }
       cms_data: {
         Row: {
           key: string
@@ -29,6 +83,306 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      guests: {
+        Row: {
+          country: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          notes: string
+          phone: string
+        }
+        Insert: {
+          country?: string
+          created_at?: string
+          email?: string
+          id: string
+          name?: string
+          notes?: string
+          phone?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          notes?: string
+          phone?: string
+        }
+        Relationships: []
+      }
+      inventory_items: {
+        Row: {
+          category: string
+          id: string
+          name: string
+          notes: string
+          quantity: number
+          reorder_threshold: number
+          unit: string
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          id: string
+          name?: string
+          notes?: string
+          quantity?: number
+          reorder_threshold?: number
+          unit?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          id?: string
+          name?: string
+          notes?: string
+          quantity?: number
+          reorder_threshold?: number
+          unit?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      motorbike_rentals: {
+        Row: {
+          amount: number
+          bike_id: string
+          bike_name: string
+          created_at: string
+          days: number
+          deposit: number
+          end_date: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          notes: string
+          paid_amount: number
+          reference: string
+          start_date: string
+          status: string
+        }
+        Insert: {
+          amount?: number
+          bike_id?: string
+          bike_name?: string
+          created_at?: string
+          days?: number
+          deposit?: number
+          end_date?: string
+          guest_name?: string
+          guest_phone?: string
+          id: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          start_date?: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          bike_id?: string
+          bike_name?: string
+          created_at?: string
+          days?: number
+          deposit?: number
+          end_date?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          start_date?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      motorbikes: {
+        Row: {
+          active: boolean
+          daily_rate: number
+          id: string
+          model: string
+          name: string
+          notes: string
+          plate: string
+          status: string
+        }
+        Insert: {
+          active?: boolean
+          daily_rate?: number
+          id: string
+          model?: string
+          name?: string
+          notes?: string
+          plate?: string
+          status?: string
+        }
+        Update: {
+          active?: boolean
+          daily_rate?: number
+          id?: string
+          model?: string
+          name?: string
+          notes?: string
+          plate?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      pay_records: {
+        Row: {
+          amount: number
+          hours: number
+          id: string
+          method: string
+          notes: string
+          paid: boolean
+          paid_at: string
+          period_end: string
+          period_start: string
+          staff_id: string
+        }
+        Insert: {
+          amount?: number
+          hours?: number
+          id: string
+          method?: string
+          notes?: string
+          paid?: boolean
+          paid_at?: string
+          period_end?: string
+          period_start?: string
+          staff_id?: string
+        }
+        Update: {
+          amount?: number
+          hours?: number
+          id?: string
+          method?: string
+          notes?: string
+          paid?: boolean
+          paid_at?: string
+          period_end?: string
+          period_start?: string
+          staff_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          category: string
+          date: string
+          description: string
+          direction: string
+          id: string
+          method: string
+          notes: string
+          reference: string
+          related_id: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          date?: string
+          description?: string
+          direction?: string
+          id: string
+          method?: string
+          notes?: string
+          reference?: string
+          related_id?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          date?: string
+          description?: string
+          direction?: string
+          id?: string
+          method?: string
+          notes?: string
+          reference?: string
+          related_id?: string
+        }
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          date: string
+          end_time: string
+          hours_worked: number
+          id: string
+          notes: string
+          staff_id: string
+          start_time: string
+        }
+        Insert: {
+          date?: string
+          end_time?: string
+          hours_worked?: number
+          id: string
+          notes?: string
+          staff_id?: string
+          start_time?: string
+        }
+        Update: {
+          date?: string
+          end_time?: string
+          hours_worked?: number
+          id?: string
+          notes?: string
+          staff_id?: string
+          start_time?: string
+        }
+        Relationships: []
+      }
+      staff_members: {
+        Row: {
+          active: boolean
+          email: string
+          hired_at: string
+          id: string
+          name: string
+          notes: string
+          pay_rate: number
+          pay_type: string
+          phone: string
+          role: string
+        }
+        Insert: {
+          active?: boolean
+          email?: string
+          hired_at?: string
+          id: string
+          name?: string
+          notes?: string
+          pay_rate?: number
+          pay_type?: string
+          phone?: string
+          role?: string
+        }
+        Update: {
+          active?: boolean
+          email?: string
+          hired_at?: string
+          id?: string
+          name?: string
+          notes?: string
+          pay_rate?: number
+          pay_type?: string
+          phone?: string
+          role?: string
         }
         Relationships: []
       }
@@ -62,6 +416,48 @@ export type Database = {
           reply_preview?: string
           tools_used?: string[]
           urgency?: string
+        }
+        Relationships: []
+      }
+      tala_booking_requests: {
+        Row: {
+          amount: number
+          check_in: string
+          check_out: string
+          created_at: string
+          guest_name: string
+          guests: number
+          id: string
+          notes: string
+          room_type: string
+          source: string
+          status: string
+        }
+        Insert: {
+          amount?: number
+          check_in?: string
+          check_out?: string
+          created_at?: string
+          guest_name?: string
+          guests?: number
+          id?: string
+          notes?: string
+          room_type?: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          check_in?: string
+          check_out?: string
+          created_at?: string
+          guest_name?: string
+          guests?: number
+          id?: string
+          notes?: string
+          room_type?: string
+          source?: string
+          status?: string
         }
         Relationships: []
       }
@@ -116,6 +512,24 @@ export type Database = {
           status?: string
           target_date?: string
           title?: string
+        }
+        Relationships: []
+      }
+      tala_guest_memory: {
+        Row: {
+          fact: string
+          guest_key: string
+          updated_at: string
+        }
+        Insert: {
+          fact?: string
+          guest_key?: string
+          updated_at?: string
+        }
+        Update: {
+          fact?: string
+          guest_key?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -185,6 +599,45 @@ export type Database = {
         }
         Relationships: []
       }
+      tala_rental_requests: {
+        Row: {
+          bike_name: string
+          created_at: string
+          end_date: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          notes: string
+          source: string
+          start_date: string
+          status: string
+        }
+        Insert: {
+          bike_name?: string
+          created_at?: string
+          end_date?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          notes?: string
+          source?: string
+          start_date?: string
+          status?: string
+        }
+        Update: {
+          bike_name?: string
+          created_at?: string
+          end_date?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          notes?: string
+          source?: string
+          start_date?: string
+          status?: string
+        }
+        Relationships: []
+      }
       tala_tasks: {
         Row: {
           category: string
@@ -212,6 +665,48 @@ export type Database = {
         }
         Relationships: []
       }
+      tala_tour_requests: {
+        Row: {
+          amount: number
+          created_at: string
+          guest_name: string
+          guest_phone: string
+          guests: number
+          id: string
+          notes: string
+          source: string
+          status: string
+          tour_date: string
+          tour_name: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id?: string
+          notes?: string
+          source?: string
+          status?: string
+          tour_date?: string
+          tour_name?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id?: string
+          notes?: string
+          source?: string
+          status?: string
+          tour_date?: string
+          tour_name?: string
+        }
+        Relationships: []
+      }
       tala_wins: {
         Row: {
           brief_date: string
@@ -230,6 +725,111 @@ export type Database = {
           created_at?: string
           id?: string
           text?: string
+        }
+        Relationships: []
+      }
+      tour_bookings: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          guest_name: string
+          guest_phone: string
+          guests: number
+          id: string
+          notes: string
+          paid_amount: number
+          reference: string
+          status: string
+          tour_id: string
+          tour_name: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          status?: string
+          tour_id?: string
+          tour_name?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          guest_name?: string
+          guest_phone?: string
+          guests?: number
+          id?: string
+          notes?: string
+          paid_amount?: number
+          reference?: string
+          status?: string
+          tour_id?: string
+          tour_name?: string
+        }
+        Relationships: []
+      }
+      tours_catalog: {
+        Row: {
+          active: boolean
+          capacity: number
+          description: string
+          duration: string
+          id: string
+          inclusions: string[]
+          name: string
+          price: number
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          capacity?: number
+          description?: string
+          duration?: string
+          id: string
+          inclusions?: string[]
+          name?: string
+          price?: number
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          capacity?: number
+          description?: string
+          duration?: string
+          id?: string
+          inclusions?: string[]
+          name?: string
+          price?: number
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -255,9 +855,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      room_availability_conflicts: {
+        Args: { p_check_in: string; p_check_out: string }
+        Returns: {
+          check_in: string
+          check_out: string
+          room_type: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -384,6 +999,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin"],
+    },
   },
 } as const
