@@ -776,6 +776,8 @@ function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) 
   const tour = ctx.cms.operations.tours.find((t) =>
     t.name.toLowerCase().includes(tourName.toLowerCase()),
   );
+  const guests = num(args.guests, 1);
+  const tourCost = tour ? tour.boatCost + tour.guideCost + (tour.lunchCost * guests) + (tour.entranceFee * guests) : 0;
   const booking: CmsData["operations"]["tourBookings"][number] = {
     id: uid("tb"),
     reference: generateReference("TR"),
@@ -784,8 +786,9 @@ function createTourBooking(args: Record<string, unknown>, ctx: TalaToolContext) 
     guestName: str(args.guestName),
     guestPhone: str(args.guestPhone),
     date,
-    guests: num(args.guests, 1),
+    guests,
     amount: num(args.amount, 0),
+    cost: tourCost,
     paidAmount: 0,
     status: "confirmed",
     notes: str(args.notes),

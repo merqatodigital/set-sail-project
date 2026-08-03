@@ -207,6 +207,10 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
         ...defaults.settings.tala,
         ...((parsed.settings as any).tala || {}),
       },
+      financial: {
+        ...defaults.settings.financial,
+        ...((parsed.settings as any).financial || {}),
+      },
     };
   }
 

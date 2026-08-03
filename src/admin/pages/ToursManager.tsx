@@ -10,12 +10,12 @@ import type { Tour, TourBooking } from "@/types/cms";
 
 const emptyTour = (order: number): Tour => ({
   id: uid("tour"), name: "", description: "", duration: "8 hours",
-  price: 0, capacity: 10, inclusions: [], active: true, order,
+  price: 0, capacity: 10, inclusions: [], boatCost: 0, guideCost: 0, lunchCost: 0, entranceFee: 0, active: true, order,
 });
 const emptyTourBooking = (tourId = "", tourName = ""): TourBooking => ({
   id: uid("tb"), reference: generateReference("TR"), tourId, tourName,
   guestName: "", guestPhone: "", date: todayISO(), guests: 1,
-  amount: 0, paidAmount: 0, status: "confirmed", notes: "", createdAt: new Date().toISOString(),
+  amount: 0, cost: 0, paidAmount: 0, status: "confirmed", notes: "", createdAt: new Date().toISOString(),
 });
 
 export default function ToursManager() {

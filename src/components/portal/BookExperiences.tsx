@@ -31,6 +31,7 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
   const [confirmed, setConfirmed] = useState(false);
 
   const total = selectedTour ? selectedTour.price * pax : 0;
+  const tourCost = selectedTour ? selectedTour.boatCost + selectedTour.guideCost + (selectedTour.lunchCost * pax) + (selectedTour.entranceFee * pax) : 0;
 
   const handleConfirm = () => {
     if (!selectedTour) return;
@@ -45,6 +46,7 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
       date,
       guests: pax,
       amount: total,
+      cost: tourCost,
       paidAmount: 0,
       status: "confirmed" as const,
       notes: `Booked via Guest Portal. Pay on-site or GCash.`,

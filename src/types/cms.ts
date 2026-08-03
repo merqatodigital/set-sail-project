@@ -377,6 +377,12 @@ export interface TalaSettings {
   updatedAt: string;
 }
 
+export interface FinancialSettings {
+  dailyLaborCost: number; // PHP per day — staff wages + utilities
+  monthlyUtilities: number; // PHP — electricity, water, internet estimate
+  defaultCurrency: string; // "PHP"
+}
+
 export interface SiteSettings {
   siteName: string;
   tagline: string;
@@ -388,6 +394,7 @@ export interface SiteSettings {
   whatsapp: WhatsAppSettings;
   theme: ThemeSettings;
   tala: TalaSettings;
+  financial: FinancialSettings;
 }
 
 export interface MediaItem {
@@ -459,6 +466,12 @@ export interface Tour {
   price: number; // per person PHP
   capacity: number; // max guests per departure
   inclusions: string[]; // ["Lunch", "Snorkel gear", "Boat"]
+  // Fixed costs per departure (not per guest)
+  boatCost: number; // PHP — boat rental per departure
+  guideCost: number; // PHP — guide fee per departure
+  // Per-guest costs
+  lunchCost: number; // PHP — lunch cost per guest
+  entranceFee: number; // PHP — entrance fees per guest
   active: boolean;
   order: number;
 }
@@ -472,7 +485,8 @@ export interface TourBooking {
   guestPhone: string;
   date: string; // ISO date of tour
   guests: number;
-  amount: number;
+  amount: number; // revenue
+  cost: number; // total cost snapshot at booking time
   paidAmount: number;
   status: "confirmed" | "completed" | "cancelled";
   notes: string;
