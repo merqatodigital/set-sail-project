@@ -159,6 +159,8 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
     payments: savedOps.payments || defaultOps.payments,
     motorbikes: savedOps.motorbikes || defaultOps.motorbikes,
     motorbikeRentals: savedOps.motorbikeRentals || defaultOps.motorbikeRentals,
+    menuItems: savedOps.menuItems || defaultOps.menuItems,
+    foodOrders: savedOps.foodOrders || defaultOps.foodOrders,
   };
 
   // Deep-merge settings so new fields (whatsapp, etc.) appear

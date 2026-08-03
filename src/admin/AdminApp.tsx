@@ -30,6 +30,7 @@ import ToursManager from "./pages/ToursManager";
 import StaffManager from "./pages/StaffManager";
 import PaymentsManager from "./pages/PaymentsManager";
 import RentalsManager from "./pages/RentalsManager";
+import FoodOrdersManager from "./pages/FoodOrdersManager";
 
 export default function AdminApp() {
   const { isAuthed } = useAuth();
@@ -69,6 +70,7 @@ export default function AdminApp() {
         <Route path="staff" element={<StaffManager />} />
         <Route path="payments" element={<PaymentsManager />} />
         <Route path="rentals" element={<RentalsManager />} />
+        <Route path="food-orders" element={<FoodOrdersManager />} />
       </Route>
     </Routes>
   );

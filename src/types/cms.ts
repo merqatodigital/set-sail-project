@@ -173,6 +173,29 @@ export interface PricingPackage {
   order: number;
 }
 
+export interface PackageInclusions {
+  id: string;
+  text: string;
+  included: boolean;  // for 1-person vs 2-person packages
+}
+
+export interface PackageItem {
+  id: string;
+  name: string;
+  price: string;  // PHP price
+  period: string;  // e.g. "7 days"
+  icon: string;   // lucide icon name
+  description: string;
+  features: PricingFeatureLine[];
+  inclusions: PackageInclusions[];
+  buttonLabel: string;
+  featured: boolean;
+  order: number;
+  // 1-person and 2-person pricing
+  priceOne: string;
+  priceTwo: string;
+}
+
 export interface GalleryImage {
   id: string;
   mediaId: string;
@@ -499,7 +522,7 @@ export interface Payment {
   id: string;
   reference: string;
   date: string; // ISO date
-  category: "booking" | "tour" | "rental" | "other" | "expense";
+  category: "booking" | "tour" | "rental" | "food" | "other" | "expense";
   direction: "in" | "out"; // in = revenue, out = expense
   amount: number;
   method: PaymentMethod;
@@ -537,6 +560,35 @@ export interface MotorbikeRental {
   createdAt: string;
 }
 
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  category: "food" | "drink";
+  price: number; // PHP
+  active: boolean;
+  order: number;
+}
+
+export interface FoodOrderItem {
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+export interface FoodOrder {
+  id: string;
+  reference: string;
+  guestName: string;
+  guestPhone: string;
+  items: FoodOrderItem[];
+  total: number;
+  status: "pending" | "preparing" | "delivered" | "cancelled";
+  notes: string;
+  createdAt: string;
+}
+
 export interface Operations {
   guests: Guest[];
   bookings: Booking[];
@@ -548,6 +600,8 @@ export interface Operations {
   payments: Payment[];
   motorbikes: Motorbike[];
   motorbikeRentals: MotorbikeRental[];
+  menuItems: MenuItem[];
+  foodOrders: FoodOrder[];
 }
 
 export interface CmsData {

@@ -736,5 +736,20 @@ export function buildDefaultOperations(): import("@/types/cms").Operations {
       },
     ],
     motorbikeRentals: [],
+    menuItems: [
+      { id: uid("mi"), name: "Chicken Adobo Rice", description: "Classic Filipino adobo with steamed rice", category: "food", price: 180, active: true, order: 0 },
+      { id: uid("mi"), name: "Pork Sinigang Rice", description: "Sour tamarind soup with pork & vegetables, rice", category: "food", price: 200, active: true, order: 1 },
+      { id: uid("mi"), name: "Bicol Express Rice", description: "Spicy coconut pork stew with rice", category: "food", price: 190, active: true, order: 2 },
+      { id: uid("mi"), name: "Grilled Fish Rice", description: "Fresh catch of the day, grilled with rice & veggies", category: "food", price: 220, active: true, order: 3 },
+      { id: uid("mi"), name: "Pancit Canton", description: "Stir-fried noodles with vegetables & meat", category: "food", price: 150, active: true, order: 4 },
+      { id: uid("mi"), name: "Lumpia Shanghai", description: "Crispy spring rolls (6 pcs) with sweet chili sauce", category: "food", price: 120, active: true, order: 5 },
+      { id: uid("mi"), name: "Bottled Water", description: "500ml purified water", category: "drink", price: 25, active: true, order: 6 },
+      { id: uid("mi"), name: "Coca-Cola / Sprite", description: "330ml can", category: "drink", price: 35, active: true, order: 7 },
+      { id: uid("mi"), name: "Fresh Buko Juice", description: "Young coconut, natural sweetness", category: "drink", price: 60, active: true, order: 8 },
+      { id: uid("mi"), name: "Iced Tea", description: "House-brewed, lightly sweetened", category: "drink", price: 50, active: true, order: 9 },
+      { id: uid("mi"), name: "San Miguel Beer", description: "Pale Pilsen 330ml", category: "drink", price: 70, active: true, order: 10 },
+      { id: uid("mi"), name: "Mango Shake", description: "Fresh mango blended with ice", category: "drink", price: 90, active: true, order: 11 },
+    ],
+    foodOrders: [],
   };
 }

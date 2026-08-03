@@ -4,6 +4,7 @@ import PortalLogin from "@/components/portal/PortalLogin";
 import PortalHome from "@/components/portal/PortalHome";
 import BookExperiences from "@/components/portal/BookExperiences";
 import RentMotorbike from "@/components/portal/RentMotorbike";
+import OrderFood from "@/components/portal/OrderFood";
 import MyBookings from "@/components/portal/MyBookings";
 import GCashQR from "@/components/portal/GCashQR";
 
@@ -17,6 +18,7 @@ export type PortalView =
   | "home"
   | "tours"
   | "rentals"
+  | "food"
   | "bookings"
   | "gcash";
 
@@ -125,6 +127,14 @@ export default function Portal() {
             guest={guest}
             motorbikes={data.operations.motorbikes.filter((m) => m.active && m.status === "available")}
             onComplete={handleBookingComplete}
+            onBack={() => setView("home")}
+          />
+        )}
+
+        {view === "food" && guest && (
+          <OrderFood
+            guest={guest}
+            onOrderComplete={() => setView("home")}
             onBack={() => setView("home")}
           />
         )}

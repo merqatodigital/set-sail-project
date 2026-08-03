@@ -123,6 +123,26 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
             </div>
           </button>
 
+          {/* Order Food & Drinks */}
+          <button
+            onClick={() => onNavigate("food")}
+            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            style={{ backgroundColor: DARK_CARD }}
+          >
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              style={{ backgroundColor: `${GOLD}22` }}
+            >
+              {"\u{1F37D}\uFE0F"}
+            </div>
+            <div>
+              <p className="font-medium">Order Food & Drinks</p>
+              <p className="text-xs opacity-50">
+                Rice meals, snacks, drinks & more — delivered to your room
+              </p>
+            </div>
+          </button>
+
           {/* My Bookings */}
           <button
             onClick={() => onNavigate("bookings")}

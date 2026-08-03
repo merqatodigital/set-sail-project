@@ -1,0 +1,262 @@
+import { useState, useMemo } from "react";
+import { useCms } from "@/context/CmsContext";
+import { uid, generateReference } from "@/admin/ops/opsUtils";
+import type { MenuItem, FoodOrderItem } from "@/types/cms";
+
+// ---------------------------------------------------------------------------
+// Order Food & Drinks — browse menu, build cart, place order.
+// ---------------------------------------------------------------------------
+
+const GOLD = "#C6A15B";
+const DARK_CARD = "#16213e";
+
+interface CartItem extends FoodOrderItem {
+  quantity: number;
+}
+
+interface Props {
+  guest: { phone: string; name: string };
+  onOrderComplete: () => void;
+  onBack: () => void;
+}
+
+export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
+  const { data, update } = useCms();
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [tab, setTab] = useState<"food" | "drink">("food");
+  const [notes, setNotes] = useState("");
+  const [placed, setPlaced] = useState(false);
+
+  const menuItems = useMemo(
+    () => data.operations.menuItems.filter((m) => m.active).sort((a, b) => a.order - b.order),
+    [data.operations.menuItems],
+  );
+
+  const filtered = menuItems.filter((m) => m.category === tab);
+
+  const addToCart = (item: MenuItem) => {
+    setCart((prev) => {
+      const existing = prev.find((c) => c.menuItemId === item.id);
+      if (existing) {
+        return prev.map((c) =>
+          c.menuItemId === item.id ? { ...c, quantity: c.quantity + 1 } : c,
+        );
+      }
+      return [...prev, { menuItemId: item.id, name: item.name, quantity: 1, price: item.price }];
+    });
+  };
+
+  const updateQty = (menuItemId: string, delta: number) => {
+    setCart((prev) => {
+      const next = prev
+        .map((c) => (c.menuItemId === menuItemId ? { ...c, quantity: c.quantity + delta } : c))
+        .filter((c) => c.quantity > 0);
+      return next;
+    });
+  };
+
+  const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+
+  const placeOrder = () => {
+    if (cart.length === 0) return;
+
+    const order = {
+      id: uid("fo"),
+      reference: generateReference("FO"),
+      guestName: guest.name,
+      guestPhone: guest.phone,
+      items: cart.map((c) => ({ menuItemId: c.menuItemId, name: c.name, quantity: c.quantity, price: c.price })),
+      total,
+      status: "pending" as const,
+      notes,
+      createdAt: new Date().toISOString(),
+    };
+
+    const payment = {
+      id: uid("pay"),
+      reference: generateReference("PY"),
+      date: new Date().toISOString().slice(0, 10),
+      category: "food" as const,
+      direction: "in" as const,
+      amount: total,
+      method: "cash" as const,
+      relatedId: order.id,
+      description: `Food order for ${guest.name} (${cart.length} item${cart.length > 1 ? "s" : ""})`,
+      notes: "",
+    };
+
+    update((d) => ({
+      ...d,
+      operations: {
+        ...d.operations,
+        foodOrders: [...d.operations.foodOrders, order],
+        payments: [...d.operations.payments, payment],
+      },
+    }));
+
+    setPlaced(true);
+  };
+
+  if (placed) {
+    return (
+      <div className="flex flex-col items-center space-y-6 py-12 text-center">
+        <div className="text-5xl">{"\u{1F37D}\uFE0F"}</div>
+        <h1 className="text-xl font-semibold">Order Placed!</h1>
+        <p className="text-sm opacity-60">
+          Your order is being prepared. We'll bring it to your room or you can pick it up at the front desk.
+        </p>
+        <button
+          onClick={onOrderComplete}
+          className="w-full rounded-lg py-3 text-sm font-medium transition"
+          style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Back */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm opacity-60 transition hover:opacity-100"
+      >
+        <span>{"\u2190"}</span> Back
+      </button>
+
+      <h1 className="text-xl font-semibold">Order Food & Drinks</h1>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {(["food", "drink"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="flex-1 rounded-lg py-2 text-sm font-medium transition"
+            style={{
+              backgroundColor: tab === t ? GOLD : DARK_CARD,
+              color: tab === t ? "#1a1a2e" : "#e8e8e8",
+            }}
+          >
+            {t === "food" ? "\u{1F35B} Food" : "\u{1F379} Drinks"}
+          </button>
+        ))}
+      </div>
+
+      {/* Menu Items */}
+      <div className="space-y-2">
+        {filtered.map((item) => {
+          const inCart = cart.find((c) => c.menuItemId === item.id);
+          return (
+            <button
+              key={item.id}
+              onClick={() => addToCart(item)}
+              className="w-full rounded-xl p-4 text-left transition hover:scale-[1.02]"
+              style={{ backgroundColor: DARK_CARD }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="font-medium">{item.name}</h3>
+                  <p className="mt-1 text-xs opacity-50">{item.description}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {inCart && (
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => updateQty(item.id, -1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                        style={{ backgroundColor: `${GOLD}22`, color: GOLD }}
+                      >
+                        -
+                      </button>
+                      <span className="w-5 text-center text-sm font-medium">{inCart.quantity}</span>
+                      <button
+                        onClick={() => updateQty(item.id, 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                        style={{ backgroundColor: `${GOLD}22`, color: GOLD }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <p className="text-sm font-semibold" style={{ color: GOLD }}>
+                      {"\u20B1"}{item.price}
+                    </p>
+                    {!inCart && <p className="text-[10px] opacity-40">Tap to add</p>}
+                  </div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="rounded-xl p-6 text-center" style={{ backgroundColor: DARK_CARD }}>
+            <p className="opacity-50">No items available right now.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Cart */}
+      {cart.length > 0 && (
+        <div className="space-y-4 rounded-2xl p-5 shadow-lg" style={{ backgroundColor: DARK_CARD }}>
+          <h2 className="font-medium">Your Order</h2>
+
+          <div className="space-y-2">
+            {cart.map((c) => (
+              <div key={c.menuItemId} className="flex items-center justify-between text-sm">
+                <span className="flex-1">
+                  {c.name} x {c.quantity}
+                </span>
+                <span style={{ color: GOLD }}>{"\u20B1"}{(c.price * c.quantity).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t pt-3" style={{ borderColor: `${GOLD}22` }}>
+            <div className="flex justify-between text-lg font-semibold">
+              <span>Total</span>
+              <span style={{ color: GOLD }}>{"\u20B1"}{total.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide opacity-50">
+              Special Requests
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Allergies, extra rice, etc."
+              rows={2}
+              className="w-full rounded-lg border px-4 py-3 text-sm focus:outline-none"
+              style={{
+                backgroundColor: "#0f3460",
+                borderColor: `${GOLD}44`,
+                color: "#e8e8e8",
+              }}
+            />
+          </div>
+
+          {/* Guest Info */}
+          <div className="rounded-lg p-3" style={{ backgroundColor: "#0f346022" }}>
+            <p className="text-xs opacity-50">Ordering for</p>
+            <p className="text-sm font-medium">{guest.name}</p>
+            <p className="text-xs opacity-50">{guest.phone}</p>
+          </div>
+
+          <button
+            onClick={placeOrder}
+            className="w-full rounded-lg py-3 text-sm font-medium transition"
+            style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
+          >
+            Place Order — {"\u20B1"}{total.toLocaleString()}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
