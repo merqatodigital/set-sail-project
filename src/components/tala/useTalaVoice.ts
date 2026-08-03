@@ -231,6 +231,13 @@ export interface UseTalaVoiceOptions {
    * The owner's Admin console passes false so it can preview/change voices.
    */
   ignoreLocalVoice?: boolean;
+  /**
+   * Gates the ~80 MB Kokoro download. Defaults to true (the admin voice
+   * preview page always wants it available). The public widget passes its
+   * `open` state so every visitor to every page doesn't silently pull 80 MB
+   * in the background before ever opening the chat.
+   */
+  active?: boolean;
 }
 
 export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
@@ -280,7 +287,11 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   const pendingSpeakRef = useRef(false);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playQueueRef = useRef<(() => Promise<void>) | null>(null);
-  const KOKORO_WAIT_CAP_MS = 45000;
+  // Was 45s — on a first-ever visit over a slow connection that's 45 seconds
+  // of the reply sitting silently on screen before anything is spoken.
+  // Silence reads as far more "broken" than a brief robotic-voice opener, so
+  // this now falls back to the browser voice much sooner.
+  const KOKORO_WAIT_CAP_MS = 8000;
   const voiceIdRef = useRef(voiceId);
   voiceIdRef.current = voiceId;
 
@@ -327,9 +338,10 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   // Only when Kokoro is actually the engine in use, though: the whole point
   // of the OpenRouter provider is no local model download, so skip this
   // entirely rather than wasting 80 MB of bandwidth nobody will use.
+  const active = options?.active ?? true;
   useEffect(() => {
     if (provider !== "kokoro") return;
-    if (!enabled || kokoroRef.current || kokoroLoading.current) return;
+    if (!active || !enabled || kokoroRef.current || kokoroLoading.current) return;
     if (typeof window === "undefined") return;
     kokoroLoading.current = true;
     setEngine((e) => (e === "none" ? "browser" : e));
@@ -379,7 +391,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
         }
       }
     })();
-  }, [enabled, provider]);
+  }, [enabled, provider, active]);
 
   const playQueue = useCallback(async () => {
     if (speakingRef.current) return;
@@ -387,30 +399,80 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     const generation = generationRef.current;
     setStatus("speaking");
 
-    // OpenRouter path: no local model, so no pipelining benefit — sequential
-    // request/play per chunk. On failure, put the chunk back and drop into
-    // the shared browser-fallback loop below for the rest of the reply.
+    // OpenRouter path: pipeline chunks — synthesize N+1 while N plays,
+    // same as Kokoro, so only the first chunk waits for a network round-trip.
     if (providerRef.current === "openrouter" && orConfigRef.current) {
-      while (queueRef.current.length && generation === generationRef.current) {
-        const chunk = queueRef.current.shift()!;
+      const readyOr: Array<{ url: string }> = [];
+      let orProducerDone = false;
+      let orProducerError = false;
+      let orNotify: (() => void) | null = null;
+      const orWake = () => {
+        const n = orNotify;
+        orNotify = null;
+        if (n) n();
+      };
+      const orConfig = orConfigRef.current;
+
+      const orProducer = (async () => {
         try {
-          const blob = await synthesizeOpenRouterTts(chunk, orConfigRef.current);
-          if (generation !== generationRef.current) break;
-          const url = URL.createObjectURL(blob);
-          await new Promise<void>((resolve) => {
-            const el = new Audio(url);
-            audioRef.current = el;
-            el.onended = () => resolve();
-            el.onerror = () => resolve();
-            el.play().catch(() => resolve());
-          });
-          URL.revokeObjectURL(url);
-          continue;
-        } catch (e) {
-          console.warn("[TALA] OpenRouter TTS failed, falling back to browser voice.", e);
-          queueRef.current.unshift(chunk);
-          break;
+          while (queueRef.current.length && generation === generationRef.current) {
+            // Bounded look-ahead of 1 keeps memory in check.
+            while (readyOr.length >= 1 && generation === generationRef.current) {
+              await new Promise<void>((r) => {
+                orNotify = r;
+              });
+            }
+            if (generation !== generationRef.current) break;
+            const chunk = queueRef.current.shift();
+            if (!chunk) break;
+            try {
+              const blob = await synthesizeOpenRouterTts(chunk, orConfig);
+              if (generation !== generationRef.current) break;
+              readyOr.push({ url: URL.createObjectURL(blob) });
+              orWake();
+            } catch (e) {
+              console.warn("[TALA] OpenRouter TTS failed for a chunk.", e);
+              queueRef.current.unshift(chunk);
+              orProducerError = true;
+              break;
+            }
+          }
+        } finally {
+          orProducerDone = true;
+          orWake();
         }
+      })();
+
+      while (generation === generationRef.current) {
+        if (!readyOr.length) {
+          if (orProducerDone) break;
+          await new Promise<void>((r) => {
+            orNotify = r;
+          });
+          continue;
+        }
+        const { url } = readyOr.shift()!;
+        orWake();
+        await new Promise<void>((resolve) => {
+          const el = new Audio(url);
+          audioRef.current = el;
+          el.onended = () => resolve();
+          el.onerror = () => resolve();
+          el.play().catch(() => resolve());
+        });
+        URL.revokeObjectURL(url);
+      }
+
+      // Drain leftovers on cancel.
+      for (const item of readyOr) URL.revokeObjectURL(item.url);
+      readyOr.length = 0;
+      await orProducer.catch(() => {});
+
+      // If OpenRouter TTS blew up mid-reply, fall through to browser voice.
+      if (!orProducerError) {
+        speakingRef.current = false;
+        if (generation === generationRef.current) setStatus("idle");
+        return;
       }
     } else {
       const kokoro = kokoroRef.current;

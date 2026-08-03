@@ -76,12 +76,19 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
 
     rec.onresult = (event) => {
       let interim = "";
+      let gotFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) finalRef.current += result[0].transcript;
-        else interim += result[0].transcript;
+        if (result.isFinal) {
+          finalRef.current += result[0].transcript;
+          gotFinal = true;
+        } else interim += result[0].transcript;
       }
       setTranscript((finalRef.current + interim).trim());
+      // Chrome's non-continuous recognizer doesn't end on the first final
+      // result — it waits out its own ~1-1.5s internal silence timer first.
+      // Stopping as soon as we have a final result removes that dead air.
+      if (gotFinal) rec.stop();
     };
     rec.onend = () => {
       setListening(false);
