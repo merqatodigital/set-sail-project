@@ -287,6 +287,18 @@ export function useTalaChat(): UseTalaChat {
         wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
       }
 
+      // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
+      // Falls back gracefully if no API key is set
+      try {
+        const { buildWeatherContext } = await import("./talaWeather");
+        const weatherCtx = await buildWeatherContext();
+        if (weatherCtx.suggestion) {
+          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
+        }
+      } catch {
+        /* weather is optional — never blocks the conversation */
+      }
+
       try {
         // Priority: key entered in Admin → TALA (works instantly, no deploy
         // needed) → device-local dev key (building on this browser only) →

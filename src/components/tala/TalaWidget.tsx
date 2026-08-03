@@ -271,6 +271,27 @@ export function TalaWidget() {
                 className="mb-3 w-full rounded-md border bg-white px-2 py-1.5"
                 style={{ borderColor: `${GOLD}55` }}
               />
+              <label className="mb-1 block font-medium">
+                OpenWeatherMap key{" "}
+                <span className="font-normal opacity-60">
+                  (optional — enables weather-aware suggestions)
+                </span>
+              </label>
+              <input
+                type="password"
+                defaultValue={typeof localStorage !== "undefined" ? localStorage.getItem("openweathermap_api_key") || "" : ""}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (val) {
+                    localStorage.setItem("openweathermap_api_key", val);
+                  } else {
+                    localStorage.removeItem("openweathermap_api_key");
+                  }
+                }}
+                placeholder="your-api-key (optional)"
+                className="mb-3 w-full rounded-md border bg-white px-2 py-1.5"
+                style={{ borderColor: `${GOLD}55` }}
+              />
               <button
                 onClick={() => {
                   voice.stop();
