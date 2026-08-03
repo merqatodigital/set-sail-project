@@ -643,8 +643,8 @@ export function buildDefaultData(): CmsData {
         updatedAt: "",
       },
       financial: {
-        dailyLaborCost: 5200,
-        monthlyUtilities: 36000,
+        dailyLaborCost: 1550, // IT ₱750 + 2 Housekeeping ₱800
+        monthlyUtilities: 31000, // utilities ₱25,000 + maintenance ₱6,000
         defaultCurrency: "PHP",
       },
     },

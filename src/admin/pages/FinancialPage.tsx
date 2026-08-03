@@ -1,15 +1,25 @@
 import { useMemo, useState } from "react";
-import { DollarSign, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calculator } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine } from "recharts";
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { KpiCard } from "../ops/OpsPrimitives";
 import { formatPHP } from "../ops/opsUtils";
-import type { Booking, TourBooking, MotorbikeRental, FoodOrder, Payment, Tour } from "@/types/cms";
 
 const COLORS = ["#C6A15B", "#4ade80", "#60a5fa", "#f87171", "#a78bfa", "#fbbf24"];
 
 type Period = "month" | "quarter" | "year";
+
+const ROOMS = [
+  { name: "Superior Room UNO", rate: 2400 },
+  { name: "Standard Room DUE", rate: 1800 },
+  { name: "Basic Room TRE", rate: 1400 },
+  { name: "Single Room QUATTRO", rate: 1150 },
+];
+const AVG_ROOM_RATE = ROOMS.reduce((s, r) => s + r.rate, 0) / ROOMS.length;
+const TOTAL_ROOMS = 4;
+const DAYS_PER_MONTH = 30;
+const TOTAL_ROOM_NIGHTS = TOTAL_ROOMS * DAYS_PER_MONTH;
 
 function getPeriodRange(period: Period) {
   const now = new Date();
@@ -24,6 +34,28 @@ function calcFixedCosts(dailyLabor: number, monthlyUtilities: number, daysInPeri
   return dailyLabor * daysInPeriod + monthlyUtilities;
 }
 
+function calcOccupancyProjection(occupancy: number, dailyLabor: number, monthlyUtilities: number) {
+  const roomNights = Math.round(TOTAL_ROOM_NIGHTS * (occupancy / 100));
+  const avgStay = 3;
+  const guests = Math.round(roomNights / avgStay);
+
+  const revenueAccommodation = roomNights * AVG_ROOM_RATE;
+  const revenueTours = Math.round(guests * 0.5) * 2500;
+  const revenueRentals = Math.round(guests * 0.3) * 1500;
+  const revenueFood = Math.round(guests * 2) * 400;
+  const totalRevenue = revenueAccommodation + revenueTours + revenueRentals + revenueFood;
+
+  const fixedCosts = dailyLabor * DAYS_PER_MONTH + monthlyUtilities;
+  const costTours = Math.round(guests * 0.5) * 1500;
+  const costFood = Math.round(guests * 2) * 150;
+  const totalCosts = fixedCosts + costTours + costFood;
+
+  const netProfit = totalRevenue - totalCosts;
+  const margin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
+
+  return { occupancy, roomNights, guests, totalRevenue, totalCosts, netProfit, margin };
+}
+
 export default function FinancialPage() {
   const { data } = useCms();
   const [period, setPeriod] = useState<Period>("month");
@@ -32,12 +64,10 @@ export default function FinancialPage() {
   const daysInPeriod = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) || 30;
 
   const financial = data.settings.financial;
-  const tours = data.operations.tours;
   const bookings = data.operations.bookings;
   const tourBookings = data.operations.tourBookings;
   const rentals = data.operations.motorbikeRentals;
   const foodOrders = data.operations.foodOrders;
-  const payments = data.operations.payments;
 
   const inRange = <T extends { createdAt: string }>(items: T[]) =>
     items.filter((i) => i.createdAt >= start && i.createdAt <= end);
@@ -47,20 +77,17 @@ export default function FinancialPage() {
   const activeRentals = inRange(rentals).filter((r) => r.status !== "cancelled");
   const activeFoodOrders = inRange(foodOrders).filter((o) => o.status !== "cancelled");
 
-  // Revenue by stream
   const revenueAccommodation = activeBookings.reduce((s, b) => s + b.amount, 0);
   const revenueTours = activeTourBookings.reduce((s, t) => s + t.amount, 0);
   const revenueRentals = activeRentals.reduce((s, r) => s + r.amount, 0);
   const revenueFood = activeFoodOrders.reduce((s, o) => s + o.total, 0);
   const totalRevenue = revenueAccommodation + revenueTours + revenueRentals + revenueFood;
 
-  // Costs by stream
   const costTours = activeTourBookings.reduce((s, t) => s + t.cost, 0);
   const costFood = activeFoodOrders.reduce((s, o) => s + o.totalCost, 0);
   const fixedCosts = calcFixedCosts(financial.dailyLaborCost, financial.monthlyUtilities, daysInPeriod);
   const totalCosts = fixedCosts + costTours + costFood;
 
-  // Profit by stream
   const profitAccommodation = revenueAccommodation - (fixedCosts * (revenueAccommodation / (totalRevenue || 1)));
   const profitTours = revenueTours - costTours;
   const profitRentals = revenueRentals;
@@ -68,7 +95,6 @@ export default function FinancialPage() {
   const netProfit = totalRevenue - totalCosts;
   const profitMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
 
-  // Monthly data for charts (last6 months)
   const monthlyData = useMemo(() => {
     const months: { month: string; revenue: number; costs: number; profit: number }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -95,7 +121,6 @@ export default function FinancialPage() {
     return months;
   }, [bookings, tourBookings, rentals, foodOrders, financial]);
 
-  // Revenue breakdown for pie chart
   const revenuePie = [
     { name: "Accommodations", value: revenueAccommodation },
     { name: "Tours", value: revenueTours },
@@ -103,20 +128,37 @@ export default function FinancialPage() {
     { name: "Food & Beverage", value: revenueFood },
   ].filter((d) => d.value > 0);
 
-  // Cost breakdown for pie chart
   const costPie = [
     { name: "Staff & Utilities", value: fixedCosts },
     { name: "Tour Costs", value: costTours },
     { name: "Food Ingredients", value: costFood },
   ].filter((d) => d.value > 0);
 
-  // Profit by stream for bar chart
   const profitBar = [
     { name: "Accommodations", profit: Math.round(profitAccommodation) },
     { name: "Tours", profit: profitTours },
     { name: "Rentals", profit: profitRentals },
     { name: "Food & Beverage", profit: profitFood },
   ];
+
+  // Occupancy projections
+  const occupancyData = useMemo(() => {
+    return [20, 30, 40, 50, 60, 70, 80, 90, 100].map((occ) =>
+      calcOccupancyProjection(occ, financial.dailyLaborCost, financial.monthlyUtilities)
+    );
+  }, [financial]);
+
+  // Find break-even occupancy
+  const breakEven = occupancyData.find((d) => d.netProfit >= 0);
+  const breakEvenOccupancy = breakEven ? breakEven.occupancy : 100;
+
+  // Sensitivity chart data
+  const sensitivityData = occupancyData.map((d) => ({
+    name: `${d.occupancy}%`,
+    revenue: d.totalRevenue,
+    costs: d.totalCosts,
+    profit: d.netProfit,
+  }));
 
   return (
     <div>
@@ -144,6 +186,35 @@ export default function FinancialPage() {
         <KpiCard label="Profit Margin" value={`${profitMargin}%`} tone={profitMargin > 0 ? "positive" : "warning"} />
       </div>
 
+      {/* Break-Even & Cost Structure */}
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="rounded-xl bg-white p-6 shadow-sm">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Break-Even Point</h3>
+          <p className="font-serif text-4xl font-light" style={{ color: breakEvenOccupancy <= 50 ? "#4ade80" : "#fbbf24" }}>
+            {breakEvenOccupancy}%
+          </p>
+          <p className="mt-1 text-xs text-[#26221C]/50">occupancy needed to break even</p>
+        </div>
+        <div className="rounded-xl bg-white p-6 shadow-sm">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Monthly Fixed Costs</h3>
+          <p className="font-serif text-4xl font-light">{formatPHP(financial.dailyLaborCost * 30 + financial.monthlyUtilities)}</p>
+          <div className="mt-2 space-y-1 text-xs text-[#26221C]/50">
+            <p>Labor: {formatPHP(financial.dailyLaborCost * 30)}/mo ({formatPHP(financial.dailyLaborCost)}/day)</p>
+            <p>Utilities + Maintenance: {formatPHP(financial.monthlyUtilities)}/mo</p>
+          </div>
+        </div>
+        <div className="rounded-xl bg-white p-6 shadow-sm">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Current Occupancy</h3>
+          <p className="font-serif text-4xl font-light">
+            {Math.round((activeBookings.reduce((s, b) => {
+              const nights = Math.ceil((new Date(b.checkOut).getTime() - new Date(b.checkIn).getTime()) / 86400000) || 1;
+              return s + nights;
+            }, 0) / TOTAL_ROOM_NIGHTS) * 100) || 0}%
+          </p>
+          <p className="mt-1 text-xs text-[#26221C]/50">{TOTAL_ROOM_NIGHTS} room-nights/month capacity</p>
+        </div>
+      </div>
+
       {/* Revenue vs Costs Over Time */}
       <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Revenue vs Costs (6 Months)</h3>
@@ -157,6 +228,26 @@ export default function FinancialPage() {
               <Legend />
               <Bar dataKey="revenue" name="Revenue" fill="#4ade80" radius={[4, 4, 0, 0]} />
               <Bar dataKey="costs" name="Costs" fill="#f87171" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Occupancy Sensitivity */}
+      <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Occupancy Sensitivity Analysis</h3>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={sensitivityData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#26221C10" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v: number) => formatPHP(v)} />
+              <Legend />
+              <ReferenceLine y={0} stroke="#26221C" strokeDasharray="3 3" />
+              <Bar dataKey="revenue" name="Revenue" fill="#4ade80" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="costs" name="Costs" fill="#f87171" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="profit" name="Net Profit" fill="#C6A15B" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -242,6 +333,7 @@ export default function FinancialPage() {
               <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
               <Tooltip formatter={(v: number) => formatPHP(v)} />
+              <ReferenceLine x={0} stroke="#26221C" strokeDasharray="3 3" />
               <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]}>
                 {profitBar.map((entry, i) => (
                   <Cell key={i} fill={entry.profit >= 0 ? "#4ade80" : "#f87171"} />
@@ -253,7 +345,7 @@ export default function FinancialPage() {
       </div>
 
       {/* Net Profit Trend */}
-      <div className="rounded-xl bg-white p-6 shadow-sm">
+      <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Net Profit Trend (6 Months)</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -262,11 +354,48 @@ export default function FinancialPage() {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: number) => formatPHP(v)} />
+              <ReferenceLine y={0} stroke="#26221C" strokeDasharray="3 3" />
               <Legend />
               <Line type="monotone" dataKey="profit" name="Net Profit" stroke="#C6A15B" strokeWidth={2} dot={{ fill: "#C6A15B" }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* Occupancy Projection Table */}
+      <div className="rounded-xl bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Occupancy Projection Table</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#26221C]/10">
+                <th className="pb-2 text-left font-medium text-[#26221C]/60">Occupancy</th>
+                <th className="pb-2 text-right font-medium text-[#26221C]/60">Room-Nights</th>
+                <th className="pb-2 text-right font-medium text-[#26221C]/60">Revenue</th>
+                <th className="pb-2 text-right font-medium text-[#26221C]/60">Costs</th>
+                <th className="pb-2 text-right font-medium text-[#26221C]/60">Net Profit</th>
+                <th className="pb-2 text-right font-medium text-[#26221C]/60">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {occupancyData.map((row) => (
+                <tr key={row.occupancy} className={`border-b border-[#26221C]/5 ${row.occupancy === 40 ? "bg-[#C6A15B]/10 font-medium" : ""}`}>
+                  <td className="py-2">{row.occupancy}%</td>
+                  <td className="py-2 text-right">{row.roomNights}</td>
+                  <td className="py-2 text-right">{formatPHP(row.totalRevenue)}</td>
+                  <td className="py-2 text-right">{formatPHP(row.totalCosts)}</td>
+                  <td className="py-2 text-right" style={{ color: row.netProfit >= 0 ? "#16a34a" : "#dc2626" }}>
+                    {formatPHP(row.netProfit)}
+                  </td>
+                  <td className="py-2 text-right" style={{ color: row.margin >= 0 ? "#16a34a" : "#dc2626" }}>
+                    {row.margin}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-[#26221C]/40">Highlighted row shows current 40% occupancy scenario</p>
       </div>
     </div>
   );
