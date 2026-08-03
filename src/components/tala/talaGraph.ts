@@ -111,6 +111,7 @@ export interface TalaAuditEntry {
   guestMessage: string;
   replyPreview: string;
   toolsUsed: string[];
+  sentiment?: string;
 }
 
 /**
@@ -129,6 +130,7 @@ export function writeAuditEntry(entry: TalaAuditEntry): void {
         guest_message: entry.guestMessage.slice(0, 500),
         reply_preview: entry.replyPreview.slice(0, 300),
         tools_used: entry.toolsUsed,
+        sentiment: entry.sentiment || "neutral",
       });
     } catch {
       /* audit must never break the conversation */

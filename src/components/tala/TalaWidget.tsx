@@ -11,6 +11,7 @@ import {
   VolumeX,
   X,
   MessageCircle,
+  Bell,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
@@ -20,6 +21,7 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
+import { getProactiveMessages, markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
@@ -39,6 +41,8 @@ export function TalaWidget() {
   const [input, setInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [devKey, setDevKeyState] = useState("");
+  const [proactiveMessages, setProactiveMessages] = useState<ProactiveMessage[]>([]);
+  const [showProactive, setShowProactive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +106,24 @@ export function TalaWidget() {
   useEffect(() => {
     if (open) setDevKeyState(getDevApiKey());
   }, [open]);
+
+  // Load proactive messages when widget opens (guest mode only)
+  useEffect(() => {
+    if (!open || data.settings.tala.enabled === false) return;
+    // Only load for guest-facing widget (not admin)
+    const loadProactive = async () => {
+      try {
+        const msgs = await getProactiveMessages("", "", data);
+        if (msgs.length > 0) {
+          setProactiveMessages(msgs);
+          setShowProactive(true);
+        }
+      } catch {
+        // proactive messaging must never break the chat
+      }
+    };
+    void loadProactive();
+  }, [open, data]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -266,6 +288,33 @@ export function TalaWidget() {
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             <Bubble role="assistant" text={greeting} />
+
+            {/* Proactive messages — notifications TALA generated for the guest */}
+            {showProactive && proactiveMessages.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: GOLD }}>
+                  <Bell className="h-3 w-3" />
+                  <span>Updates for you</span>
+                </div>
+                {proactiveMessages.slice(0, 3).map((msg) => (
+                  <button
+                    key={msg.id}
+                    onClick={() => {
+                      void submit(msg.message);
+                      void markProactiveRead(msg.id);
+                      setShowProactive(false);
+                    }}
+                    className="w-full rounded-xl border p-3 text-left transition-colors hover:bg-white/80"
+                    style={{ borderColor: `${GOLD}33`, backgroundColor: `${GOLD}08` }}
+                  >
+                    <p className="text-[11px] font-semibold" style={{ color: INK }}>{msg.title}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed" style={{ color: `${INK}99` }}>{msg.message.slice(0, 100)}…</p>
+                    <p className="mt-1.5 text-[10px] opacity-40">Tap to chat about this</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {chat.messages.map((m) => (
               <Bubble key={m.id} role={m.role} text={m.content} />
             ))}

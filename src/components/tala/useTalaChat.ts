@@ -20,6 +20,7 @@ import {
   writeAuditEntry,
   type TalaClassification,
 } from "./talaGraph";
+import { detectSentiment, sentimentInstruction } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
 
@@ -269,6 +270,23 @@ export function useTalaChat(): UseTalaChat {
         ...history.slice(-TALA_MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
       ];
 
+      // Sentiment analysis — inject context-aware instructions into the prompt
+      const sentiment = detectSentiment(trimmed);
+      const sentimentNote = sentimentInstruction(sentiment);
+      if (sentimentNote) {
+        wire.splice(1, 0, { role: "system", content: `[Guest sentiment: ${sentiment.sentiment} (${Math.round(sentiment.confidence * 100)}% confidence). ${sentimentNote}]` });
+      }
+
+      // Time-of-day context injection for proactive behavior
+      const hour = new Date().getHours();
+      if (hour >= 16 && hour <= 17) {
+        wire.splice(1, 0, { role: "system", content: "[Context: It's late afternoon — sunset session is happening now. Mention it if relevant.]" });
+      } else if (hour >= 7 && hour <= 10) {
+        wire.splice(1, 0, { role: "system", content: "[Context: It's morning — breakfast is being served. Mention it if relevant.]" });
+      } else if (hour >= 12 && hour <= 14) {
+        wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
+      }
+
       try {
         // Priority: key entered in Admin → TALA (works instantly, no deploy
         // needed) → device-local dev key (building on this browser only) →
@@ -327,6 +345,7 @@ export function useTalaChat(): UseTalaChat {
           guestMessage: trimmed,
           replyPreview: finalText,
           toolsUsed,
+          sentiment: sentiment.sentiment,
         });
 
         return finalText;

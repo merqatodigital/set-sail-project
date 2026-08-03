@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import { useCms } from "@/context/CmsContext";
 import type { Tour, Motorbike } from "@/types/cms";
 import type { PortalView } from "@/pages/Portal";
+import { getProactiveMessages, markProactiveRead, type ProactiveMessage } from "@/components/tala/talaProactive";
+import { Bell, ChevronRight } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Portal home — dashboard with service cards for in-house guests.
@@ -19,6 +22,7 @@ interface Props {
 
 export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Props) {
   const { data } = useCms();
+  const [proactiveMessages, setProactiveMessages] = useState<ProactiveMessage[]>([]);
   const bookings = data.operations.bookings.filter(
     (b) => b.guestName.toLowerCase() === guest.name.toLowerCase(),
   );
@@ -37,6 +41,19 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
 
   const totalBookings = bookings.length + tourBookings.length + rentals.length;
 
+  // Load proactive messages for this guest
+  useEffect(() => {
+    const loadProactive = async () => {
+      try {
+        const msgs = await getProactiveMessages(guest.phone, guest.name, data);
+        setProactiveMessages(msgs.filter((m) => !m.read));
+      } catch {
+        // proactive messaging must never break the portal
+      }
+    };
+    void loadProactive();
+  }, [guest.phone, guest.name, data]);
+
   return (
     <div className="space-y-6">
       {/* Welcome */}
@@ -48,6 +65,35 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           Welcome to Marina Terrace. We're here to make your stay exceptional.
         </p>
       </div>
+
+      {/* Proactive Messages */}
+      {proactiveMessages.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: GOLD }}>
+            <Bell className="h-4 w-4" />
+            <span>Updates for you</span>
+          </div>
+          {proactiveMessages.slice(0, 3).map((msg) => (
+            <button
+              key={msg.id}
+              onClick={() => {
+                void markProactiveRead(msg.id);
+                setProactiveMessages((prev) => prev.filter((m) => m.id !== msg.id));
+              }}
+              className="w-full rounded-xl border p-4 text-left transition-colors hover:bg-white/5"
+              style={{ borderColor: `${GOLD}33`, backgroundColor: `${GOLD}08` }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "#E8E4DD" }}>{msg.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed opacity-70">{msg.message}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 opacity-40" />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Current Stay Card */}
       {activeBooking && (

@@ -81,14 +81,15 @@ Coworking: Our rooftop coworking space has ocean views Starlink internet backup 
 Quiet Environment: Marina Terrace maintains a quiet environment for focused work. No loud events parties or noise disturbances allowed. We are a workspace-first property.
 Weather: San Vicente has two seasons: dry season from November to May and wet season from June to October. The best months for travel are December to April with calm seas and sunny days. July to October brings occasional rain but still many clear days.
 Friendly Locals: San Vicente is a quiet authentic fishing town. Locals are warm and friendly. A gentle po or Taglish phrase is always appreciated but English is widely spoken in tourist areas.
-Menu: We serve an all-day curated menu. Breakfast: Corned Beef with Eggs P350, French Toast P300, Pancakes P350, Cheese Omelette P400, Tropical Yogurt Bowl P320. Lunch: Bruschetta P320, Papas Bravas P300, Linguine Aglio Olio P480, Tagliatelle Puttanesca P550, Tonkatsu Pork Curry P550. Dinner: Shrimp Marinara Linguine P650, Shrimp a la Pobre P650, Mojo Verde Fish Fillet P650, Chicken Cacciatore P600, Paccheri Carbonara P700. Drinks: Bottled Water P25, Coke/Sprite P35, Fresh Buko Juice P60, Iced Tea P50, San Miguel Beer P70, Mango Shake P90.
 Taking Orders: To order food just tell me what you want from the menu and I'll place the order for you. You can also order directly from the Guest Portal at /portal.
 Food Availability: Some items may be sold out for the day. If an item is unavailable I'll let you know and suggest alternatives.
 Meal Periods: Breakfast is served until 11:00 AM. Lunch is served from 11:00 AM to 3:00 PM. Dinner is served from 5:00 PM to 9:00 PM. Drinks are available all day.`;
 
 export function buildTalaSystemPrompt(cms: CmsData): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const { homepage, pricing, faqs, settings } = cms;
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const hour = now.getHours();
+  const { homepage, pricing, faqs, settings, operations } = cms;
   const contact = settings.contact;
   const whatsapp = settings.whatsapp;
   const primaryWhatsApp =
@@ -97,6 +98,40 @@ export function buildTalaSystemPrompt(cms: CmsData): string {
     contact.whatsapp ||
     contact.phone;
   const siteName = settings.siteName || settings.seo.siteTitle || "Marina Terrace";
+
+  // Dynamic time-of-day context
+  const timeOfDay = hour < 6 ? "early morning" : hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night";
+  const mealPeriod = hour < 11 ? "breakfast" : hour < 15 ? "lunch" : hour < 21 ? "dinner" : "closed";
+
+  // Dynamic menu from CMS
+  const menuItems = operations.menuItems
+    .filter((m) => m.active)
+    .sort((a, b) => a.order - b.order);
+  const menuByCategory = {
+    breakfast: menuItems.filter((m) => m.category === "breakfast"),
+    lunch: menuItems.filter((m) => m.category === "lunch"),
+    dinner: menuItems.filter((m) => m.category === "dinner"),
+    drinks: menuItems.filter((m) => m.category === "drinks"),
+  };
+  const menuBlock = Object.entries(menuByCategory)
+    .filter(([_, items]) => items.length > 0)
+    .map(([cat, items]) => {
+      const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+      const itemList = items.map((m) => {
+        const stock = m.inventoryCount <= 0 ? " [SOLD OUT]" : m.inventoryCount < 5 ? ` [Only ${m.inventoryCount} left]` : "";
+        return `  - ${m.name} P${m.price}${stock}`;
+      }).join("\n");
+      return `${label}:\n${itemList}`;
+    })
+    .join("\n\n");
+
+  // Dynamic tours from CMS
+  const tours = operations.tours
+    .filter((t) => t.active)
+    .sort((a, b) => a.order - b.order);
+  const tourBlock = tours.length > 0
+    ? tours.map((t) => `- ${t.name}: P${t.price}/person, ${t.duration}, capacity ${t.capacity}. Includes: ${t.inclusions.join(", ")}`).join("\n")
+    : null;
 
   const rooms = homepage.rooms
     .filter((r) => r.visible)
@@ -154,6 +189,8 @@ export function buildTalaSystemPrompt(cms: CmsData): string {
     "6. Never ask for or accept payment details, IDs or passwords.",
     "7. Stay on topic: this property, San Vicente, Port Barton, Palawan travel, remote work life. Politely decline anything else.",
     "8. Be concise first; offer to go deeper rather than dumping everything.",
+    "9. Be PROACTIVE: if it's morning, greet them with 'Good morning'. If it's evening, mention sunset sessions. If they seem to be planning a tour, suggest the best time. If they're checking out tomorrow, remind them about check-out time. If they haven't eaten and it's meal time, mention the menu.",
+    "10. If a guest seems frustrated or upset, acknowledge their feelings, apologize, and offer to connect them with the team immediately. Don't try to solve complex complaints alone.",
     "",
     "## Your tools",
     "You have three real tools — use them; don't guess when you could just check.",
@@ -181,7 +218,13 @@ export function buildTalaSystemPrompt(cms: CmsData): string {
     "",
     packages ? `## Plans & pricing\n${packages}` : null,
     "",
+    menuBlock ? `## Menu (current — update from CMS)\n${menuBlock}\n\nCurrent meal period: ${mealPeriod}. If a guest orders outside the current meal period, let them know when it's available or suggest what's available now.` : null,
+    "",
+    tourBlock ? `## Available Tours\n${tourBlock}\n\nAlways check real availability before booking a tour.` : null,
+    "",
     `## Knowledge base\n${HARDCODED_KNOWLEDGE}`,
+    "",
+    `## Context\n- Current time: ${timeOfDay} (${now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })})\n- Today: ${today}`,
     "",
     "## Contact",
     primaryWhatsApp ? `- WhatsApp (bookings): ${primaryWhatsApp}` : null,
