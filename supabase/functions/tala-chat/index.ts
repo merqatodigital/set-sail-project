@@ -125,16 +125,36 @@ function parseClassification(raw: string | null | undefined): Classification | n
   }
 }
 
+const ALLOWED_ORIGINS = [
+  "https://marinaterrace.com",
+  "https://sanvic.ph",
+  "https://www.marinaterrace.com",
+  "https://www.sanvic.ph",
+];
+
+function getAllowedOrigin(req: Request): string {
+  const origin = req.headers.get("origin") || "";
+  if (ALLOWED_ORIGINS.includes(origin)) return origin;
+  // Allow localhost for development
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return origin;
+  return ALLOWED_ORIGINS[0];
+}
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "*", // replaced per-request below
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, req?: Request): Response {
+  const origin = req ? getAllowedOrigin(req) : ALLOWED_ORIGINS[0];
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: {
+      ...corsHeaders,
+      "Access-Control-Allow-Origin": origin,
+      "Content-Type": "application/json",
+    },
   });
 }
 
@@ -220,14 +240,20 @@ async function invokeWithFallback(
 // directly in tests (constructing a Request and reading back the Response)
 // without needing a live network listener.
 export async function handleRequest(req: Request): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (req.method === "OPTIONS") {
+    const origin = getAllowedOrigin(req);
+    return new Response("ok", {
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin },
+    });
+  }
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   if (!openRouterApiKey) {
     return json(
       { error: "TALA is not configured yet: set the OPENROUTER_API_KEY secret in Supabase." },
       500,
+      req,
     );
   }
   // Reassigned to a definitely-string const: TypeScript's control-flow
@@ -240,19 +266,19 @@ export async function handleRequest(req: Request): Promise<Response> {
   try {
     const body = await req.json();
     if (!Array.isArray(body?.messages) || body.messages.length === 0) {
-      return json({ error: "messages array is required" }, 400);
+      return json({ error: "messages array is required" }, 400, req);
     }
     wireMessages = body.messages
       .map(sanitizeMessage)
       .filter((m: WireMessage | null): m is WireMessage => m !== null)
       .slice(-MAX_MESSAGES);
-    if (!wireMessages.length) return json({ error: "no valid messages" }, 400);
+    if (!wireMessages.length) return json({ error: "no valid messages" }, 400, req);
 
     if (typeof body?.model === "string" && MODEL_ID_PATTERN.test(body.model)) {
       preferredModel = body.model.slice(0, 200);
     }
   } catch {
-    return json({ error: "invalid JSON body" }, 400);
+    return json({ error: "invalid JSON body" }, 400, req);
   }
 
   const chain = preferredModel
@@ -1066,7 +1092,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       reply,
       classification: finalState.classification,
       toolsUsed: finalState.toolsUsed,
-    });
+    }, 200, req);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // Never leak a raw OpenRouter model slug to the guest — strip model
@@ -1079,6 +1105,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         error: `TALA's free models are all busy right now — please try again in a moment. (${safeMessage})`,
       },
       503,
+      req,
     );
   }
 }

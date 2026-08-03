@@ -54,7 +54,7 @@ export function FaqSection() {
   if (faqs.length === 0) return null;
 
   return (
-    <section className="bg-white py-16 sm:py-20 lg:py-32">
+    <section className="bg-white py-16 sm:py-20 lg:py-32" role="region" aria-label="Frequently Asked Questions">
       <div className="mx-auto max-w-3xl px-5 sm:px-6 lg:px-12">
         <Reveal className="mb-10 text-center sm:mb-14">
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C6A15B] sm:text-xs">FAQ</p>
@@ -68,6 +68,9 @@ export function FaqSection() {
               <div key={faq.id}>
                 <button
                   onClick={() => setOpen(isOpen ? null : faq.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${faq.id}`}
+                  id={`faq-${faq.id}`}
                   className="group flex w-full items-center justify-between gap-3 py-4 text-left transition-colors hover:text-[#8A6B32] sm:gap-4 sm:py-5 lg:py-6"
                 >
                   <span className="font-serif text-sm leading-snug text-[#26221C] transition-colors group-hover:text-[#8A6B32] sm:text-[15px] lg:text-lg">{faq.question}</span>
@@ -75,7 +78,12 @@ export function FaqSection() {
                     <ChevronDown className="h-3.5 w-3.5" />
                   </span>
                 </button>
-                <div className={cn("grid overflow-hidden transition-all duration-300", isOpen ? "grid-rows-[1fr] pb-4 sm:pb-6" : "grid-rows-[0fr]")}>
+                <div
+                  id={`faq-answer-${faq.id}`}
+                  role="region"
+                  aria-labelledby={`faq-${faq.id}`}
+                  className={cn("grid overflow-hidden transition-all duration-300", isOpen ? "grid-rows-[1fr] pb-4 sm:pb-6" : "grid-rows-[0fr]")}
+                >
                   <div className="overflow-hidden">
                     <p className="max-w-xl text-[13px] leading-relaxed text-[#26221C]/60 sm:text-sm">{faq.answer}</p>
                   </div>

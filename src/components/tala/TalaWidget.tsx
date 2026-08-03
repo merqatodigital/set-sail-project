@@ -406,6 +406,7 @@ export function TalaWidget() {
               onChange={(e) => setInput(e.target.value)}
               readOnly={speech.listening}
               placeholder={speech.listening ? "Listening…" : "Ask TALA anything…"}
+              aria-label="Chat message"
               className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:ring-2"
               style={{ borderColor: `${GOLD}55`, color: INK }}
             />

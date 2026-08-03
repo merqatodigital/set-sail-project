@@ -165,6 +165,11 @@ export function Footer() {
           <p className="text-center sm:text-left">
             © {new Date().getFullYear()} {data.settings.siteName}. All rights reserved.
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-white/40 sm:justify-start">
+            <Link to="/privacy" className="transition-colors hover:text-white/70">Privacy Policy</Link>
+            <Link to="/terms" className="transition-colors hover:text-white/70">Terms of Service</Link>
+            <Link to="/accessibility" className="transition-colors hover:text-white/70">Accessibility</Link>
+          </div>
         </div>
       </div>
     </footer>

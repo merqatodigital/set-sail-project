@@ -64,7 +64,7 @@ export function Navbar() {
           {data.settings.logoText}
         </Link>
 
-        <nav className="hidden items-center gap-9 lg:flex">
+        <nav className="hidden items-center gap-9 lg:flex" aria-label="Main navigation">
           {LINKS.map((link) => (
             <button
               key={link.label}
@@ -82,6 +82,7 @@ export function Navbar() {
             <select
               value={currencyState.currency}
               onChange={(e) => currencyState.setCurrency(e.target.value as any)}
+              aria-label="Select currency"
               className={cn(
                 "appearance-none h-9 rounded-full pl-4 pr-8 text-[12px] font-medium tracking-wide outline-none cursor-pointer transition-all duration-200",
                 solid
@@ -161,6 +162,7 @@ export function Navbar() {
                 <select
                   value={currencyState.currency}
                   onChange={(e) => currencyState.setCurrency(e.target.value as any)}
+                  aria-label="Select currency"
                   className="w-full h-10 rounded-full border border-[#26221C]/15 bg-white pl-4 pr-10 text-[13px] font-medium text-[#26221C] outline-none appearance-none sm:h-11 sm:text-sm"
                 >
                   <option value="PHP">Philippine Peso (₱)</option>

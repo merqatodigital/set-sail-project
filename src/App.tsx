@@ -8,12 +8,16 @@ import { ToastProvider } from "@/context/ToastContext";
 import PublicLayout from "@/pages/PublicLayout";
 import Home from "@/pages/Home";
 import { AppLoader } from "@/components/AppLoader";
+import { CookieConsent } from "@/components/site/CookieConsent";
 
 // Lazy-load non-critical routes so the public landing page parses faster.
 const BlogList = lazy(() => import("@/pages/BlogList"));
 const BlogPost = lazy(() => import("@/pages/BlogPost"));
 const AdminApp = lazy(() => import("@/admin/AdminApp"));
 const Portal = lazy(() => import("@/pages/Portal"));
+const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
+const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement"));
 
 export default function App() {
   return (
@@ -59,8 +63,33 @@ export default function App() {
                     </Suspense>
                   }
                 />
+                <Route
+                  path="/privacy"
+                  element={
+                    <Suspense fallback={<AppLoader label="Loading…" />}>
+                      <PrivacyPolicy />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/terms"
+                  element={
+                    <Suspense fallback={<AppLoader label="Loading…" />}>
+                      <TermsOfService />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/accessibility"
+                  element={
+                    <Suspense fallback={<AppLoader label="Loading…" />}>
+                      <AccessibilityStatement />
+                    </Suspense>
+                  }
+                />
               </Routes>
             </BrowserRouter>
+            <CookieConsent />
           </AuthProvider>
         </CurrencyProvider>
       </ThemeProvider>

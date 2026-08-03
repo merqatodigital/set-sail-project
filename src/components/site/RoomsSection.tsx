@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Users, Layout, Map, Calendar, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import DOMPurify from "dompurify";
 import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Card } from "@/components/ui";
@@ -154,7 +155,7 @@ export function RoomsSection() {
                   return (
                     <div key={fac.id} className="flex items-center gap-3 rounded-xl border border-[#26221C]/8 bg-white/60 p-3.5 shadow-sm">
                       <Icon className="h-4.5 w-4.5 text-[#C6A15B]" />
-                      <span className="text-[13px] font-medium text-[#26221C]/85" dangerouslySetInnerHTML={{ __html: fac.name }} />
+                      <span className="text-[13px] font-medium text-[#26221C]/85" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fac.name) }} />
                     </div>
                   );
                 })}
