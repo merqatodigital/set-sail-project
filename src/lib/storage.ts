@@ -145,6 +145,15 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
     );
   }
 
+  // Merge packages: keep saved packages, add any new defaults that are missing
+  if (Array.isArray(merged.packages)) {
+    const savedPkgNames = merged.packages.map((p: any) => p.name);
+    const missingPkgs = defaults.packages.filter((p) => !savedPkgNames.includes(p.name));
+    if (missingPkgs.length > 0) {
+      merged.packages = [...merged.packages, ...missingPkgs];
+    }
+  }
+
   // Ensure operations block exists (added later in the schema)
   const defaultOps = buildDefaultOperations();
   const savedOps = (parsed as any).operations || {};
