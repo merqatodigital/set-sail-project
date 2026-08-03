@@ -68,30 +68,28 @@ export default function GCashQR({ booking, onDone }: Props) {
         <p className="mb-4 text-center text-sm font-medium">Pay with GCash</p>
 
         <div className="flex justify-center">
-          <div className="overflow-hidden rounded-xl bg-white p-2">
-            <img
-              src={GCASH_QR_URL}
-              alt="GCash QR Code"
-              className="h-64 w-64 object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = "none";
-                const parent = target.parentElement;
-                if (parent) {
-                  const fallback = document.createElement("div");
-                  fallback.className = "flex h-64 w-64 items-center justify-center bg-gray-100 text-gray-500 text-sm text-center p-4";
-                  fallback.innerHTML = `
-                    <div>
-                      <p class="font-bold text-gray-700 mb-2">GCash QR Code</p>
-                      <p class="text-xs text-gray-500">QU****E O.</p>
-                      <p class="text-xs text-gray-500">0917 894 ****</p>
-                    </div>
-                  `;
-                  parent.appendChild(fallback);
-                }
-              }}
-            />
-          </div>
+          <img
+            src={GCASH_QR_URL}
+            alt="GCash QR Code"
+            className="w-full max-w-xs rounded-xl object-contain"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+              const parent = target.parentElement;
+              if (parent) {
+                const fallback = document.createElement("div");
+                fallback.className = "flex h-64 w-full max-w-xs items-center justify-center bg-gray-100 text-gray-500 text-sm text-center p-4 rounded-xl";
+                fallback.innerHTML = `
+                  <div>
+                    <p class="font-bold text-gray-700 mb-2">GCash QR Code</p>
+                    <p class="text-xs text-gray-500">QU****E O.</p>
+                    <p class="text-xs text-gray-500">0917 894 ****</p>
+                  </div>
+                `;
+                parent.appendChild(fallback);
+              }
+            }}
+          />
         </div>
 
         <div className="mt-4 space-y-2 text-center">
