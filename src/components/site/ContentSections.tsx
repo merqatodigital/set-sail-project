@@ -9,8 +9,8 @@ export function WorkspaceSection() {
   const { data } = useCms();
   const w = data.workspace;
   return (
-    <section id="workspace" className="bg-[#FAF6EF] py-24 lg:py-32">
-      <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-14 px-6 lg:grid-cols-2 lg:gap-20 lg:px-12">
+    <section id="workspace" className="bg-[#FAF6EF] py-16 sm:py-20 lg:py-32">
+      <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 px-5 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:px-12">
         <Reveal>
           <ImagePlaceholder mediaId={w.imageId} label="Rooftop Workspace" className="aspect-[4/5] w-full lg:aspect-[3/4]" />
         </Reveal>
@@ -47,8 +47,8 @@ export function KitchenSection() {
   const categories: MenuCategory[] = ["breakfast", "lunch", "dinner", "drinks"];
 
   return (
-    <section id="kitchen" className="bg-white py-24 lg:py-32">
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
+    <section id="kitchen" className="bg-white py-16 sm:py-20 lg:py-32">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-6 lg:px-12">
         <Reveal className="mx-auto max-w-xl text-center">
           <SectionEyebrow>{k.eyebrow}</SectionEyebrow>
           <h2 className="font-serif text-4xl font-light leading-[1.1] text-[#26221C] sm:text-5xl">{k.title}</h2>
@@ -56,22 +56,22 @@ export function KitchenSection() {
         </Reveal>
 
         {/* Menu Display */}
-        <div className="mt-16 grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid grid-cols-1 gap-10 sm:mt-16 sm:gap-12 md:grid-cols-2 lg:grid-cols-4">
           {categories.map((cat) => {
             const items = menuItems.filter((m) => m.category === cat);
             if (items.length === 0) return null;
             return (
               <Reveal key={cat} delay={categories.indexOf(cat) * 0.1}>
                 <div>
-                  <h3 className="mb-4 font-serif text-2xl text-[#26221C]">{cat.charAt(0).toUpperCase() + cat.slice(1)}</h3>
-                  <div className="space-y-4">
+                  <h3 className="mb-3 font-serif text-xl sm:mb-4 sm:text-2xl text-[#26221C]">{cat.charAt(0).toUpperCase() + cat.slice(1)}</h3>
+                  <div className="space-y-3 sm:space-y-4">
                     {items.map((item) => (
-                      <div key={item.id} className="flex items-start justify-between gap-4">
+                      <div key={item.id} className="flex items-start justify-between gap-3 sm:gap-4">
                         <div className="flex-1">
-                          <h4 className="font-serif text-base text-[#26221C]">{item.name}</h4>
-                          <p className="mt-0.5 text-xs leading-relaxed text-[#26221C]/50">{item.description}</p>
+                          <h4 className="font-serif text-sm sm:text-base text-[#26221C]">{item.name}</h4>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-[#26221C]/50 sm:text-xs">{item.description}</p>
                         </div>
-                        <span className="shrink-0 font-serif text-base text-[#C6A15B]">{"\u20B1"}{item.price}</span>
+                        <span className="shrink-0 font-serif text-sm sm:text-base text-[#C6A15B]">{"\u20B1"}{item.price}</span>
                       </div>
                     ))}
                   </div>
@@ -93,8 +93,8 @@ export function FocusSection() {
   const { data } = useCms();
   const f = data.homepage.focus;
   return (
-    <section className="bg-[#F3ECDD] py-24 lg:py-32">
-      <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-14 px-6 lg:grid-cols-2 lg:gap-20 lg:px-12">
+    <section className="bg-[#F3ECDD] py-16 sm:py-20 lg:py-32">
+      <div className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 px-5 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:px-12">
         <Reveal>
           <ImagePlaceholder mediaId={f.imageId} label="Sunset Workspace" className="aspect-[4/5] w-full lg:aspect-[3/4]" />
         </Reveal>

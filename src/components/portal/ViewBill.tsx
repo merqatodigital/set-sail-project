@@ -105,7 +105,7 @@ export default function ViewBill({
       <h1 className="text-xl font-semibold">My Bill</h1>
 
       {/* Summary */}
-      <div className="rounded-2xl p-5 shadow-lg" style={{ backgroundColor: DARK_CARD }}>
+      <div className="rounded-xl p-4 shadow-lg sm:rounded-2xl sm:p-5" style={{ backgroundColor: DARK_CARD }}>
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="opacity-50">Room Bookings</span>

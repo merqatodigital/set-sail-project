@@ -61,7 +61,7 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
             </p>
             <h2 className="text-xl font-semibold">{activeBooking.roomType}</h2>
             <p className="mt-1 text-xs opacity-50">Direct Booking</p>
-            <div className="mt-4 flex gap-6">
+            <div className="mt-4 flex gap-4 sm:gap-6">
               <div>
                 <p className="text-[10px] uppercase tracking-wide opacity-40">Check-in</p>
                 <p className="text-sm font-medium">{activeBooking.checkIn}</p>
@@ -81,16 +81,16 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
 
       {/* Service Cards */}
       <div>
-        <h3 className="mb-3 text-lg font-medium">How can we help you today?</h3>
-        <div className="space-y-3">
+        <h3 className="mb-3 text-base font-medium sm:text-lg">How can we help you today?</h3>
+        <div className="space-y-2.5 sm:space-y-3">
           {/* View Packages */}
           <button
             onClick={() => onNavigate("packages")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD, border: `1px solid ${GOLD}33` }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F3E6}"}
@@ -106,11 +106,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* Book Experiences */}
           <button
             onClick={() => onNavigate("tours")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F3D4}\uFE0F"}
@@ -126,11 +126,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* Rent Motorbike */}
           <button
             onClick={() => onNavigate("rentals")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F6F9}"}
@@ -146,11 +146,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* Order Food & Drinks */}
           <button
             onClick={() => onNavigate("food")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F37D}\uFE0F"}
@@ -166,11 +166,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* My Bookings */}
           <button
             onClick={() => onNavigate("bookings")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F4CB}"}
@@ -186,11 +186,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* Message Reception */}
           <button
             onClick={() => onNavigate("messages")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F4AC}"}
@@ -206,11 +206,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
           {/* View Bill */}
           <button
             onClick={() => onNavigate("bill")}
-            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:gap-4 sm:p-4"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg sm:h-12 sm:w-12 sm:text-xl"
               style={{ backgroundColor: `${GOLD}22` }}
             >
               {"\u{1F4B3}"}
@@ -226,20 +226,20 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl p-3 text-center" style={{ backgroundColor: DARK_CARD }}>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-xl p-2.5 text-center sm:p-3" style={{ backgroundColor: DARK_CARD }}>
           <p className="text-lg font-semibold" style={{ color: GOLD }}>
             {bookings.length}
           </p>
-          <p className="text-[10px] uppercase opacity-40">Room Bookings</p>
+          <p className="text-[10px] uppercase opacity-40">Rooms</p>
         </div>
-        <div className="rounded-xl p-3 text-center" style={{ backgroundColor: DARK_CARD }}>
+        <div className="rounded-xl p-2.5 text-center sm:p-3" style={{ backgroundColor: DARK_CARD }}>
           <p className="text-lg font-semibold" style={{ color: GOLD }}>
             {tourBookings.length}
           </p>
           <p className="text-[10px] uppercase opacity-40">Tours</p>
         </div>
-        <div className="rounded-xl p-3 text-center" style={{ backgroundColor: DARK_CARD }}>
+        <div className="rounded-xl p-2.5 text-center sm:p-3" style={{ backgroundColor: DARK_CARD }}>
           <p className="text-lg font-semibold" style={{ color: GOLD }}>
             {rentals.length}
           </p>

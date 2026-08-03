@@ -108,7 +108,7 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
             <button
               key={tour.id}
               onClick={() => setSelectedTour(tour)}
-              className="w-full rounded-xl p-4 text-left transition hover:scale-[1.02]"
+              className="w-full rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:p-4"
               style={{ backgroundColor: DARK_CARD }}
             >
               <div className="flex items-start justify-between">
@@ -140,7 +140,7 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
 
       {/* Booking Form */}
       {selectedTour && (
-        <div className="space-y-4 rounded-2xl p-5 shadow-lg" style={{ backgroundColor: DARK_CARD }}>
+        <div className="space-y-4 rounded-xl p-4 shadow-lg sm:rounded-2xl sm:p-5" style={{ backgroundColor: DARK_CARD }}>
           <div className="flex items-center justify-between">
             <h2 className="font-medium">{selectedTour.name}</h2>
             <button

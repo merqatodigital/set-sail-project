@@ -82,21 +82,21 @@ export default function Portal() {
     >
       {/* Header */}
       <header
-        className="sticky top-0 z-50 border-b px-4 py-3"
+        className="sticky top-0 z-50 border-b px-3 py-2.5 sm:px-4 sm:py-3"
         style={{ backgroundColor: DARK, borderColor: `${GOLD}33` }}
       >
         <div className="mx-auto flex max-w-lg items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold tracking-wide" style={{ color: GOLD }}>
+            <span className="text-xs font-semibold tracking-wide sm:text-sm" style={{ color: GOLD }}>
               MARINA TERRACE
             </span>
           </div>
           {guest && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs opacity-60">Hello, {guest.name}</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-[11px] opacity-60 sm:text-xs">Hello, {guest.name}</span>
               <button
                 onClick={handleLogout}
-                className="rounded-full px-3 py-1 text-xs transition"
+                className="rounded-full px-2.5 py-1 text-[11px] transition sm:px-3 sm:text-xs"
                 style={{ border: `1px solid ${GOLD}55`, color: GOLD }}
               >
                 Sign out
@@ -107,7 +107,7 @@ export default function Portal() {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-lg px-4 py-6">
+      <main className="mx-auto max-w-lg px-3.5 py-5 sm:px-4 sm:py-6">
         {view === "login" && <PortalLogin onLogin={handleLogin} />}
 
         {view === "home" && guest && (

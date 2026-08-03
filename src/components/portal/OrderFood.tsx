@@ -154,12 +154,12 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
       <h1 className="text-xl font-semibold">Order Food & Drinks</h1>
 
       {/* Category Tabs */}
-      <div className="flex gap-2">
+      <div className="flex gap-1.5 sm:gap-2">
         {CATEGORIES.map((c) => (
           <button
             key={c.key}
             onClick={() => setTab(c.key)}
-            className="flex-1 rounded-lg py-2 text-xs font-medium transition sm:text-sm"
+            className="flex-1 rounded-lg py-2 text-[11px] font-medium transition sm:text-xs"
             style={{
               backgroundColor: tab === c.key ? GOLD : DARK_CARD,
               color: tab === c.key ? "#1a1a2e" : "#e8e8e8",
@@ -181,7 +181,7 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
               key={item.id}
               onClick={() => !soldOut && addToCart(item)}
               disabled={soldOut}
-              className="w-full rounded-xl p-4 text-left transition hover:scale-[1.02]"
+              className="w-full rounded-xl p-3.5 text-left transition hover:scale-[1.02] sm:p-4"
               style={{
                 backgroundColor: soldOut ? "#1a1a2e88" : DARK_CARD,
                 opacity: soldOut ? 0.5 : 1,

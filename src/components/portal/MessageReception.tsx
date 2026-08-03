@@ -70,7 +70,7 @@ export default function MessageReception({ guest, onBack }: Props) {
       <h1 className="text-xl font-semibold">Message Reception</h1>
 
       {/* Send Message */}
-      <div className="space-y-3 rounded-2xl p-5 shadow-lg" style={{ backgroundColor: DARK_CARD }}>
+      <div className="space-y-3 rounded-xl p-4 shadow-lg sm:rounded-2xl sm:p-5" style={{ backgroundColor: DARK_CARD }}>
         <p className="text-sm opacity-60">Send a message to our front desk team. We'll get back to you shortly.</p>
         <textarea
           value={message}

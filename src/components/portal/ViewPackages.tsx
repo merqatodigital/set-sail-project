@@ -53,7 +53,7 @@ export default function ViewPackages({ onBack }: Props) {
 function PackageCard({ pkg }: { pkg: PackageItem }) {
   return (
     <div
-      className="rounded-2xl p-5 shadow-lg"
+      className="rounded-xl p-4 shadow-lg sm:rounded-2xl sm:p-5"
       style={{
         backgroundColor: DARK_CARD,
         border: pkg.featured ? `1px solid ${GOLD}44` : "1px solid transparent",
@@ -94,17 +94,17 @@ function PackageCard({ pkg }: { pkg: PackageItem }) {
       </div>
 
       {/* What's Included Table */}
-      <div className="mt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-50">What's Included</p>
-        <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "#0f346011" }}>
+      <div className="mt-3.5 sm:mt-4">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide opacity-50 sm:text-xs">What's Included</p>
+        <div className="rounded-lg overflow-hidden sm:rounded-xl" style={{ backgroundColor: "#0f346011" }}>
           <table className="w-full text-sm">
             <tbody>
               {pkg.features.map((f, i) => (
                 <tr key={f.id} style={{ borderBottom: i < pkg.features.length - 1 ? `1px solid ${GOLD}11` : "none" }}>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-2 sm:px-3 sm:py-2.5">
                     <span style={{ color: GOLD }}>{"\u2713"}</span>
                   </td>
-                  <td className="px-3 py-2.5 opacity-70">{f.text}</td>
+                  <td className="px-2.5 py-2 opacity-70 sm:px-3 sm:py-2.5">{f.text}</td>
                 </tr>
               ))}
             </tbody>
@@ -115,7 +115,7 @@ function PackageCard({ pkg }: { pkg: PackageItem }) {
       {/* CTA */}
       <button
         onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
-        className="mt-5 w-full rounded-lg py-3 text-sm font-medium transition"
+        className="mt-4 w-full rounded-lg py-2.5 text-sm font-medium transition sm:mt-5 sm:py-3"
         style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
       >
         {pkg.buttonLabel}

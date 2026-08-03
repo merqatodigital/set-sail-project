@@ -83,7 +83,7 @@ export default function MyBookings({ guest, bookings, tourBookings, rentals, onB
             {myBookings.map((b) => (
               <div
                 key={b.id}
-                className="rounded-xl p-4"
+                className="rounded-xl p-3.5 sm:p-4"
                 style={{ backgroundColor: DARK_CARD }}
               >
                 <div className="flex items-start justify-between">
@@ -127,7 +127,7 @@ export default function MyBookings({ guest, bookings, tourBookings, rentals, onB
             {myTours.map((b) => (
               <div
                 key={b.id}
-                className="rounded-xl p-4"
+                className="rounded-xl p-3.5 sm:p-4"
                 style={{ backgroundColor: DARK_CARD }}
               >
                 <div className="flex items-start justify-between">
@@ -165,7 +165,7 @@ export default function MyBookings({ guest, bookings, tourBookings, rentals, onB
             {myRentals.map((b) => (
               <div
                 key={b.id}
-                className="rounded-xl p-4"
+                className="rounded-xl p-3.5 sm:p-4"
                 style={{ backgroundColor: DARK_CARD }}
               >
                 <div className="flex items-start justify-between">
