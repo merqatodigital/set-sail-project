@@ -2,10 +2,13 @@ import type { PortalBookingResult } from "@/pages/Portal";
 
 // ---------------------------------------------------------------------------
 // GCash QR — displays QR code after booking confirmation.
+// Image hosted in Supabase Storage bucket: images-payment
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
 const DARK_CARD = "#16213e";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const GCASH_QR_URL = `${SUPABASE_URL}/storage/v1/object/public/images-payment/gcash-qr.png`;
 
 interface Props {
   booking: PortalBookingResult;
@@ -66,13 +69,11 @@ export default function GCashQR({ booking, onDone }: Props) {
 
         <div className="flex justify-center">
           <div className="overflow-hidden rounded-xl bg-white p-2">
-            {/* Replace this div with your actual GCash QR image */}
             <img
-              src="/assets/gcash-qr.png"
+              src={GCASH_QR_URL}
               alt="GCash QR Code"
               className="h-64 w-64 object-contain"
               onError={(e) => {
-                // Fallback if image not found
                 const target = e.target as HTMLImageElement;
                 target.style.display = "none";
                 const parent = target.parentElement;
@@ -84,8 +85,8 @@ export default function GCashQR({ booking, onDone }: Props) {
                       <p class="font-bold text-gray-700 mb-2">GCash QR Code</p>
                       <p class="text-xs text-gray-500">QU****E O.</p>
                       <p class="text-xs text-gray-500">0917 894 ****</p>
-                      <p class="text-xs text-gray-400 mt-2">Place your QR image at:</p>
-                      <p class="text-xs text-gray-400 font-mono">public/assets/gcash-qr.png</p>
+                      <p class="text-xs text-gray-400 mt-2">Upload gcash-qr.png to</p>
+                      <p class="text-xs text-gray-400 font-mono">images-payment bucket</p>
                     </div>
                   `;
                   parent.appendChild(fallback);
