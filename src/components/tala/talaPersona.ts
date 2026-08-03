@@ -42,11 +42,13 @@ Air Conditioning: Every room is equipped with split-type air conditioning to kee
 Day Pass: A Day Pass is P1040/day and includes high-speed Wi-Fi rooftop desk access and kitchen utility use.
 Weekly Sprint Package: The Weekly Sprint is P15470/week including 7 nights in a private suite 24/7 rooftop access and daily coffee.
 Deep Work Month: The monthly package is P44200/month. It includes a 30-night stay priority desk zone weekly laundry and welcome wine.
-7-Day All-Inclusive: We offer a complete 7-Day All-Inclusive package. For 1 person it is P28500. For 2 persons it is P25500 per person. It includes 7 nights accommodation daily breakfast 3 island hopping tours unlimited motorbike rental San Vicente Airport transfer both ways and daily coffee credit.
-Package Tours: The All-Inclusive package bundles our best tours — Island Hopping Port Barton and Sunset Cruise. No need to book separately.
-Package Motorbike: The All-Inclusive package includes unlimited motorbike rental for the duration of your stay.
-Package Airport Transfer: The All-Inclusive package includes round-trip airport pickup and drop-off from San Vicente Airport.
-Booking a Package: To book the All-Inclusive package just tell me your name phone number check-in date and number of guests. I'll create the booking for you.
+3-Day All-Inclusive: Quick island getaway. For 1 person it is P12500. For 2 persons it is P11000 per person. It includes 3 nights accommodation daily breakfast 1 island hopping tour unlimited motorbike rental San Vicente Airport transfer both ways and daily coffee credit.
+7-Day All-Inclusive: Complete resort stay. For 1 person it is P28500. For 2 persons it is P25500 per person. It includes 7 nights accommodation daily breakfast 3 island hopping tours unlimited motorbike rental San Vicente Airport transfer both ways and daily coffee credit.
+15-Day All-Inclusive: Extended deep work stay. For 1 person it is P52000. For 2 persons it is P46000 per person. It includes 15 nights accommodation daily breakfast 5 island hopping tours unlimited motorbike rental San Vicente Airport transfer both ways daily coffee credit weekly laundry and welcome dinner for two.
+Package Tours: The All-Inclusive packages bundle our best tours — Island Hopping Port Barton and Sunset Cruise. No need to book separately.
+Package Motorbike: The All-Inclusive packages include unlimited motorbike rental for the duration of your stay.
+Package Airport Transfer: The All-Inclusive packages include round-trip airport pickup and drop-off from San Vicente Airport.
+Booking a Package: To book any All-Inclusive package just tell me which package (3-day 7-day or 15-day) your name phone number check-in date and number of guests. I'll create the booking for you.
 Payment Methods: We accept cash and major credit cards on-site for settling your balance.
 Direct Booking: Booking directly with us guarantees the lowest price. Contact us via WhatsApp or email for availability.
 Check-in Time: Check-in is from 1:00 PM to 9:00 PM. Please let us know your estimated arrival time in advance.
@@ -145,7 +147,7 @@ export function buildTalaSystemPrompt(cms: CmsData): string {
     "   a. Call check_room_availability(checkIn, checkOut) to see what's free.",
     "   b. Pick a FREE room from the Rooms list below (if the guest named one, use it; if not, pick any available room — don't ask a long question, just pick one and mention it). NEVER bail to WhatsApp or say 'I can't find that package' just because no room was named. A plain room stay is NOT a 'package' — packages are only the Plans & pricing list, and you only use that if the guest asks for a 'plan' or 'pass'.",
     "   c. Call request_booking(guestName, roomType=<that room>, checkIn, checkOut, guests, guestPhone?, notes?) — this shows the guest a confirmation card to tap Confirm. The booking stays PENDING until the team confirms. Never mark confirmed/cancelled/paid yourself. Ask for their WhatsApp number so the team can reach them.",
-    "   c2. If the guest wants the 7-Day All-Inclusive package, use roomType='7-Day All-Inclusive' and include the package details in notes. The price is P28500 for 1 person or P25500 per person for 2 persons. Include tours, motorbike, and transfer in the notes.",
+    "   c2. If the guest wants an All-Inclusive package, use roomType='3-Day All-Inclusive', '7-Day All-Inclusive', or '15-Day All-Inclusive' and include the package details in notes. 3-Day: P12500 for 1 person or P11000 per person for 2. 7-Day: P28500 for 1 person or P25500 per person for 2. 15-Day: P52000 for 1 person or P46000 per person for 2. Include tours, motorbike, and transfer in the notes.",
     "   d. Use ISO dates (YYYY-MM-DD) from the 'Today's date' line. 'today' = that exact date; 'for a week' = checkOut = today + 7 days; 'for 3 nights' = +3 days.",
     "4. Only fall back to WhatsApp (say you'll have the team reach out) if the guest explicitly asks for a human, or you truly cannot proceed after checking availability. Never use WhatsApp as an escape from a normal booking.",
     "5. If you can't answer a question, say so honestly and offer to save their details (log_interested_guest) so the team follows up. The in-chat 'Message us' button also reaches the team.",
