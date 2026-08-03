@@ -919,6 +919,19 @@ export function confirmBookingDraft(
   update((d) => {
     const exists = d.operations.bookings.some((b) => b.id === draft.id);
     if (exists) return d;
+    // Log revenue payment so dashboard Revenue (30D) updates immediately.
+    const payment: CmsData["operations"]["payments"][number] = {
+      id: uid("pay"),
+      reference: generateReference("PY"),
+      date: new Date().toISOString().slice(0, 10),
+      category: "booking" as Payment["category"],
+      direction: "in" as "in",
+      amount: draft.amount,
+      method: "cash",
+      relatedId: draft.id,
+      description: `Booking: ${draft.roomType} for ${draft.guestName} (${draft.checkIn} → ${draft.checkOut})`,
+      notes: "",
+    };
     return {
       ...d,
       operations: {
@@ -928,12 +941,13 @@ export function confirmBookingDraft(
           {
             ...draft,
             guestId: "",
-            paidAmount: 0,
+            paidAmount: draft.amount,
             status: "pending",
             source: "other",
             createdAt: new Date().toISOString(),
           } as CmsData["operations"]["bookings"][number],
         ],
+        payments: [...d.operations.payments, payment],
       },
     };
   });
