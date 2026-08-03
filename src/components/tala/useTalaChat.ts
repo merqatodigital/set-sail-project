@@ -165,11 +165,14 @@ async function askEdgeFunction(
   if (!res.ok) {
     throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
   }
-  const message = data?.message as AssistantReply | undefined;
-  if (!message || (!message.content && !message.tool_calls?.length)) {
+  // The edge function already runs the full agent<->tools loop server-side
+  // and returns only the final text as { reply }. It never sends tool_calls
+  // back to the client — that's why this reads `reply`, not `message`.
+  const content = typeof data?.reply === "string" ? data.reply.trim() : "";
+  if (!content) {
     throw new Error("TALA returned an empty reply.");
   }
-  return message;
+  return { content, tool_calls: undefined };
 }
 
 /**
