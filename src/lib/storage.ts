@@ -14,6 +14,35 @@ import { supabase, isSupabaseConnected } from "./supabase";
 const STORAGE_KEY = "marina-terrace-cms-v1";
 const DB_ROW_KEY = "marina_terrace_payload";
 
+/**
+ * Synchronous, cache-only read — no network. Used to paint the site
+ * instantly from whatever was cached on a previous visit while `loadCms()`
+ * revalidates in the background, instead of blocking every page load
+ * behind a network round-trip.
+ */
+export function loadCmsCached(): CmsData | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return migrateAndMerge(JSON.parse(raw) as Partial<CmsData>);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cache writes are best-effort: inline image data can exceed the browser's
+ * storage quota, and a thrown QuotaExceededError must never break a save or
+ * take the page down.
+ */
+function writeCache(data: CmsData) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn("Local cache write skipped (storage quota).", err);
+  }
+}
+
 export async function loadCms(): Promise<CmsData> {
   try {
     // 1. If Supabase is connected, attempt to pull latest cloud data first
@@ -22,6 +51,10 @@ export async function loadCms(): Promise<CmsData> {
         .from("cms_data")
         .select("value")
         .eq("key", DB_ROW_KEY)
+        // Cap the request at 6s — on a flaky mobile connection an un-timed
+        // query could hang indefinitely and leave the whole site stuck on
+        // the "Loading Marina Terrace…" spinner.
+        .abortSignal(AbortSignal.timeout(6000))
         .maybeSingle();
 
       if (!error && data) {
@@ -30,7 +63,7 @@ export async function loadCms(): Promise<CmsData> {
           const parsed = row.value as Partial<CmsData>;
           const merged = migrateAndMerge(parsed);
           // Sync local cache with latest cloud truth
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          writeCache(merged);
           return merged;
         }
       }
@@ -179,7 +212,7 @@ function migrateAndMerge(parsed: Partial<CmsData>): CmsData {
 
 export async function saveCms(data: CmsData): Promise<void> {
   // 1. Sync local storage cache instantly (ensures layout stays in sync in the browser)
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  writeCache(data);
 
   // 2. If Supabase is connected, asynchronously upload the data payload to the cloud
   if (isSupabaseConnected() && supabase) {

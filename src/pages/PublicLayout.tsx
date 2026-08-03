@@ -1,9 +1,13 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
+import { Component, Suspense, lazy, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer, WhatsAppFloat } from "@/components/site/CtaFooter";
-import { TalaWidget } from "@/components/tala/TalaWidget";
 import { useCms } from "@/context/CmsContext";
+
+// Lazy so the TALA bundle can never block or break the site's first paint.
+const TalaWidget = lazy(() =>
+  import("@/components/tala/TalaWidget").then((module) => ({ default: module.TalaWidget })),
+);
 
 class TalaWidgetBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -46,7 +50,9 @@ export default function PublicLayout() {
       <Footer />
       <WhatsAppFloat />
       <TalaWidgetBoundary>
-        <TalaWidget />
+        <Suspense fallback={null}>
+          <TalaWidget />
+        </Suspense>
       </TalaWidgetBoundary>
     </div>
   );
