@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Menu, Sparkles, X, ChevronDown } from "lucide-react";
+import { Menu, Sparkles, X, ChevronDown, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
@@ -114,6 +114,18 @@ export function Navbar() {
               <span>Talk to TALA</span>
             </button>
           )}
+          <Link
+            to="/portal"
+            className={cn(
+              "inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
+              solid
+                ? "border border-[#C6A15B]/40 bg-[#C6A15B]/10 text-[#C6A15B] hover:bg-[#C6A15B]/20"
+                : "border border-[#C6A15B]/40 bg-[#C6A15B]/10 text-[#C6A15B] backdrop-blur-sm hover:bg-[#C6A15B]/20"
+            )}
+          >
+            <User className="h-3.5 w-3.5" />
+            <span>Guest Portal</span>
+          </Link>
         </nav>
 
         <button
@@ -165,6 +177,13 @@ export function Navbar() {
               >
                 <Sparkles className="h-4 w-4" /> Talk to TALA
               </button>
+              <Link
+                to="/portal"
+                onClick={() => setOpen(false)}
+                className="mt-3 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#C6A15B]/40 bg-[#C6A15B]/10 px-5 text-sm font-medium text-[#C6A15B] transition active:scale-[0.98]"
+              >
+                <User className="h-4 w-4" /> Guest Portal
+              </Link>
             </div>
           </motion.div>
         )}

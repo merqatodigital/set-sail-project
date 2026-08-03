@@ -1,4 +1,4 @@
-import { MapPin, Phone, Mail, Sparkles } from "lucide-react";
+import { MapPin, Phone, Mail, Sparkles, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
 import { safeHref, safeMailto, safeTel } from "@/lib/security";
@@ -24,14 +24,23 @@ export function CtaSection() {
           <p className="max-w-xl text-base leading-relaxed text-white/60">{home.ctaSubtext}</p>
         </Reveal>
         <Reveal delay={0.2}>
-          <button
-            type="button"
-            onClick={() => openTala("Hi TALA! I'd like to check availability and book a stay.")}
-            className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#C6A15B] px-6 text-[13px] font-medium tracking-wide text-[#221D14] shadow-[0_6px_20px_rgba(198,161,91,0.4),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-200 hover:bg-[#D9BA80] hover:shadow-[0_10px_28px_rgba(198,161,91,0.55),inset_0_1px_0_rgba(255,255,255,0.25)] active:scale-[0.98] sm:h-14 sm:px-8 sm:text-sm"
-          >
-            <Sparkles className="h-4 w-4" />
-            <span>{home.ctaButtonLabel}</span>
-          </button>
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-4">
+            <button
+              type="button"
+              onClick={() => openTala("Hi TALA! I'd like to check availability and book a stay.")}
+              className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#C6A15B] px-6 text-[13px] font-medium tracking-wide text-[#221D14] shadow-[0_6px_20px_rgba(198,161,91,0.4),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-200 hover:bg-[#D9BA80] hover:shadow-[0_10px_28px_rgba(198,161,91,0.55),inset_0_1px_0_rgba(255,255,255,0.25)] active:scale-[0.98] sm:h-14 sm:px-8 sm:text-sm"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>{home.ctaButtonLabel}</span>
+            </button>
+            <Link
+              to="/portal"
+              className="group inline-flex h-12 items-center gap-2 rounded-full border border-[#C6A15B]/40 bg-[#C6A15B]/10 px-6 text-[13px] font-medium tracking-wide text-[#C6A15B] transition-all duration-200 hover:bg-[#C6A15B]/20 active:scale-[0.98] sm:h-14 sm:px-8 sm:text-sm"
+            >
+              <User className="h-4 w-4" />
+              <span>Guest Portal</span>
+            </Link>
+          </div>
         </Reveal>
       </div>
     </section>
