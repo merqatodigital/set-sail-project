@@ -440,6 +440,7 @@ export const TALA_TOOL_SCHEMAS = [
         type: "object",
         properties: {
           guestName: { type: "string", description: "Guest's name." },
+          guestPhone: { type: "string", description: "Guest's phone/WhatsApp number." },
           roomType: {
             type: "string",
             description: "Room or package name as listed, e.g. 'Superior Room UNO', 'Weekly Sprint', 'Day Pass'.",
@@ -904,6 +905,7 @@ export function confirmBookingDraft(
     id: string;
     reference: string;
     guestName: string;
+    guestPhone: string;
     roomType: string;
     checkIn: string;
     checkOut: string;
@@ -939,10 +941,12 @@ export function confirmBookingDraft(
   // live in notes), so the team can follow up even before the owner approves.
   try {
     const email = (draft.notes.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0] || "").trim();
-    if (isSupabaseConnected() && supabase && (email || draft.guestName)) {
+    const phone = draft.guestPhone || (draft.notes.match(/Phone:\s*(.+)/i)?.[1] || "").trim();
+    const contact = email || phone || "";
+    if (isSupabaseConnected() && supabase && (contact || draft.guestName)) {
       void supabase.from("tala_leads").insert({
         name: draft.guestName,
-        contact: email.slice(0, 200),
+        contact: contact.slice(0, 200),
         note: `Booking draft ${draft.reference} (${draft.roomType}, ${draft.checkIn}→${draft.checkOut}): ${draft.notes}`.slice(0, 1000),
         source: "booking_draft",
       });

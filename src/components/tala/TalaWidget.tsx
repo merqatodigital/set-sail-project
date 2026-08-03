@@ -384,7 +384,7 @@ function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
 // and tell us about their stay (nomad? working? tours?) before the human
 // team sees it. Confirm = the guest's human action; we never auto-write.
 // ---------------------------------------------------------------------------
-type DraftExtra = { email?: string; nomad?: boolean; working?: boolean; tours?: string[] };
+type DraftExtra = { email?: string; phone?: string; nomad?: boolean; working?: boolean; tours?: string[] };
 
 function BookingFormCard({
   draft,
@@ -396,6 +396,7 @@ function BookingFormCard({
     id: string;
     reference: string;
     guestName: string;
+    guestPhone: string;
     roomType: string;
     checkIn: string;
     checkOut: string;
@@ -408,6 +409,7 @@ function BookingFormCard({
   onEdit: () => void;
 }) {
   const [email, setEmail] = useState(draft.notes.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0] ?? "");
+  const [phone, setPhone] = useState(draft.guestPhone || "");
   const [guests, setGuests] = useState(Math.max(1, draft.guests || 1));
   const [nomad, setNomad] = useState(false);
   const [working, setWorking] = useState(false);
@@ -460,6 +462,17 @@ function BookingFormCard({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@email.com"
+            className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+            style={{ borderColor: `${GOLD}55` }}
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="opacity-70">WhatsApp / Phone number</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+63 9XX XXX XXXX"
             className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
             style={{ borderColor: `${GOLD}55` }}
           />
@@ -520,7 +533,7 @@ function BookingFormCard({
       <div className="mt-3 flex gap-2">
         <button
           type="button"
-          onClick={() => onConfirm({ email: email.trim() || undefined, nomad, working, tours: picked })}
+          onClick={() => onConfirm({ email: email.trim() || undefined, phone: phone.trim() || undefined, nomad, working, tours: picked })}
           className="flex-1 rounded-full py-2 text-xs font-semibold text-white transition-colors hover:opacity-90"
           style={{ backgroundColor: GREEN }}
         >

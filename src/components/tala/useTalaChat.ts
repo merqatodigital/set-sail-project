@@ -214,6 +214,7 @@ interface BookingDraft {
   id: string;
   reference: string;
   guestName: string;
+  guestPhone: string;
   roomType: string;
   checkIn: string;
   checkOut: string;
@@ -353,12 +354,13 @@ export function useTalaChat(): UseTalaChat {
 
   const confirmDraft = useCallback(
     (
-      extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
+      extra?: { email?: string; phone?: string; nomad?: boolean; working?: boolean; tours?: string[] },
     ) => {
       if (!pendingDraft) return;
       const notes = [
         pendingDraft.notes,
         extra?.email ? `Email: ${extra.email}` : "",
+        extra?.phone ? `Phone: ${extra.phone}` : "",
         extra?.nomad ? "Digital nomad" : "",
         extra?.working ? "Working while staying" : "",
         extra?.tours?.length ? `Tours of interest: ${extra.tours.join(", ")}` : "",
@@ -366,7 +368,7 @@ export function useTalaChat(): UseTalaChat {
         .filter(Boolean)
         .join(" · ");
       confirmBookingDraft(
-        { ...pendingDraft, notes },
+        { ...pendingDraft, notes, guestPhone: extra?.phone || pendingDraft.guestPhone },
         persistCms,
       );
       setPendingDraft(null);
