@@ -46,6 +46,30 @@ export default function App() {
                       </Suspense>
                     }
                   />
+                  <Route
+                    path="/privacy"
+                    element={
+                      <Suspense fallback={<AppLoader label="Loading…" />}>
+                        <PrivacyPolicy />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/terms"
+                    element={
+                      <Suspense fallback={<AppLoader label="Loading…" />}>
+                        <TermsOfService />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/accessibility"
+                    element={
+                      <Suspense fallback={<AppLoader label="Loading…" />}>
+                        <AccessibilityStatement />
+                      </Suspense>
+                    }
+                  />
                 </Route>
                 <Route
                   path="/portal"
@@ -60,30 +84,6 @@ export default function App() {
                   element={
                     <Suspense fallback={<AppLoader label="Loading admin…" />}>
                       <AdminApp />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="/privacy"
-                  element={
-                    <Suspense fallback={<AppLoader label="Loading…" />}>
-                      <PrivacyPolicy />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="/terms"
-                  element={
-                    <Suspense fallback={<AppLoader label="Loading…" />}>
-                      <TermsOfService />
-                    </Suspense>
-                  }
-                />
-                <Route
-                  path="/accessibility"
-                  element={
-                    <Suspense fallback={<AppLoader label="Loading…" />}>
-                      <AccessibilityStatement />
                     </Suspense>
                   }
                 />
