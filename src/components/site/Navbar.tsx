@@ -53,11 +53,11 @@ export function Navbar() {
         solid ? "bg-[#FAF6EF]/95 shadow-sm shadow-black/5 backdrop-blur-md" : "bg-gradient-to-b from-black/40 to-transparent"
       )}
     >
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-5 lg:px-12">
+      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-5 py-4 sm:px-6 lg:px-12 lg:py-5">
         <Link
           to="/"
           className={cn(
-            "font-serif text-xl font-medium tracking-[0.18em] transition-colors",
+            "font-serif text-base font-medium tracking-[0.18em] transition-colors sm:text-xl",
             solid ? "text-[#26221C]" : "text-white"
           )}
         >
@@ -146,22 +146,22 @@ export function Navbar() {
             transition={{ duration: 0.25 }}
             className="overflow-hidden bg-[#FAF6EF] lg:hidden"
           >
-            <div className="flex flex-col gap-1 px-6 pb-6">
+            <div className="flex flex-col gap-0.5 px-5 pb-5 sm:px-6">
               {LINKS.map((link) => (
                 <button
                   key={link.label}
                   onClick={() => handleNav(link.href)}
-                  className="py-3 text-left text-sm font-medium uppercase tracking-wide text-[#26221C]/80 border-b border-[#26221C]/5"
+                  className="py-2.5 text-left text-[13px] font-medium uppercase tracking-wide text-[#26221C]/80 border-b border-[#26221C]/5 sm:py-3 sm:text-sm"
                 >
                   {link.label}
                 </button>
               ))}
               {/* Mobile Currency Selector */}
-              <div className="relative mt-3 flex items-center">
+              <div className="relative mt-2 flex items-center sm:mt-3">
                 <select
                   value={currencyState.currency}
                   onChange={(e) => currencyState.setCurrency(e.target.value as any)}
-                  className="w-full h-11 rounded-full border border-[#26221C]/15 bg-white pl-4 pr-10 text-sm font-medium text-[#26221C] outline-none appearance-none"
+                  className="w-full h-10 rounded-full border border-[#26221C]/15 bg-white pl-4 pr-10 text-[13px] font-medium text-[#26221C] outline-none appearance-none sm:h-11 sm:text-sm"
                 >
                   <option value="PHP">Philippine Peso (₱)</option>
                   <option value="USD">US Dollar ($)</option>
@@ -173,14 +173,14 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => openTala("Hi TALA! I'd like to ask about staying or booking.")}
-                className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#26221C] px-5 text-sm font-medium text-[#F5EFE2] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition active:scale-[0.98]"
+                className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#26221C] px-5 text-[13px] font-medium text-[#F5EFE2] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition active:scale-[0.98] sm:mt-4 sm:h-11 sm:text-sm"
               >
                 <Sparkles className="h-4 w-4" /> Talk to TALA
               </button>
               <Link
                 to="/portal"
                 onClick={() => setOpen(false)}
-                className="mt-3 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#C6A15B]/40 bg-[#C6A15B]/10 px-5 text-sm font-medium text-[#C6A15B] transition active:scale-[0.98]"
+                className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#C6A15B]/40 bg-[#C6A15B]/10 px-5 text-[13px] font-medium text-[#C6A15B] transition active:scale-[0.98] sm:mt-3 sm:h-11 sm:text-sm"
               >
                 <User className="h-4 w-4" /> Guest Portal
               </Link>

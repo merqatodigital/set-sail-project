@@ -11,17 +11,17 @@ export function CtaSection() {
   const home = data.homepage;
 
   return (
-    <section className="relative overflow-hidden bg-[#1B1812] py-24 lg:py-28">
+    <section className="relative overflow-hidden bg-[#1B1812] py-16 sm:py-20 lg:py-28">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.06]"
         style={{ backgroundImage: "radial-gradient(circle at 30% 20%, #C6A15B 0%, transparent 55%)" }}
       />
-      <div className="relative mx-auto flex max-w-[1400px] flex-col items-center gap-8 px-6 text-center lg:px-12">
+      <div className="relative mx-auto flex max-w-[1400px] flex-col items-center gap-6 px-5 text-center sm:gap-8 sm:px-6 lg:px-12">
         <Reveal>
-          <h2 className="font-serif text-4xl font-light leading-[1.1] text-white sm:text-6xl">{home.ctaTitle}</h2>
+          <h2 className="font-serif text-3xl font-light leading-[1.1] text-white sm:text-4xl lg:text-6xl">{home.ctaTitle}</h2>
         </Reveal>
         <Reveal delay={0.1}>
-          <p className="max-w-xl text-base leading-relaxed text-white/60">{home.ctaSubtext}</p>
+          <p className="max-w-xl text-sm leading-relaxed text-white/60 sm:text-base">{home.ctaSubtext}</p>
         </Reveal>
         <Reveal delay={0.2}>
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-4">
@@ -61,7 +61,7 @@ export function Footer() {
     <footer className="bg-[#141210] text-white/70">
       {/* pb-24 on mobile gives enough clearance so the fixed WhatsApp button
           (bottom-4, h-12 ≈ 64px total) never overlaps the footer bottom row. */}
-      <div className="mx-auto w-full max-w-[1400px] px-5 pb-24 pt-14 sm:px-8 sm:pb-16 sm:pt-16 lg:px-12 lg:pb-20 lg:pt-20">
+      <div className="mx-auto w-full max-w-[1400px] px-5 pb-20 pt-12 sm:px-6 sm:pb-16 sm:pt-14 lg:px-12 lg:pb-20 lg:pt-16">
         {/*
           Layout strategy:
           - mobile (base): brand on top, then Explore + Contact side-by-side (2 cols)
@@ -71,13 +71,13 @@ export function Footer() {
             take one column, Booking spans 2 for a balanced grid.
           - desktop (lg): 4 uniform columns, all top-aligned.
         */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:gap-x-8 sm:gap-y-12 lg:grid-cols-4 lg:gap-8">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-4 lg:gap-8">
           {/* Brand */}
           <div className="col-span-2 lg:col-span-1">
-            <p className="font-serif text-lg font-medium tracking-[0.18em] text-white sm:text-xl">
+            <p className="font-serif text-base font-medium tracking-[0.18em] text-white sm:text-lg lg:text-xl">
               {data.settings.logoText}
             </p>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mt-2.5 max-w-xs text-[13px] leading-relaxed text-white/50 sm:mt-3 sm:text-sm">
               {data.settings.tagline}
             </p>
             <div className="mt-5 flex gap-2.5">
@@ -98,8 +98,8 @@ export function Footer() {
 
           {/* Explore */}
           <div className="min-w-0">
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Explore</p>
-            <ul className="space-y-2.5 text-sm">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40 sm:mb-4 sm:text-[11px]">Explore</p>
+            <ul className="space-y-2 text-[13px] sm:space-y-2.5 sm:text-sm">
               <li><a href="#workspace" className="hover:text-[#C6A15B]">Workspace</a></li>
               <li><a href="#kitchen" className="hover:text-[#C6A15B]">Kitchen</a></li>
               <li><a href="#accommodation" className="hover:text-[#C6A15B]">Stay</a></li>
@@ -110,8 +110,8 @@ export function Footer() {
 
           {/* Contact */}
           <div className="min-w-0">
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Contact</p>
-            <ul className="space-y-2.5 text-sm">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40 sm:mb-4 sm:text-[11px]">Contact</p>
+            <ul className="space-y-2 text-[13px] sm:space-y-2.5 sm:text-sm">
               <li className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#C6A15B]" />
                 <span className="min-w-0 break-words leading-relaxed">{c.address}</span>
@@ -133,8 +133,8 @@ export function Footer() {
 
           {/* Booking */}
           <div className="col-span-2 lg:col-span-1">
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Booking</p>
-            <p className="mb-4 text-sm leading-relaxed text-white/50">{c.businessHours}</p>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40 sm:mb-4 sm:text-[11px]">Booking</p>
+            <p className="mb-3 text-[13px] leading-relaxed text-white/50 sm:mb-4 sm:text-sm">{c.businessHours}</p>
             <button
               type="button"
               onClick={() => openTala("Hi TALA! I'd like to book or ask about availability.")}

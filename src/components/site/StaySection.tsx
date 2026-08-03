@@ -10,14 +10,14 @@ export function StaySection() {
   const images = s.galleryImageIds;
 
   return (
-    <section id="stay" className="bg-[#FAF6EF] py-24 lg:py-32">
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-        <div className="grid grid-cols-1 gap-14 lg:grid-cols-2 lg:gap-20">
+    <section id="stay" className="bg-[#FAF6EF] py-16 sm:py-20 lg:py-32">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-6 lg:px-12">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-20">
           <Reveal>
             <SectionEyebrow>{s.eyebrow}</SectionEyebrow>
-            <h2 className="font-serif text-4xl font-light leading-[1.1] text-[#26221C] sm:text-5xl">{s.title}</h2>
-            <p className="mt-5 max-w-lg text-base leading-relaxed text-[#26221C]/65">{s.paragraph}</p>
-            <div className="mt-10 space-y-7">
+            <h2 className="font-serif text-3xl font-light leading-[1.1] text-[#26221C] sm:text-4xl lg:text-5xl">{s.title}</h2>
+            <p className="mt-4 max-w-lg text-sm leading-relaxed text-[#26221C]/65 sm:text-base">{s.paragraph}</p>
+            <div className="mt-8 space-y-6 sm:mt-10 sm:space-y-7">
               {s.features.map((f) => {
                 const Icon = getIcon(f.icon);
                 return (

@@ -54,18 +54,18 @@ export function RoomsSection() {
   const otherRooms = rooms.filter((r) => r.id !== activeRoom.id);
 
   return (
-    <section id="accommodation" className="bg-[#FAF6EF] py-20 lg:py-28">
-      <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
+    <section id="accommodation" className="bg-[#FAF6EF] py-16 sm:py-20 lg:py-28">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-6 lg:px-12">
         
         {/* Room Tab Switcher (Professional, Minimal Segmented Controller) */}
-        <div className="mb-12 flex justify-center">
-          <div className="inline-flex rounded-full border border-[#26221C]/10 bg-white p-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div className="mb-8 overflow-x-auto sm:mb-12">
+          <div className="inline-flex min-w-max rounded-full border border-[#26221C]/10 bg-white p-1 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
             {rooms.map((room, idx) => (
               <button
                 key={room.id}
                 onClick={() => handleRoomTabChange(idx)}
                 className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-full px-5 text-[13px] font-medium transition-all duration-150 active:scale-[0.97] sm:h-10 sm:px-6 sm:text-sm",
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[12px] font-medium transition-all duration-150 active:scale-[0.97] sm:h-10 sm:gap-2 sm:px-5 sm:text-[13px]",
                   activeRoomIdx === idx
                     ? "bg-[#26221C] text-white shadow-[0_2px_4px_rgba(0,0,0,0.15)]"
                     : "text-[#26221C]/55 hover:text-[#26221C]"
@@ -78,26 +78,26 @@ export function RoomsSection() {
         </div>
 
         {/* Selected Room Header info */}
-        <Reveal className="mb-10 text-center lg:text-left">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-[#C6A15B]">Featured Accommodation</p>
-          <h1 className="font-serif text-4xl font-light leading-tight text-[#26221C] sm:text-5xl lg:text-6xl">
+        <Reveal className="mb-8 text-center lg:mb-10 lg:text-left">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C6A15B] sm:text-xs">Featured Accommodation</p>
+          <h1 className="font-serif text-3xl font-light leading-tight text-[#26221C] sm:text-4xl lg:text-5xl xl:text-6xl">
             {activeRoom.name}
           </h1>
-          <div className="mt-4 flex flex-wrap justify-center gap-6 text-sm text-[#26221C]/60 lg:justify-start">
-            <span className="flex items-center gap-1.5"><Users className="h-4.5 w-4.5 text-[#C6A15B]" /> Sleeps: <strong className="text-[#26221C]">{activeRoom.capacity}</strong></span>
-            <span className="flex items-center gap-1.5"><Layout className="h-4.5 w-4.5 text-[#C6A15B]" /> Size: <strong className="text-[#26221C]">{activeRoom.size}</strong></span>
-            <span className="flex items-center gap-1.5"><Map className="h-4.5 w-4.5 text-[#C6A15B]" /> View: <strong className="text-[#26221C]">{activeRoom.view}</strong></span>
+          <div className="mt-3 flex flex-wrap justify-center gap-3 text-xs text-[#26221C]/60 sm:gap-6 sm:text-sm lg:justify-start">
+            <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-[#C6A15B] sm:h-4 sm:w-4" /> Sleeps: <strong className="text-[#26221C]">{activeRoom.capacity}</strong></span>
+            <span className="flex items-center gap-1.5"><Layout className="h-3.5 w-3.5 text-[#C6A15B] sm:h-4 sm:w-4" /> Size: <strong className="text-[#26221C]">{activeRoom.size}</strong></span>
+            <span className="flex items-center gap-1.5"><Map className="h-3.5 w-3.5 text-[#C6A15B] sm:h-4 sm:w-4" /> View: <strong className="text-[#26221C]">{activeRoom.view}</strong></span>
           </div>
         </Reveal>
 
         {/* Main Split Layout: Room Visuals vs Booking Widget */}
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-3 lg:gap-16">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
           
           {/* Left Column: Image Slider + Description + Facilities */}
-          <div className="space-y-12 lg:col-span-2">
+          <div className="space-y-8 lg:col-span-2 lg:space-y-12">
             
             {/* Image Slider */}
-            <div className="group relative overflow-hidden rounded-3xl border border-[#26221C]/8 bg-white shadow-md">
+            <div className="group relative overflow-hidden rounded-2xl border border-[#26221C]/8 bg-white shadow-md sm:rounded-3xl">
               <ImagePlaceholder
                 mediaId={activeImages[activeImgIdx]}
                 label={activeRoom.name}
@@ -134,9 +134,9 @@ export function RoomsSection() {
             </div>
 
             {/* Room Description */}
-            <Reveal className="space-y-4">
-              <h2 className="font-serif text-2xl font-light text-[#26221C]">Room Description</h2>
-              <div className="h-0.5 w-12 bg-[#C6A15B]/40" />
+            <Reveal className="space-y-3 sm:space-y-4">
+              <h2 className="font-serif text-xl font-light text-[#26221C] sm:text-2xl">Room Description</h2>
+              <div className="h-0.5 w-10 bg-[#C6A15B]/40 sm:w-12" />
               <div className="space-y-3 text-sm leading-relaxed text-[#26221C]/75">
                 {activeRoom.description.split("\n").filter(Boolean).map((line, li) => (
                   <p key={li}>{line}</p>
@@ -145,9 +145,9 @@ export function RoomsSection() {
             </Reveal>
 
             {/* Room-specific Facilities Grid */}
-            <Reveal className="space-y-6">
-              <h2 className="font-serif text-2xl font-light text-[#26221C]">Facilities</h2>
-              <div className="h-0.5 w-12 bg-[#C6A15B]/40" />
+            <Reveal className="space-y-4 sm:space-y-6">
+              <h2 className="font-serif text-xl font-light text-[#26221C] sm:text-2xl">Facilities</h2>
+              <div className="h-0.5 w-10 bg-[#C6A15B]/40 sm:w-12" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {facilities.map((fac) => {
                   const Icon = getIcon(fac.icon);
@@ -240,12 +240,12 @@ export function RoomsSection() {
 
         </div>
 
-        {/* Other Rooms Grid (Basic Room TRE, Single Room QUATTRO) */}
+        {/* Other Rooms Grid */}
         {otherRooms.length > 0 && (
-          <div className="mt-20 border-t border-[#26221C]/8 pt-16">
-            <Reveal className="mb-10 text-center">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-[#C6A15B]">Explore Alternatives</p>
-              <h2 className="font-serif text-3xl font-light text-[#26221C] sm:text-4xl">Other Rooms</h2>
+          <div className="mt-14 border-t border-[#26221C]/8 pt-10 sm:mt-20 sm:pt-16">
+            <Reveal className="mb-8 text-center sm:mb-10">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C6A15B] sm:text-xs">Explore Alternatives</p>
+              <h2 className="font-serif text-2xl font-light text-[#26221C] sm:text-3xl lg:text-4xl">Other Rooms</h2>
             </Reveal>
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

@@ -75,7 +75,7 @@ export function Hero() {
         - Max-width caps line length so headlines look intentional on wide
           screens instead of stretching.
       */}
-      <div className="relative mx-auto w-full max-w-[1400px] px-6 pb-16 pt-32 sm:px-8 sm:pb-20 sm:pt-36 lg:px-12 lg:pb-28 lg:pt-40">
+      <div className="relative mx-auto w-full max-w-[1400px] px-5 pb-12 pt-28 sm:px-6 sm:pb-16 sm:pt-32 lg:px-12 lg:pb-28 lg:pt-40">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -90,7 +90,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-6 max-w-3xl font-serif text-5xl font-light leading-[1.08] text-white sm:text-6xl lg:text-[80px]"
+          className="mt-4 max-w-3xl font-serif text-4xl font-light leading-[1.08] text-white sm:text-5xl lg:text-[80px]"
         >
           {hero.headline}
         </motion.h1>
@@ -99,7 +99,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-6 max-w-xl text-base leading-relaxed text-white/75 sm:text-lg"
+          className="mt-4 max-w-xl text-sm leading-relaxed text-white/75 sm:text-base lg:text-lg"
         >
           {hero.subtext}
         </motion.p>
@@ -108,7 +108,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:gap-4"
+          className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:gap-4"
         >
           <button
             onClick={() => scrollTo(hero.primaryButtonLink)}

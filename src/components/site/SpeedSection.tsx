@@ -75,7 +75,7 @@ export function SpeedSection() {
   const ping = live?.ping ?? s.pingMs;
 
   return (
-    <section id="internet-speed" className="relative overflow-hidden bg-[#1B1812] py-20 text-white sm:py-24 lg:py-32">
+    <section id="internet-speed" className="relative overflow-hidden bg-[#1B1812] py-16 text-white sm:py-20 lg:py-32">
       {/* Subtle background — starfield */}
       <StarField />
       {/* Radial accent behind gauge */}
@@ -84,14 +84,14 @@ export function SpeedSection() {
         style={{ background: "radial-gradient(circle, #C6A15B 0%, transparent 60%)" }}
       />
 
-      <div className="relative mx-auto max-w-[1400px] px-6 lg:px-12">
+      <div className="relative mx-auto max-w-[1400px] px-5 sm:px-6 lg:px-12">
         {/* Header */}
-        <Reveal className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
+        <Reveal className="mx-auto mb-10 max-w-2xl text-center sm:mb-16">
           <SectionEyebrow>{s.eyebrow}</SectionEyebrow>
-          <h2 className="font-serif text-4xl font-light leading-[1.1] text-white sm:text-5xl lg:text-6xl">
+          <h2 className="font-serif text-3xl font-light leading-[1.1] text-white sm:text-4xl lg:text-5xl xl:text-6xl">
             {s.title}
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-white/60 sm:text-base">
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-white/60 sm:text-base">
             {s.paragraph}
           </p>
         </Reveal>
@@ -110,7 +110,7 @@ export function SpeedSection() {
 
         {/* Failover / redundancy badge — only shown when configured in admin */}
         {s.hasFailover && (
-          <Reveal delay={0.12} className="mx-auto mb-12 flex justify-center">
+          <Reveal delay={0.12} className="mx-auto mb-8 flex justify-center sm:mb-12">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#C6A15B]/25 bg-[#C6A15B]/10 px-4 py-2 text-[11px] text-[#E4C888] sm:text-xs">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
               <span>
@@ -123,35 +123,35 @@ export function SpeedSection() {
 
         {/* The gauge */}
         <Reveal delay={0.15}>
-          <div className="mx-auto flex max-w-md flex-col items-center">
+          <div className="mx-auto flex max-w-[280px] flex-col items-center sm:max-w-md">
             <SpeedGauge value={displayMbps} max={GAUGE_MAX} />
-            <div className="-mt-24 flex flex-col items-center sm:-mt-32">
-              <motion.span className="font-serif text-7xl font-light leading-none text-white sm:text-8xl">
+            <div className="-mt-20 flex flex-col items-center sm:-mt-28 lg:-mt-32">
+              <motion.span className="font-serif text-6xl font-light leading-none text-white sm:text-7xl lg:text-8xl">
                 {roundedMbps}
               </motion.span>
-              <span className="mt-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#C6A15B]">Mbps Download</span>
+              <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-[#C6A15B] sm:text-xs">Mbps Download</span>
             </div>
           </div>
         </Reveal>
 
         {/* Stat cards */}
         <Reveal delay={0.25}>
-          <div className="mx-auto mt-12 grid max-w-3xl grid-cols-3 gap-3 sm:mt-16 sm:gap-4">
+          <div className="mx-auto mt-10 grid max-w-3xl grid-cols-3 gap-2 sm:mt-12 sm:gap-3 lg:mt-16 lg:gap-4">
             <StatCard
-              icon={<ArrowDown className="h-4 w-4" />}
+              icon={<ArrowDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               label="Download"
               value={download.toFixed(0)}
               unit="Mbps"
               highlight
             />
             <StatCard
-              icon={<ArrowUp className="h-4 w-4" />}
+              icon={<ArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               label="Upload"
               value={upload.toFixed(0)}
               unit="Mbps"
             />
             <StatCard
-              icon={<Zap className="h-4 w-4" />}
+              icon={<Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               label="Ping"
               value={ping.toFixed(0)}
               unit="ms"
@@ -161,7 +161,7 @@ export function SpeedSection() {
 
         {/* Retest button + info */}
         <Reveal delay={0.35}>
-          <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-4">
+          <div className="mx-auto mt-8 flex max-w-md flex-col items-center gap-3 sm:mt-10 sm:gap-4">
             <button
               onClick={startTest}
               disabled={testing}
@@ -347,7 +347,7 @@ function StatCard({
   icon: React.ReactNode; label: string; value: string; unit: string; highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-2xl border p-4 text-center backdrop-blur-sm sm:p-5 ${
+    <div className={`rounded-xl border p-3 text-center backdrop-blur-sm sm:rounded-2xl sm:p-4 lg:p-5 ${
       highlight
         ? "border-[#C6A15B]/40 bg-[#C6A15B]/5"
         : "border-white/10 bg-white/[0.03]"
@@ -357,9 +357,9 @@ function StatCard({
       }`}>
         {icon}
       </div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/45">{label}</p>
-      <p className="mt-1 font-serif text-2xl text-white sm:text-3xl">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-white/40">{unit}</p>
+      <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/45 sm:text-[10px]">{label}</p>
+      <p className="mt-1 font-serif text-xl text-white sm:text-2xl lg:text-3xl">{value}</p>
+      <p className="text-[9px] uppercase tracking-wide text-white/40 sm:text-[10px]">{unit}</p>
     </div>
   );
 }
