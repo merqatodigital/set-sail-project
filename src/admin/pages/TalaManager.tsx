@@ -88,6 +88,9 @@ export default function TalaManager() {
   const [loadingTtsModels, setLoadingTtsModels] = useState(true);
   const [ttsVoiceIdInput, setTtsVoiceIdInput] = useState(tala.ttsVoiceId);
 
+  // Female-only filter for the Kokoro voice picker (TALA must stay female).
+  const [femaleOnly, setFemaleOnly] = useState(true);
+
   const [sync, setSync] = useState<SyncState>("idle");
   const [keyInput, setKeyInput] = useState(tala.apiKey);
   const [showKey, setShowKey] = useState(false);
@@ -635,41 +638,78 @@ export default function TalaManager() {
         </div>
 
         {tala.voiceProvider === "kokoro" && (
-          <Field
-            label="Voice"
-            hint="American and British voices, ranked by Kokoro's own quality grade."
-          >
-            <Select value={tala.voiceId} onChange={(e) => void chooseVoice(e.target.value)}>
-              <optgroup label="American — Female">
-                {TALA_KOKORO_VOICES.filter((v) => v.id.startsWith("af_")).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="British — Female">
-                {TALA_KOKORO_VOICES.filter((v) => v.id.startsWith("bf_")).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="American — Male">
-                {TALA_KOKORO_VOICES.filter((v) => v.id.startsWith("am_")).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="British — Male">
-                {TALA_KOKORO_VOICES.filter((v) => v.id.startsWith("bm_")).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </optgroup>
-            </Select>
-          </Field>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#26221C]">
+                Female voices — tap <span className="font-mono">▶</span> to hear, tap the row to choose
+              </p>
+              <label className="flex items-center gap-1.5 text-xs text-[#26221C]/60">
+                <input
+                  type="checkbox"
+                  checked={femaleOnly}
+                  onChange={(e) => setFemaleOnly(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#1F3D2B]"
+                />
+                Female only
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {TALA_KOKORO_VOICES.filter((v) => (femaleOnly ? v.gender === "female" : true)).map((v) => {
+                const isChosen = tala.voiceId === v.id;
+                const isPlaying = voice.previewId === v.id;
+                const name = v.label.split(" — ")[0];
+                return (
+                  <div
+                    key={v.id}
+                    className={`flex items-center gap-2 rounded-xl border p-2.5 transition ${
+                      isChosen
+                        ? "border-[#C6A15B] bg-[#C6A15B]/10 shadow-sm"
+                        : "border-[#26221C]/10 bg-white hover:border-[#C6A15B]/40"
+                    }`}
+                  >
+                    {/* Green light on the chosen voice */}
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        isChosen ? "bg-green-500 shadow-[0_0_8px_2px_rgba(34,197,94,0.5)]" : "bg-[#26221C]/15"
+                      }`}
+                      title={isChosen ? "TALA's live voice" : ""}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void chooseVoice(v.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-medium text-[#26221C]">{name}</p>
+                      <p className="truncate text-[11px] text-[#26221C]/50">
+                        {v.gender === "female" ? "Female" : "Male"} · {v.accent === "british" ? "British" : "American"}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => voice.preview(v.id)}
+                      disabled={Boolean(voice.previewId)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition ${
+                        isPlaying ? "bg-[#C6A15B]" : "bg-[#1F3D2B] hover:opacity-90"
+                      }`}
+                      title="Play sample"
+                    >
+                      {isPlaying ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <PlayCircle className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-[11px] text-[#26221C]/45">
+              All Kokoro voices are free and run in the visitor's browser. The green-lit voice is what every guest
+              hears. Pick one, then use “Test TALA Live” below to confirm.
+            </p>
+          </div>
         )}
 
         {tala.voiceProvider === "openrouter" && (

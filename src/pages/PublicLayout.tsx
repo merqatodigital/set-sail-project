@@ -1,9 +1,26 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer, WhatsAppFloat } from "@/components/site/CtaFooter";
 import { TalaWidget } from "@/components/tala/TalaWidget";
 import { useCms } from "@/context/CmsContext";
+
+class TalaWidgetBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("TALA widget failed without blocking the site", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 export default function PublicLayout() {
   const location = useLocation();
@@ -28,7 +45,9 @@ export default function PublicLayout() {
       <Outlet />
       <Footer />
       <WhatsAppFloat />
-      <TalaWidget />
+      <TalaWidgetBoundary>
+        <TalaWidget />
+      </TalaWidgetBoundary>
     </div>
   );
 }

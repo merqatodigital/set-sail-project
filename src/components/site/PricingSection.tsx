@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { getIcon } from "@/lib/icons";
-import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { openTala } from "@/components/tala/talaOpen";
 import { Reveal } from "./Reveal";
 import { cn } from "@/utils/cn";
 
@@ -67,13 +67,9 @@ export function PricingSection() {
                     </li>
                   ))}
                 </ul>
-                <a
-                  href={buildWhatsAppLink(data.settings.whatsapp, data.settings.contact, {
-                    message: data.settings.whatsapp.bookingMessage,
-                    tokens: { package: pkg.name },
-                  })}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
                   className={cn(
                     "mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:h-12 sm:px-6 sm:text-sm",
                     pkg.featured
@@ -82,7 +78,7 @@ export function PricingSection() {
                   )}
                 >
                   <span>{pkg.buttonLabel}</span>
-                </a>
+                </button>
               </motion.div>
             );
           })}

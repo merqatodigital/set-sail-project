@@ -34,11 +34,12 @@ export const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speec
  * The edge function shares this list; update both together.
  */
 export const TALA_FREE_MODELS = [
-  "deepseek/deepseek-chat-v3-0324:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen3-235b-a22b:free",
-  "google/gemini-2.0-flash-exp:free",
-  "mistralai/mistral-small-3.1-24b-instruct:free",
+  "openai/gpt-oss-20b:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "cohere/north-mini-code:free",
 ] as const;
 
 /** localStorage keys (device-local preferences, never synced). */
@@ -57,30 +58,32 @@ export const TALA_STORAGE = {
  */
 export const TALA_KOKORO_VOICES = [
   // American female
-  { id: "af_heart", label: "Heart — American female (grade A, default)" },
-  { id: "af_bella", label: "Bella — American female (grade A-)" },
-  { id: "af_nicole", label: "Nicole — American female (grade B-)" },
-  { id: "af_kore", label: "Kore — American female (grade C+)" },
-  { id: "af_sarah", label: "Sarah — American female (grade C+)" },
-  { id: "af_aoede", label: "Aoede — American female (grade C+)" },
-  { id: "af_alloy", label: "Alloy — American female (grade C)" },
-  { id: "af_nova", label: "Nova — American female (grade C)" },
-  { id: "af_sky", label: "Sky — American female (grade C-)" },
-  { id: "af_jessica", label: "Jessica — American female (grade D)" },
-  { id: "af_river", label: "River — American female (grade D)" },
+  { id: "af_heart", label: "Heart — American female (grade A, default)", gender: "female", accent: "american" },
+  { id: "af_bella", label: "Bella — American female (grade A-)", gender: "female", accent: "american" },
+  { id: "af_nicole", label: "Nicole — American female (grade B-)", gender: "female", accent: "american" },
+  { id: "af_kore", label: "Kore — American female (grade C+)", gender: "female", accent: "american" },
+  { id: "af_sarah", label: "Sarah — American female (grade C+)", gender: "female", accent: "american" },
+  { id: "af_aoede", label: "Aoede — American female (grade C+)", gender: "female", accent: "american" },
+  { id: "af_alloy", label: "Alloy — American female (grade C)", gender: "female", accent: "american" },
+  { id: "af_nova", label: "Nova — American female (grade C)", gender: "female", accent: "american" },
+  { id: "af_sky", label: "Sky — American female (grade C-)", gender: "female", accent: "american" },
+  { id: "af_jessica", label: "Jessica — American female (grade D)", gender: "female", accent: "american" },
+  { id: "af_river", label: "River — American female (grade D)", gender: "female", accent: "american" },
   // British female
-  { id: "bf_emma", label: "Emma — British female (grade B-)" },
-  { id: "bf_isabella", label: "Isabella — British female (grade C)" },
-  { id: "bf_alice", label: "Alice — British female (grade D)" },
-  { id: "bf_lily", label: "Lily — British female (grade D)" },
+  { id: "bf_emma", label: "Emma — British female (grade B-)", gender: "female", accent: "british" },
+  { id: "bf_isabella", label: "Isabella — British female (grade C)", gender: "female", accent: "british" },
+  { id: "bf_alice", label: "Alice — British female (grade D)", gender: "female", accent: "british" },
+  { id: "bf_lily", label: "Lily — British female (grade D)", gender: "female", accent: "british" },
   // American male
-  { id: "am_fenrir", label: "Fenrir — American male (grade C+)" },
-  { id: "am_michael", label: "Michael — American male (grade C+)" },
-  { id: "am_puck", label: "Puck — American male (grade C+)" },
+  { id: "am_fenrir", label: "Fenrir — American male (grade C+)", gender: "male", accent: "american" },
+  { id: "am_michael", label: "Michael — American male (grade C+)", gender: "male", accent: "american" },
+  { id: "am_puck", label: "Puck — American male (grade C+)", gender: "male", accent: "american" },
   // British male
-  { id: "bm_fable", label: "Fable — British male (grade C)" },
-  { id: "bm_george", label: "George — British male (grade C)" },
+  { id: "bm_fable", label: "Fable — British male (grade C)", gender: "male", accent: "british" },
+  { id: "bm_george", label: "George — British male (grade C)", gender: "male", accent: "british" },
 ] as const;
+
+export type TalaKokoroVoice = (typeof TALA_KOKORO_VOICES)[number];
 
 export const TALA_DEFAULT_VOICE = "af_heart";
 

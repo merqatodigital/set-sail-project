@@ -12,6 +12,7 @@ import {
   Send,
   Sparkles,
   Target,
+  UserPlus,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
@@ -26,19 +27,22 @@ import {
   addTalaTask,
   addTalaWin,
   buildBriefingWhatsAppLink,
+  buildLeadWhatsAppLink,
   fetchTalaBriefings,
   fetchTalaGoals,
   fetchTalaTasks,
   fetchTalaWins,
+  fetchTalaLeads,
   generateTalaBriefing,
   markBriefingWhatsappSent,
   type TalaBriefing,
   type TalaGoal,
+  type TalaLead,
   type TalaTask,
   type TalaWin,
 } from "@/components/tala/talaOps";
 
-type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins";
+type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins" | "leads";
 
 export default function TalaOps() {
   const { data } = useCms();
@@ -61,6 +65,7 @@ export default function TalaOps() {
           { id: "goals", label: "Goals" },
           { id: "tasks", label: "Tasks" },
           { id: "wins", label: "Wins" },
+          { id: "leads", label: "Leads" },
         ]}
       />
       {tab === "chat" && <ChatTab tala={tala} cms={data} notify={notify} />}
@@ -68,6 +73,7 @@ export default function TalaOps() {
       {tab === "goals" && <GoalsTab notify={notify} />}
       {tab === "tasks" && <TasksTab notify={notify} />}
       {tab === "wins" && <WinsTab cms={data} notify={notify} />}
+      {tab === "leads" && <LeadsTab cms={data} />}
     </div>
   );
 }
@@ -82,7 +88,7 @@ function operatorPrompt(siteName: string): string {
     `You are TALA, the AI operations concierge for ${siteName} in San Vicente, Palawan.`,
     `You are speaking with the OWNER or STAFF (not a guest). Be direct, concise and useful.`,
     `You can reference bookings, tours, staff, payments and tasks. When asked for a morning update, give a tight rundown of today's arrivals, departures, tours, bikes out, in-house guests, and any unpaid payroll or money notes.`,
-    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
+    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, and log_payment (record revenue or expense). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
     `Never invent numbers — use what is in context. If you don't know, say so. Keep replies to 1-4 sentences unless detail is asked for.`,
   ].join("\n");
 }
@@ -519,7 +525,7 @@ function WinsTab({
       .map((w) => `- ${w.text}`)
       .join("\n")}`;
     setDigest(null);
-    const out = await tala.send(prompt, buildTalaSystemPrompt(cms), {
+    const out = await tala.send(prompt, buildTalaSystemPrompt(cms, []), {
       model: cms.settings.tala.modelId || undefined,
       adminApiKey: cms.settings.tala.apiKey?.trim() || undefined,
       cms,
@@ -570,6 +576,62 @@ function WinsTab({
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LEADS — captured by TALA (guest chat + scraped). Owner follows up.
+// Each lead has a one-tap WhatsApp link to reopen the conversation.
+// (Inbound auto-reply / Baileys auto-send is a later phase.)
+// ---------------------------------------------------------------------------
+function LeadsTab({ cms }: { cms: import("@/types/cms").CmsData }) {
+  const [leads, setLeads] = useState<TalaLead[] | null>(null);
+  useEffect(() => { fetchTalaLeads().then(setLeads); }, []);
+  const refresh = () => fetchTalaLeads().then(setLeads);
+
+  const followUp = (lead: TalaLead) => {
+    const href = buildLeadWhatsAppLink(lead, cms.settings.whatsapp);
+    window.open(href, "_blank", "noreferrer");
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Leads"
+        description="People TALA captured from guest chats and outreach. Follow up with one tap — WhatsApp opens pre-filled."
+        actions={<Button variant="outline" onClick={refresh}>Refresh</Button>}
+      />
+      {leads === null ? (
+        <p className="text-sm text-[#26221C]/45">Loading…</p>
+      ) : leads.length === 0 ? (
+        <p className="text-sm text-[#26221C]/45">No leads yet. They appear here when TALA captures a guest's name/contact or from outreach.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {leads.map((l) => (
+            <div key={l.id} className="rounded-xl border border-[#26221C]/10 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-serif text-base text-[#26221C]">{l.name || "Unnamed lead"}</p>
+                  <p className="text-xs text-[#26221C]/45">{l.contact || "no contact"} · {l.source}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-[#C6A15B]/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#8A6443]">
+                  {new Date(l.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              {l.note && <p className="mt-2 text-sm text-[#26221C]/70">{l.note}</p>}
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() => followUp(l)}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Follow up on WhatsApp
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

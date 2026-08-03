@@ -204,6 +204,10 @@ export interface UseTalaVoice {
   setVoiceId: (id: string) => void;
   speak: (text: string) => void;
   stop: () => void;
+  /** Audition a specific Kokoro voice id (does not change the saved selection). */
+  preview: (id: string, text?: string) => void;
+  /** The voice id currently auditioning, or null. */
+  previewId: string | null;
 }
 
 export interface UseTalaVoiceOptions {
@@ -221,6 +225,12 @@ export interface UseTalaVoiceOptions {
   ttsModelId?: string;
   /** Voice id for the chosen TTS model (each model defines its own set). */
   ttsVoiceId?: string;
+  /**
+   * When true (public site), the visitor's own localStorage voice choice is
+   * IGNORED and TALA always speaks with the owner's Admin-selected voice.
+   * The owner's Admin console passes false so it can preview/change voices.
+   */
+  ignoreLocalVoice?: boolean;
 }
 
 export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
@@ -239,6 +249,9 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   const [status, setStatus] = useState<TalaVoiceStatus>("idle");
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
   const [voiceId, setVoiceIdState] = useState<string>(() => {
+    // On the public site (ignoreLocalVoice), the owner's Admin-selected voice
+    // is the single source of truth — never a visitor's stale localStorage pick.
+    if (options?.ignoreLocalVoice) return siteDefaultVoice;
     try {
       return localStorage.getItem(TALA_STORAGE.voiceId) || siteDefaultVoice;
     } catch {
@@ -538,6 +551,58 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     [enabled, stop, playQueue],
   );
 
+  // Audition a specific Kokoro voice without changing the saved selection.
+  // Used by the admin "female voice picker" so David can hear each option
+  // before picking. Loads the model on demand (same cached 80 MB), speaks a
+  // short sample as that voice, and reports playing state via previewState.
+  // Defined AFTER `speak` so the [speak, setEnabled] deps don't hit it in the
+  // temporal dead zone (speak is a const declared just above).
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const preview = useCallback(
+    async (id: string, text?: string) => {
+      if (providerRef.current === "openrouter") {
+        // OpenRouter provider has no per-voice sample here; just speak as-is.
+        speak(text || "Hi, I'm TALA — your friend in San Vicente. Lovely to meet you!");
+        return;
+      }
+      if (!kokoroRef.current) {
+        // Kick the loader if it hasn't started (e.g. voice disabled in admin).
+        setEnabled(true);
+      }
+      setPreviewId(id);
+      const sample = text || "Hi, I'm TALA — your friend in San Vicente. Lovely to meet you!";
+      // Wait briefly for the model if still loading, then play one sample blob.
+      let tries = 0;
+      while (!kokoroRef.current && tries < 60) {
+        await new Promise((r) => setTimeout(r, 500));
+        tries++;
+      }
+      const kokoro = kokoroRef.current;
+      if (!kokoro) {
+        setPreviewId(null);
+        return; // model unavailable; nothing to audition
+      }
+      try {
+        const audio = await kokoro.generate(sample, { voice: id });
+        const blob = encodePCM16Wav(audio.audio, audio.sampling_rate);
+        const url = URL.createObjectURL(blob);
+        await new Promise<void>((resolve) => {
+          const el = new Audio(url);
+          audioRef.current = el;
+          el.onended = () => resolve();
+          el.onerror = () => resolve();
+          el.play().catch(() => resolve());
+        });
+        URL.revokeObjectURL(url);
+      } catch {
+        /* audition failed silently */
+      } finally {
+        setPreviewId(null);
+      }
+    },
+    [speak, setEnabled],
+  );
+
   // Some browsers populate speechSynthesis voices asynchronously.
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -559,5 +624,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     setVoiceId,
     speak,
     stop,
+    preview,
+    previewId,
   };
 }

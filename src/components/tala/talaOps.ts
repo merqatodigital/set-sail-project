@@ -199,3 +199,44 @@ export async function fetchTalaWins(): Promise<TalaWin[]> {
   if (error || !data) return [];
   return data as TalaWin[];
 }
+
+// ---- Leads (tala_leads) ----------------------------------------------
+export interface TalaLead {
+  id: string;
+  name: string;
+  contact: string;
+  note: string;
+  source: string;
+  created_at: string;
+}
+
+/** Newest-first list of leads TALA captured (chat + scraped). */
+export async function fetchTalaLeads(): Promise<TalaLead[]> {
+  if (!isSupabaseConnected() || !supabase) return [];
+  const { data, error } = await supabase
+    .from("tala_leads")
+    .select("id,name,contact,note,source,created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+  return data as TalaLead[];
+}
+
+/**
+ * Build a wa.me deep link to follow up a lead. No API — the admin taps it and
+ * WhatsApp opens with a ready message. (Inbound/auto-reply is a later phase.)
+ */
+export function buildLeadWhatsAppLink(
+  lead: Pick<TalaLead, "name" | "contact" | "note">,
+  wa: { numbers: Array<{ number: string; isPrimary?: boolean }> },
+): string {
+  const primary = wa.numbers.find((n) => n.isPrimary) || wa.numbers[0];
+  const digits = (primary?.number || "").replace(/[^0-9]/g, "");
+  const base = `https://wa.me/${digits}`;
+  const who = lead.name?.trim() ? lead.name.trim().split(" ")[0] : "there";
+  const text =
+    `Hi ${who}! This is Marina Terrace — following up on your interest in staying / working with us. ` +
+    (lead.note?.trim() ? `You mentioned: ${lead.note.trim()} ` : "") +
+    `How can we help you book?`;
+  return `${base}?text=${encodeURIComponent(text)}`;
+}

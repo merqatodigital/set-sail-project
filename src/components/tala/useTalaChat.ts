@@ -8,7 +8,13 @@ import {
   TALA_SUPABASE_ANON_KEY,
   type TalaMessage,
 } from "./talaConfig";
-import { executeTalaTool, type TalaToolContext } from "./talaTools";
+import {
+  TALA_TOOL_SCHEMAS,
+  executeTalaTool,
+  captureGuestLead,
+  confirmBookingDraft,
+  type TalaToolContext,
+} from "./talaTools";
 import {
   classifyHeuristically,
   parseClassification,
@@ -159,11 +165,14 @@ async function askEdgeFunction(
   if (!res.ok) {
     throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
   }
-  const message = data?.message as AssistantReply | undefined;
-  if (!message || (!message.content && !message.tool_calls?.length)) {
+  // The edge function already runs the full agent<->tools loop server-side
+  // and returns only the final text as { reply }. It never sends tool_calls
+  // back to the client — that's why this reads `reply`, not `message`.
+  const content = typeof data?.reply === "string" ? data.reply.trim() : "";
+  if (!content) {
     throw new Error("TALA returned an empty reply.");
   }
-  return message;
+  return { content, tool_calls: undefined };
 }
 
 /**
@@ -207,6 +216,8 @@ export interface UseTalaChat {
   messages: TalaMessage[];
   thinking: boolean;
   error: string | null;
+  /** Booking draft returned by request_booking (guest mode) awaiting confirm. */
+  pendingDraft: BookingDraft | null;
   /** Classification + tools from the most recent completed turn (agent-graph telemetry). */
   lastRun: TalaRunInfo | null;
   send: (
@@ -220,7 +231,25 @@ export interface UseTalaChat {
       owner?: boolean;
     },
   ) => Promise<string | null>;
+  /** Persists a guest-confirmed booking draft (the human Confirm action). */
+  confirmDraft: (
+    extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
+  ) => void;
+  /** Dismisses the pending draft card without confirming. */
+  clearDraft: () => void;
   reset: () => void;
+}
+
+interface BookingDraft {
+  id: string;
+  reference: string;
+  guestName: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  amount: number;
+  notes: string;
 }
 
 export function useTalaChat(): UseTalaChat {
@@ -228,6 +257,7 @@ export function useTalaChat(): UseTalaChat {
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<TalaRunInfo | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const inFlight = useRef(false);
   // Use the shared CMS store so owner-mode writes persist exactly like the
   // admin managers do (through CmsContext -> cms_data).
@@ -243,7 +273,7 @@ export function useTalaChat(): UseTalaChat {
     async (
       text: string,
       systemPrompt: string,
-      options?: { model?: string; adminApiKey?: string; cms?: CmsData },
+      options?: { model?: string; adminApiKey?: string; cms?: CmsData; owner?: boolean },
     ): Promise<string | null> => {
       const trimmed = text.trim();
       if (!trimmed || inFlight.current) return null;
@@ -256,6 +286,12 @@ export function useTalaChat(): UseTalaChat {
       const history: TalaMessage[] = [...messagesRef.current, userMsg];
       messagesRef.current = history;
       setMessages(history);
+
+      // Auto-capture a lead whenever a guest shares a contact/name — even if
+      // the chat never reaches a booking. Skipped for the operator face.
+      if (!options?.owner) {
+        void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
+      }
 
       let wire: WireMessage[] = [
         { role: "system", content: systemPrompt },
@@ -304,6 +340,9 @@ export function useTalaChat(): UseTalaChat {
                   } satisfies TalaToolContext,
                 )
               : { error: "Tool unavailable — no site data loaded." };
+            // Surface a guest booking draft so the widget can show a confirm card.
+            const draft = (result as { draft?: BookingDraft }).draft;
+            if (draft) setPendingDraft(draft);
             wire.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
           }
           reply = await requestReply(wire);
@@ -338,7 +377,7 @@ export function useTalaChat(): UseTalaChat {
         setThinking(false);
       }
     },
-    [],
+    [persistCms],
   );
 
   const reset = useCallback(() => {
@@ -346,7 +385,33 @@ export function useTalaChat(): UseTalaChat {
     setMessages([]);
     setError(null);
     setLastRun(null);
+    setPendingDraft(null);
   }, []);
 
-  return { messages, thinking, error, lastRun, send, reset };
+  const clearDraft = useCallback(() => setPendingDraft(null), []);
+
+  const confirmDraft = useCallback(
+    (
+      extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
+    ) => {
+      if (!pendingDraft) return;
+      const notes = [
+        pendingDraft.notes,
+        extra?.email ? `Email: ${extra.email}` : "",
+        extra?.nomad ? "Digital nomad" : "",
+        extra?.working ? "Working while staying" : "",
+        extra?.tours?.length ? `Tours of interest: ${extra.tours.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      confirmBookingDraft(
+        { ...pendingDraft, notes },
+        persistCms,
+      );
+      setPendingDraft(null);
+    },
+    [pendingDraft, persistCms],
+  );
+
+  return { messages, thinking, error, lastRun, send, reset, clearDraft, pendingDraft, confirmDraft };
 }

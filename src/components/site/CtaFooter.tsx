@@ -1,15 +1,14 @@
-import { MapPin, Phone, Mail, MessageCircle } from "lucide-react";
+import { MapPin, Phone, Mail, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
 import { safeHref, safeMailto, safeTel } from "@/lib/security";
-import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { openTala } from "@/components/tala/talaOpen";
 import { Reveal } from "./Reveal";
 import { InstagramIcon, FacebookIcon, YoutubeIcon } from "./SocialIcons";
 
 export function CtaSection() {
   const { data } = useCms();
   const home = data.homepage;
-  const waHref = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact);
 
   return (
     <section className="relative overflow-hidden bg-[#1B1812] py-24 lg:py-28">
@@ -25,15 +24,14 @@ export function CtaSection() {
           <p className="max-w-xl text-base leading-relaxed text-white/60">{home.ctaSubtext}</p>
         </Reveal>
         <Reveal delay={0.2}>
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => openTala("Hi TALA! I'd like to check availability and book a stay.")}
             className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#C6A15B] px-6 text-[13px] font-medium tracking-wide text-[#221D14] shadow-[0_6px_20px_rgba(198,161,91,0.4),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-200 hover:bg-[#D9BA80] hover:shadow-[0_10px_28px_rgba(198,161,91,0.55),inset_0_1px_0_rgba(255,255,255,0.25)] active:scale-[0.98] sm:h-14 sm:px-8 sm:text-sm"
           >
-            <MessageCircle className="h-4 w-4" />
+            <Sparkles className="h-4 w-4" />
             <span>{home.ctaButtonLabel}</span>
-          </a>
+          </button>
         </Reveal>
       </div>
     </section>
@@ -43,7 +41,6 @@ export function CtaSection() {
 export function Footer() {
   const { data } = useCms();
   const c = data.settings.contact;
-  const waHref = buildWhatsAppLink(data.settings.whatsapp, c);
 
   const socials = [
     { href: c.social.instagram, Icon: InstagramIcon, label: "Instagram" },
@@ -129,15 +126,14 @@ export function Footer() {
           <div className="col-span-2 lg:col-span-1">
             <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Booking</p>
             <p className="mb-4 text-sm leading-relaxed text-white/50">{c.businessHours}</p>
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={() => openTala("Hi TALA! I'd like to book or ask about availability.")}
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[#C6A15B] px-5 text-[12px] font-medium tracking-wide text-[#221D14] shadow-[0_2px_10px_rgba(198,161,91,0.35),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-200 hover:bg-[#D9BA80] active:scale-[0.98] sm:w-auto"
             >
-              <MessageCircle className="h-4 w-4" />
-              <span>Message on WhatsApp</span>
-            </a>
+              <Sparkles className="h-4 w-4" />
+              <span>Book with TALA</span>
+            </button>
           </div>
         </div>
 
@@ -169,17 +165,15 @@ export function Footer() {
 export function WhatsAppFloat() {
   const { data } = useCms();
   if (!data.settings.whatsapp.showFloatingButton) return null;
-  const href = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact);
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      aria-label="Chat on WhatsApp"
+    <button
+      type="button"
+      onClick={() => openTala("Hi TALA! How can you help me today?")}
+      aria-label="Chat with TALA"
       className="group fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition-all duration-200 hover:scale-110 hover:shadow-[0_10px_28px_rgba(37,211,102,0.55)] active:scale-95 sm:bottom-6 sm:right-6 sm:h-14 sm:w-14"
     >
       <span className="pointer-events-none absolute inset-0 rounded-full bg-[#25D366]/40 opacity-0 transition-opacity duration-500 group-hover:animate-ping group-hover:opacity-75" />
-      <MessageCircle className="relative h-5 w-5 sm:h-6 sm:w-6" />
-    </a>
+      <Sparkles className="relative h-5 w-5 sm:h-6 sm:w-6" />
+    </button>
   );
 }

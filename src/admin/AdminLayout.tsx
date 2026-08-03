@@ -67,6 +67,14 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "TALA",
+    items: [
+      { to: "/admin/tala", label: "TALA Setup", icon: Bot },
+      { to: "/admin/tala/knowledge", label: "TALA Knowledge Base", icon: BookOpen },
+      { to: "/admin/tala/ops", label: "TALA Operations", icon: Brain },
+    ],
+  },
+  {
     title: "Website Content",
     items: [
       { to: "/admin/homepage", label: "Homepage", icon: Home },
@@ -89,9 +97,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/admin/contact", label: "Contact", icon: Phone },
       { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
-      { to: "/admin/tala", label: "TALA (AI Concierge)", icon: Bot },
-      { to: "/admin/tala/knowledge", label: "TALA Knowledge Base", icon: BookOpen },
-      { to: "/admin/tala/ops", label: "TALA Operations", icon: Brain },
       { to: "/admin/seo", label: "SEO", icon: Search },
       { to: "/admin/appearance", label: "Appearance", icon: Palette },
       { to: "/admin/settings", label: "Settings", icon: Settings },

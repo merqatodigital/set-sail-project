@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   Mic,
@@ -10,14 +10,17 @@ import {
   Volume2,
   VolumeX,
   X,
+  MessageCircle,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { buildTalaSystemPrompt, talaGreeting } from "./talaPersona";
 import { useTalaChat, getDevApiKey, setDevApiKey } from "./useTalaChat";
 import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { useTalaKnowledge } from "./useTalaKnowledge";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
+import { setTalaOpenListener, openTala } from "./talaOpen";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
@@ -47,9 +50,16 @@ export function TalaWidget() {
     apiKey: data.settings.tala.apiKey || undefined,
     ttsModelId: data.settings.tala.ttsModelId || undefined,
     ttsVoiceId: data.settings.tala.ttsVoiceId || undefined,
+    ignoreLocalVoice: true,
   });
   const knowledge = useTalaKnowledge();
 
+  // Fallback to the human team — always points at the primary WhatsApp number
+  // configured in Admin → WhatsApp. Shows as a persistent button and again
+  // whenever TALA errors or can't finish the job.
+  const waHref = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact, {
+    message: `Hi Marina Terrace! I was just chatting with TALA and need a hand: `,
+  });
   const systemPrompt = useMemo(
     () => buildTalaSystemPrompt(data, knowledge.entries),
     [data, knowledge.entries],
@@ -68,6 +78,23 @@ export function TalaWidget() {
     });
     if (reply) voice.speak(reply);
   };
+
+  const openAndPrefill = useCallback(
+    (message?: string) => {
+      setOpen(true);
+      if (message && message.trim()) {
+        // Seed the input and send immediately so TALA responds to the intent.
+        void submit(message);
+      }
+    },
+    [submit],
+  );
+
+  // Let any public CTA open TALA with a prefilled intent via openTala().
+  useEffect(() => {
+    setTalaOpenListener(openAndPrefill);
+    return () => setTalaOpenListener(null);
+  }, [openAndPrefill]);
 
   const speech = useSpeechInput((finalText) => void submit(finalText));
 
@@ -193,18 +220,17 @@ export function TalaWidget() {
               style={{ borderColor: `${GOLD}33`, color: INK }}
             >
               <label className="mb-1 block font-medium">Voice</label>
-              <select
-                value={voice.voiceId}
-                onChange={(e) => voice.setVoiceId(e.target.value)}
-                className="mb-3 w-full rounded-md border bg-white px-2 py-1.5"
+              {/* Read-only: TALA's voice is owner-controlled in Admin → TALA.
+                  Visitors (including foreigners on their own devices) must NOT
+                  be able to override it, so we show the active voice but don't
+                  let them change it — the gear is a dev/diagnostic panel only. */}
+              <div
+                className="mb-3 w-full rounded-md border bg-white/60 px-2 py-1.5"
                 style={{ borderColor: `${GOLD}55` }}
               >
-                {TALA_KOKORO_VOICES.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
+                {TALA_KOKORO_VOICES.find((v) => v.id === voice.voiceId)?.label ?? voice.voiceId}
+                <span className="ml-1 opacity-50">(set in Admin)</span>
+              </div>
               <label className="mb-1 block font-medium">
                 Dev OpenRouter key{" "}
                 <span className="font-normal opacity-60">
@@ -253,6 +279,30 @@ export function TalaWidget() {
                 {chat.error}
               </p>
             )}
+
+            {/* Guest booking verification + visitor details form — TALA
+                drafted it; the guest fills the few missing bits and confirms. */}
+            {chat.pendingDraft && (
+              <BookingFormCard
+                draft={chat.pendingDraft}
+                tours={(data.operations?.tours ?? []).map((t) => ({ name: t.name }))}
+                onConfirm={(extra) => chat.confirmDraft(extra)}
+                onEdit={() => chat.clearDraft()}
+              />
+            )}
+
+            {/* Fallback to a human — always available, and the safety net when
+                TALA can't finish the job. */}
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              className="mx-3 mb-2 flex items-center justify-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors hover:bg-white"
+              style={{ borderColor: "#25D36688", color: "#1F7A3D", backgroundColor: "#25D36614" }}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              {chat.error ? "TALA hit a snag — message us on WhatsApp" : "Prefer a human? Message us on WhatsApp"}
+            </a>
           </div>
 
           {/* Composer */}
@@ -322,6 +372,167 @@ function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
         }
       >
         {text}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Visitor booking form — shown after TALA drafts a booking. TALA already
+// knows name/room/dates; this lets the guest refine guests, add their email,
+// and tell us about their stay (nomad? working? tours?) before the human
+// team sees it. Confirm = the guest's human action; we never auto-write.
+// ---------------------------------------------------------------------------
+type DraftExtra = { email?: string; nomad?: boolean; working?: boolean; tours?: string[] };
+
+function BookingFormCard({
+  draft,
+  tours,
+  onConfirm,
+  onEdit,
+}: {
+  draft: {
+    id: string;
+    reference: string;
+    guestName: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+    amount: number;
+    notes: string;
+  };
+  tours: { name: string }[];
+  onConfirm: (extra: DraftExtra) => void;
+  onEdit: () => void;
+}) {
+  const [email, setEmail] = useState(draft.notes.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0] ?? "");
+  const [guests, setGuests] = useState(Math.max(1, draft.guests || 1));
+  const [nomad, setNomad] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+
+  const toggleTour = (name: string) =>
+    setPicked((p) => (p.includes(name) ? p.filter((x) => x !== name) : [...p, name]));
+
+  const nights =
+    Math.max(
+      0,
+      Math.round(
+        (new Date(draft.checkOut).getTime() - new Date(draft.checkIn).getTime()) / 86400000,
+      ),
+    ) || 1;
+
+  return (
+    <div
+      className="mx-1 rounded-xl border-2 px-3.5 py-3"
+      style={{ borderColor: GOLD, backgroundColor: "#FFFFFF", color: INK }}
+    >
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: GOLD }}>
+        <Sparkles className="h-3.5 w-3.5" /> Your booking — please confirm
+      </p>
+      <dl className="space-y-1 text-sm">
+        <div className="flex justify-between gap-2"><dt className="opacity-60">Name</dt><dd className="font-medium text-right">{draft.guestName}</dd></div>
+        <div className="flex justify-between gap-2"><dt className="opacity-60">Room / Plan</dt><dd className="font-medium text-right">{draft.roomType}</dd></div>
+        <div className="flex justify-between gap-2"><dt className="opacity-60">Check-in</dt><dd className="font-medium">{draft.checkIn}</dd></div>
+        <div className="flex justify-between gap-2"><dt className="opacity-60">Check-out</dt><dd className="font-medium">{draft.checkOut}</dd></div>
+        <div className="flex justify-between gap-2"><dt className="opacity-60">Nights</dt><dd className="font-medium">{nights}</dd></div>
+      </dl>
+
+      <div className="mt-3 space-y-2.5">
+        <label className="flex items-center justify-between gap-2 text-sm">
+          <span className="opacity-70">Guests</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={guests}
+            onChange={(e) => setGuests(Math.max(1, Number(e.target.value) || 1))}
+            className="w-16 rounded-md border px-2 py-1 text-right text-sm"
+            style={{ borderColor: `${GOLD}55` }}
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="opacity-70">Email (so we can confirm)</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com"
+            className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+            style={{ borderColor: `${GOLD}55` }}
+          />
+        </label>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setNomad((v) => !v)}
+            className="flex-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors"
+            style={
+              nomad
+                ? { backgroundColor: GREEN, color: "#fff" }
+                : { border: `1px solid ${GOLD}55`, color: INK }
+            }
+          >
+            Digital nomad
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorking((v) => !v)}
+            className="flex-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors"
+            style={
+              working
+                ? { backgroundColor: GREEN, color: "#fff" }
+                : { border: `1px solid ${GOLD}55`, color: INK }
+            }
+          >
+            Working here
+          </button>
+        </div>
+
+        {tours.length > 0 && (
+          <div>
+            <p className="mb-1 text-[11px] opacity-70">Tours you might like (optional)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {tours.map((t) => (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() => toggleTour(t.name)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors"
+                  style={
+                    picked.includes(t.name)
+                      ? { backgroundColor: GOLD, color: "#fff" }
+                      : { border: `1px solid ${GOLD}55`, color: INK }
+                  }
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-2 text-[11px] opacity-60">Pending — the team confirms after you submit.</p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => onConfirm({ email: email.trim() || undefined, nomad, working, tours: picked })}
+          className="flex-1 rounded-full py-2 text-xs font-semibold text-white transition-colors hover:opacity-90"
+          style={{ backgroundColor: GREEN }}
+        >
+          Confirm booking
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-full border px-3 py-2 text-xs font-medium transition-colors hover:bg-black/5"
+          style={{ borderColor: `${GOLD}55` }}
+        >
+          Edit
+        </button>
       </div>
     </div>
   );

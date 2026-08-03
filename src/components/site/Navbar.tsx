@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Menu, MessageCircle, X, ChevronDown } from "lucide-react";
+import { Menu, Sparkles, X, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
-import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { openTala } from "@/components/tala/talaOpen";
 import { cn } from "@/utils/cn";
 
 const LINKS = [
@@ -100,10 +100,9 @@ export function Navbar() {
           </div>
 
           {data.settings.whatsapp.showInNavbar && (
-            <a
-              href={buildWhatsAppLink(data.settings.whatsapp, data.settings.contact)}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={() => openTala("Hi TALA! I'd like to ask about staying or booking.")}
               className={cn(
                 "inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
                 solid
@@ -111,9 +110,9 @@ export function Navbar() {
                   : "border border-white/25 bg-white/10 text-white backdrop-blur-sm hover:border-white/50 hover:bg-white/20"
               )}
             >
-              <MessageCircle className="h-3.5 w-3.5" />
-              <span>WhatsApp</span>
-            </a>
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Talk to TALA</span>
+            </button>
           )}
         </nav>
 
@@ -159,14 +158,13 @@ export function Navbar() {
                 <ChevronDown className="pointer-events-none absolute right-4 h-4 w-4 text-[#26221C]/60" />
               </div>
 
-              <a
-                href={buildWhatsAppLink(data.settings.whatsapp, data.settings.contact)}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => openTala("Hi TALA! I'd like to ask about staying or booking.")}
                 className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#26221C] px-5 text-sm font-medium text-[#F5EFE2] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition active:scale-[0.98]"
               >
-                <MessageCircle className="h-4 w-4" /> WhatsApp
-              </a>
+                <Sparkles className="h-4 w-4" /> Talk to TALA
+              </button>
             </div>
           </motion.div>
         )}

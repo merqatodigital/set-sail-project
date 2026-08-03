@@ -1,45 +1,46 @@
-# Fix TALA voice lag
+# Fix TALA chat error, voice lag, and the stuck loading spinner
 
-## What's causing the lag
+Three regressions came back with the last sync. All three are confirmed in the current code. No design or copy changes.
 
-The lag is in `src/components/tala/useTalaVoice.ts`, not the network. Kokoro-82M runs entirely in the browser on CPU (WASM, q8). Today the pipeline is strictly sequential:
+## 1. TALA chat backend is broken (why you see the error in the chat bubble)
+
+In the TALA chat function there is a line missing its `const` keyword:
 
 ```text
-LLM reply arrives
-   └─ split into sentences
-        └─ generate sentence 1  ── wait ──►  play sentence 1
-                                                └─ generate sentence 2 ── wait ──► play sentence 2
-                                                                                       └─ ...
+supabase/functions/tala-chat/index.ts (inside runDailyOpsTool)
+  alerts: string[] = [];      ->  const alerts: string[] = [];
 ```
 
-So the delay before TALA starts talking = full synthesis time of the first sentence, and every gap between sentences = full synthesis time of the next one. On a modest laptop that's easily 1–3 s per sentence — which is what "lag" feels like even on fast internet.
+That single line is a parse error, so the whole function fails to load and every guest/owner message returns a 5xx. Fix: add the missing keyword, redeploy `tala-chat`, then send a real test message and confirm a reply comes back (this also clears the 503 errors in the logs).
 
-Two other smaller contributors:
-- Kokoro only starts downloading when voice is first toggled on / the first reply arrives, so the very first reply can also wait on the 80 MB model download.
-- `dtype: "q8"` is the heaviest of Kokoro's quantized weights on CPU; `q4` / `q4f16` are noticeably faster with negligible quality loss for a concierge voice.
+Also verify the `TALA_TOOL_SCHEMAS is not defined` message in your screenshot: the import exists in the current code, so the most likely cause is that you were on the previously published bundle. After the redeploy I'll reload the chat and confirm the message is gone; if it still appears I'll trace the import chain in `talaTools.ts` and fix it.
 
-## The fix
+## 2. TALA voice laggy and robotic again
 
-Change is scoped to `src/components/tala/useTalaVoice.ts` only — no UI, copy, or server changes.
+The earlier responsiveness fixes were reverted. Restore them exactly as before:
 
-1. **Pipeline synthesis with playback.** Keep a small look-ahead: while sentence N is playing, generate sentence N+1 in the background. First-sentence latency is unchanged (that's a hard floor), but every subsequent sentence starts instantly instead of after a gap. Concretely, replace the "generate → play → generate → play" loop with two coordinated tasks:
-   - a producer that pulls the next queued chunk, calls `kokoro.generate`, and pushes the resulting WAV blob URL into a small ready-queue (cap 2 so memory stays bounded),
-   - a consumer that pops the next ready blob and plays it via the existing `<audio>` element.
-   Both honour the existing `generationRef` cancellation token so `stop()` still cuts everything cleanly, and the browser-speech fallback path is left untouched.
+- Bring the Kokoro wait cap back down (45s of silence -> ~8s) so the natural voice doesn't stall and the browser ("robotic") voice isn't used as often.
+- Restore the pipelined synthesis so the next chunk is generated while the current one plays, instead of one network round-trip per chunk.
+- Restore the `active` option and pass `active: open` from the widget, so the ~80 MB voice model only downloads when someone actually opens the chat, not on every page load.
+- Restore `rec.stop()` on the first final speech result so there's no ~1.5s trailing pause before the turn is sent.
+- Restore the lazy/Suspense boundary around the TALA widget in `PublicLayout.tsx` so the widget bundle doesn't load on first paint.
 
-2. **Shorten the first chunk.** Update `splitSentences` so the *first* returned chunk is allowed to be short (drop the "merge short fragments" rule for index 0). A short opening clause ("Hi! Sure —") synthesizes in a fraction of the time of a full sentence, so TALA starts talking sooner; the rest of the reply keeps the current natural chunking.
+Voice quality stays on the `q8` model — the low quants are what made it sound robotic, so that does not change.
 
-3. **Pre-warm Kokoro earlier.** Kick off `KokoroTTS.from_pretrained` as soon as the TALA widget mounts with voice enabled, instead of waiting for the first reply. The model then downloads/initialises in parallel with the user reading the greeting and typing, so by the time the first assistant reply arrives it's usually ready. `pendingSpeakRef` / `KOKORO_WAIT_CAP_MS` behaviour is unchanged.
+## 3. Site can get stuck on "Loading Marina Terrace…"
 
-4. **Switch quantization to `q4f16`.** Change the `KokoroTTS.from_pretrained` options from `dtype: "q8"` to `dtype: "q4f16"`. Smaller download, meaningfully faster CPU inference, quality difference is not audible on a concierge voice. If a browser rejects that dtype, fall back to `q8` in the same catch block that today falls back to browser voices.
+`CmsProvider` currently starts with no data and blocks the entire site behind the spinner until the database responds, and the database fetch has no timeout. Fix:
 
-## Out of scope (kept as-is)
+- Restore the synchronous cached read so returning visitors paint instantly from local content, then refresh from the database in the background.
+- Restore the 6s timeout on the `cms_data` fetch so a stalled request falls back to cached/default content instead of spinning forever.
+- Keep the spinner only for the genuine first-load-with-no-cache case.
 
-- Web Speech fallback, voice picker, admin default voice, `stop()` semantics, `pendingSpeakRef` wait cap, PCM16 WAV encoder, chat/LLM path.
-- No new dependency, no server work, no config change.
+## Also (quiet fix)
 
-## Verification
+Saving content is hitting the browser storage quota (`marina-terrace-cms-v1 exceeded the quota`) because images are stored inline in the cached copy. I'll make the local cache tolerate that instead of throwing an unhandled error, so admin saves never break the page.
 
-- Load `/`, open TALA, ask a multi-sentence question. Expect: audible speech within ~1 s of the reply text appearing, and no silent gap between sentences.
-- Toggle voice off/on mid-reply — playback should still cut immediately.
-- Hard-reload with cache cleared — first visit's first reply is still slower (model download), but the second reply onward is snappy; second visit onward is snappy from the first reply.
+## Verification before I report done
+
+- Redeploy `tala-chat` and send a live message; confirm a reply, not an error.
+- Load the site with a cold and a warm cache and confirm no indefinite spinner.
+- Open TALA, confirm the natural voice speaks quickly and the model isn't fetched before the chat is opened.

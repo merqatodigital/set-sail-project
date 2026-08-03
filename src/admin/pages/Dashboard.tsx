@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { Tags, Images, Newspaper, Quote, HelpCircle, ArrowUpRight, ExternalLink, CalendarCheck, Ship, Bike, CircleDollarSign } from "lucide-react";
+import { Tags, Images, Newspaper, Quote, HelpCircle, ArrowUpRight, ExternalLink, CalendarCheck, Ship, Bike, CircleDollarSign, Bot, MessageCircle } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { formatPHP } from "../ops/opsUtils";
+import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 
 export default function Dashboard() {
   const { data } = useCms();
+  const brief = computeBriefing(data);
 
   const stats = [
     { label: "Pricing Packages", value: data.pricing.length, icon: Tags, to: "/admin/pricing" },
@@ -25,8 +27,8 @@ export default function Dashboard() {
         description="Your control center for the website and the day-to-day operations of Marina Terrace."
         actions={
           <>
-            <Link to="/admin/operations" className="inline-flex items-center gap-1.5 rounded-full bg-[#C6A15B] px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#221D14] hover:bg-[#B8924B]">
-              <CalendarCheck className="h-3.5 w-3.5" /> Operations
+            <Link to="/admin/tala/ops" className="inline-flex items-center gap-1.5 rounded-full bg-[#C6A15B] px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#221D14] hover:bg-[#B8924B]">
+              <Bot className="h-3.5 w-3.5" /> Talk to TALA
             </Link>
             <Link to="/" target="_blank" className="inline-flex items-center gap-1.5 rounded-full bg-[#26221C] px-4 py-2 text-xs font-medium uppercase tracking-wide text-white hover:bg-[#3a3327]">
               <ExternalLink className="h-3.5 w-3.5" /> View Live Site
@@ -34,6 +36,47 @@ export default function Dashboard() {
           </>
         }
       />
+
+      {/* TALA — she runs the site, so she's front and center on login. */}
+      <div className="mb-8 overflow-hidden rounded-2xl border border-[#26221C]/8 bg-[#1B1812] p-6 text-white shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#C6A15B]">
+              <Bot className="h-5 w-5 text-[#221D14]" strokeWidth={1.75} />
+            </span>
+            <div>
+              <p className="font-serif text-lg leading-tight">TALA — your operations agent</p>
+              <p className="text-xs text-white/45">Live read of the property right now</p>
+            </div>
+          </div>
+          <Link to="/admin/tala/ops" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15">
+            <MessageCircle className="h-3.5 w-3.5" /> Open console
+          </Link>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <TalaStat value={String(brief.inHouse)} label="Guests In-House" />
+          <TalaStat value={String(brief.arrivalsToday)} label="Arrivals Today" />
+          <TalaStat value={String(brief.departuresToday)} label="Departures Today" />
+          <TalaStat value={String(brief.toursToday)} label="Tours Today" />
+          <TalaStat value={String(brief.bikesOut)} label="Bikes Out" />
+          <TalaStat
+            value={brief.unpaidPayroll > 0 ? formatPHP(brief.unpaidPayroll) : "₱0"}
+            label="Unpaid Payroll"
+            alert={brief.unpaidPayroll > 0}
+          />
+        </div>
+
+        {brief.highlights.length > 0 && (
+          <p className="mt-4 text-sm text-white/70">
+            {brief.highlights.slice(0, 3).map((h, i) => (
+              <span key={i} className="mr-2 inline-flex rounded-full bg-white/8 px-2.5 py-1 text-xs text-white/80">
+                {h}
+              </span>
+            ))}
+          </p>
+        )}
+      </div>
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Link to="/admin/bookings" className="group rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -111,13 +154,22 @@ export default function Dashboard() {
         <div className="rounded-2xl border border-[#26221C]/8 bg-white p-6">
           <h3 className="font-serif text-lg text-[#26221C]">Quick Tips</h3>
           <ul className="mt-3 space-y-2 text-sm text-[#26221C]/60">
-            <li>• Homepage → reorder or hide sections instantly.</li>
-            <li>• Gallery → drag thumbnails to reorder.</li>
+            <li>• Talk to TALA → create bookings, tours, mark rentals.</li>
+            <li>• TALA → Operations → see her daily morning brief.</li>
             <li>• Pricing → mark one package "Most Popular".</li>
             <li>• Settings → replace the temporary passkey any time.</li>
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+function TalaStat({ value, label, alert }: { value: string; label: string; alert?: boolean }) {
+  return (
+    <div className="rounded-xl bg-white/5 p-3">
+      <p className={`font-serif text-2xl ${alert ? "text-[#E8B04B]" : "text-white"}`}>{value}</p>
+      <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
     </div>
   );
 }
