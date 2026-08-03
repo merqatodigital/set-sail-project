@@ -525,7 +525,7 @@ function WinsTab({
       .map((w) => `- ${w.text}`)
       .join("\n")}`;
     setDigest(null);
-    const out = await tala.send(prompt, buildTalaSystemPrompt(cms, []), {
+    const out = await tala.send(prompt, buildTalaSystemPrompt(cms), {
       model: cms.settings.tala.modelId || undefined,
       adminApiKey: cms.settings.tala.apiKey?.trim() || undefined,
       cms,

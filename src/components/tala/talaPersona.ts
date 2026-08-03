@@ -1,20 +1,81 @@
 import type { CmsData } from "@/types/cms";
-import { knowledgeForPrompt, type TalaKnowledgeEntry } from "./talaKnowledge";
 
 // ---------------------------------------------------------------------------
-// TALA's persona — adapted from the KAPWA Resort OS system prompt
-// (packages/agent-core/src/agent_core/prompts/system.py) for a guest-facing,
-// voice-first concierge. The ops-side rules (approvals, audit trail, task
-// creation) stay in the KAPWA backend; this prompt covers everything a
-// website visitor needs, grounded in live CMS data so TALA never invents
-// prices or amenities.
+// TALA's persona — knowledge is HARDCODED here for instant access.
+// No Supabase fetch needed. No lag. Works offline.
 // ---------------------------------------------------------------------------
 
 function cleanLines(lines: Array<string | null | undefined | false>): string {
   return lines.filter(Boolean).join("\n");
 }
 
-export function buildTalaSystemPrompt(cms: CmsData, knowledge: TalaKnowledgeEntry[] = []): string {
+// All knowledge baked in — fetched once at build time, zero runtime latency.
+const HARDCODED_KNOWLEDGE = `Internet Speed: We use redundant Starlink Business connections with Smart 5G/4G LTE failover. Speeds average 80-150 Mbps.
+Internet Drops: Our system automatically switches to 5G backup in under 2 seconds during any satellite drops to ensure uninterrupted video calls.
+Workspace Hours: The rooftop workspace is open daily from 6:00 AM to 11:00 PM.
+Power Outages: We have an on-site backup generator. Power outlets are integrated at every rooftop seat so your work is never interrupted.
+Workspace Noise Level: We maintain a Quiet Deep Work Policy during daytime hours to protect focus for calls and deep work.
+Non-Guest Access: Non-guests can access the rooftop workspace by purchasing a Day Pass for P1040/day which includes high-speed Wi-Fi and kitchen utilities.
+Outdoor Glare: The workspace features heavy canvas shading engineered to block direct tropical glare while maximizing cross-breeze and screen visibility.
+Evening Vibe: At 5:00 PM we have a sunset reset. Laptops close the vinyl turntable comes on and guests enjoy a relaxed evening with community dinners.
+Workspace Views: The rooftop offers panoramic ocean views. Every seat faces the water so you can watch local bancas drift by.
+Video Calls: Yes our connection is engineered specifically for video calls like Zoom or Google Meet and large uploads without lagging.
+Anti-Restaurant Concept: We run a shared community kitchen model. You can buy fresh seafood locally cook it and our team handles all the cleanup.
+Dishwashing: You do not have to wash dishes. Our local staff handles all dishwashing and resets the kitchen after you cook.
+Shared Pantry: The shared kitchen includes free premium cooking oils real spices salt pepper and daily cooking staples.
+Buying Fresh Seafood: You can buy the mornings fresh catch directly from the Poblacion port just a short walk away and grill it on the rooftop.
+Breakfast: Breakfast is available daily on the rooftop terrace featuring items like homemade yogurt granola eggs and Italian coffee.
+Bar and Drinks: We offer a curated selection of wines Italian coffee champagne and cocktails on the sun terrace.
+Restaurant Hours: Our kitchen and bar are open daily. Sunset sessions typically begin around 5:00 PM.
+Nearby Groceries: Local sari-sari stores vegetable stands and bakeries are within a 2-minute walking radius in Poblacion.
+Drinking Water: Clean safe drinking water is provided on the rooftop for all guests.
+Room Types: We offer three room categories: Superior Room UNO (24 sqm) Standard Room DUE (20 sqm) and Basic Room TRE (15 sqm).
+In-Room Amenities: All long-stay suites include high-speed Wi-Fi AC mini-bar kettle TV hot shower private bathroom desk linens and towels.
+Superior Room UNO: Room UNO is our largest suite for 2 adults featuring a sofa coffee table large TV and bright windows with city views.
+Standard Room DUE: Room DUE is a 20 sqm standard double suite with a full desk private bathroom and complete amenities for up to 2 adults.
+Basic Room TRE: Room TRE is a 15 sqm compact suite designed for essential comfort and is budget-friendly for up to 2 adults.
+Wet Room Bathrooms: Our private bathrooms are wet-room style meaning the shower toilet and sink share a single tiled enclosure.
+Room Cleaning: Our local team provides regular housekeeping to ensure your suite remains clean and comfortable during your stay.
+Bed Setup: Rooms feature either Queen or King beds. UNO and DUE have standard double/queen setups ensuring a comfortable rest.
+Room Views: Depending on the suite rooms offer views of the local city streets or the sea.
+Air Conditioning: Every room is equipped with split-type air conditioning to keep you cool powered by our backup generator during outages.
+Day Pass: A Day Pass is P1040/day and includes high-speed Wi-Fi rooftop desk access and kitchen utility use.
+Weekly Sprint Package: The Weekly Sprint is P15470/week including 7 nights in a private suite 24/7 rooftop access and daily coffee.
+Deep Work Month: The monthly package is P44200/month. It includes a 30-night stay priority desk zone weekly laundry and welcome wine.
+Payment Methods: We accept cash and major credit cards on-site for settling your balance.
+Direct Booking: Booking directly with us guarantees the lowest price. Contact us via WhatsApp or email for availability.
+Check-in Time: Check-in is from 1:00 PM to 9:00 PM. Please let us know your estimated arrival time in advance.
+Check-out Time: Check-out is strictly by 10:30 AM to allow our team to prepare the suite for the next guest.
+Adults Only: Marina Terrace is an adults-only property. Children are not permitted to ensure a quiet work environment.
+Pet Policy: Pets are not allowed on the property.
+Smoking Policy: Smoking is only permitted in designated outdoor areas.
+San Vicente Airport: San Vicente Airport (SWL) is only 2.3 km (1.2 miles) away which is about a 5 to 10-minute drive.
+From Puerto Princesa: Travel from Puerto Princesa takes about 3 to 3.5 hours via shared or private AC vans along the paved highway.
+From El Nido: Travel from El Nido takes roughly 3 hours by private car or AC van.
+Getting Around Town: E-trikes and standard tricycles operate continuously in Poblacion. We also offer motorbike and scooter rentals at reception.
+Parking: We offer free private parking on-site for guests. No advance reservation is needed.
+Nearest ATM: The main municipal ATM is located in Poblacion town proper just a short walk from our door.
+Long Beach: Long Beach is a 14.7 km stretch of pristine white sand running through Poblacion New Agutaya San Isidro and Alimanguan. The southern end Pinagmangalokan Beach is a 13-minute walk (1.1 km) away.
+Nearby Beaches: Nearby beaches include Penanindigan (2.2 km) New Capari (2.3 km) and Makatombaten (2.6 km).
+Island Hopping: We can organize island-hopping tours to 22 islets including Inaladelan (German) Island Turtle Point and Twin Reef. Tours depart by outrigger boat from the shore. Expect calm clear water sea turtles and shallow coral reefs. No guarantee on turtle sightings as they are wild.
+Cell Signal: Globe and Smart have 4G/5G coverage in Poblacion though thick walls can occasionally affect indoor signal.
+San Vicente Overview: San Vicente is a municipality in Palawan Philippines. The main zones are Poblacion (town center and airport) Alimanguan (15 km north surf town) and Port Barton (southwest across the bay bohemian tourism enclave with bars cafes and dive shops).
+Port Barton: Port Barton is a bohemian established tourism enclave across the bay from Poblacion. It has bars cafes hostels and dive shops. By land it takes 1 to 1.5 hours looping via the Roxas highway. By boat it is only 10 to 15 minutes from Poblacion or Panindigan Beach.
+Alimanguan: Alimanguan is 15 km north of Poblacion. It is an emerging surf town and traditional fishing village with unobstructed sunsets. Tandol Rock Islet with a swim-through cave is a local landmark. The drive takes about 20 to 25 minutes on a fully paved coastal road.
+Surfing Season: Alimanguan is the primary surf spot in San Vicente. The season runs during Amihan (Northeast Monsoon) from November to March with peak swell in January and February. It is a long sand-bottom beach break best for longboarding noseriding and beginners. Board rentals and local instructors are available.
+Pamuayan Falls: Pamuayan Falls is near Port Barton. It is a relatively easy and flat 30 to 40 minute shaded jungle walk along a riverbed. The falls are 8 meters high with a deep wide cold freshwater pool suitable for swimming. Best combined with a Port Barton day trip.
+Bigaho Waterfalls: Bigaho or Ipanganan Waterfalls is in northern San Vicente near Alimanguan. It features a cascading tier system in dense primary forest with a natural swimming pool at the base. Known for a maintained wooden eco-walkway from the road making it minimal and accessible.
+Turtle Bay: Turtle Bay or Inaladelan Island is a popular island hopping stop in Port Barton Bay. Sea turtle encounters are possible but not guaranteed as they are wild animals. The water is calm and clear with shallow coral reefs.
+German Island: German Island is a white sandbar stop on island hopping tours. It has hammocks and is a popular spot for beach lunch. Part of the Port Barton Bay Marine Park.
+Twin Reef: Twin Reef is a shallow snorkeling spot with fan corals. Part of the Port Barton Bay Marine Park island hopping circuit. Water conditions depend on weather and tide.
+Sunset Sessions: Sunset sessions begin around 5:00 PM on the rooftop terrace. Enjoy wine cocktails and Italian coffee as the sun goes down over the ocean.
+Long Stays: Marina Terrace specializes in long stays for digital nomads and remote workers. Weekly and monthly packages include priority desk zone workspace and community access.
+Coworking: Our rooftop coworking space has ocean views Starlink internet backup power and a quiet deep work policy. Day passes weekly sprints and monthly plans available.
+Quiet Environment: Marina Terrace maintains a quiet environment for focused work. No loud events parties or noise disturbances allowed. We are a workspace-first property.
+Weather: San Vicente has two seasons: dry season from November to May and wet season from June to October. The best months for travel are December to April with calm seas and sunny days. July to October brings occasional rain but still many clear days.
+Friendly Locals: San Vicente is a quiet authentic fishing town. Locals are warm and friendly. A gentle po or Taglish phrase is always appreciated but English is widely spoken in tourist areas.`;
+
+export function buildTalaSystemPrompt(cms: CmsData): string {
   const today = new Date().toISOString().slice(0, 10);
   const { homepage, pricing, faqs, settings } = cms;
   const contact = settings.contact;
@@ -48,7 +109,6 @@ export function buildTalaSystemPrompt(cms: CmsData, knowledge: TalaKnowledgeEntr
     .join(", ");
 
   const speed = homepage.speed;
-  const knowledgeBlock = knowledgeForPrompt(knowledge);
   const faqBlock = [...faqs]
     .sort((a, b) => a.order - b.order)
     .slice(0, 10)
@@ -108,9 +168,7 @@ export function buildTalaSystemPrompt(cms: CmsData, knowledge: TalaKnowledgeEntr
     "",
     packages ? `## Plans & pricing\n${packages}` : null,
     "",
-    knowledgeBlock
-      ? `## Knowledge base\n${knowledgeBlock}\n(Any "[price removed]" note means that fact's price is intentionally stripped — always quote pricing from the Plans & pricing / Rooms sections above, never from here.)`
-      : null,
+    `## Knowledge base\n${HARDCODED_KNOWLEDGE}`,
     "",
     "## Contact",
     primaryWhatsApp ? `- WhatsApp (bookings): ${primaryWhatsApp}` : null,

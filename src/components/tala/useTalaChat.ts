@@ -17,9 +17,7 @@ import {
 } from "./talaTools";
 import {
   classifyHeuristically,
-  parseClassification,
   writeAuditEntry,
-  TALA_CLASSIFY_PROMPT,
   type TalaClassification,
 } from "./talaGraph";
 import { useCms } from "@/context/CmsContext";
@@ -176,37 +174,9 @@ async function askEdgeFunction(
 }
 
 /**
- * Classify node of the agent graph — one cheap, tool-free LLM call tagging
- * intent / department / urgency (KAPWA's classify node, ported). Runs in
- * parallel with the main answer so it adds no latency; any failure falls
- * back to deterministic keyword rules so it can never block a reply.
+ * Classify node of the agent graph — uses deterministic keyword rules only.
+ * No extra LLM call needed. Fast, free, and reliable.
  */
-async function classifyMessage(
-  userText: string,
-  apiKey: string,
-  preferredModel?: string,
-): Promise<TalaClassification> {
-  const wire: WireMessage[] = [
-    { role: "system", content: TALA_CLASSIFY_PROMPT },
-    { role: "user", content: userText },
-  ];
-  const chain = preferredModel
-    ? [preferredModel, ...TALA_FREE_MODELS.filter((m) => m !== preferredModel)]
-    : [...TALA_FREE_MODELS];
-  for (const model of chain.slice(0, 2)) {
-    try {
-      const result = await requestChatCompletion(model, wire, apiKey, false);
-      if (result.ok) {
-        const parsed = parseClassification(result.message.content);
-        if (parsed) return parsed;
-      }
-    } catch {
-      /* fall through to next model / heuristics */
-    }
-  }
-  return classifyHeuristically(userText);
-}
-
 export interface TalaRunInfo {
   classification: TalaClassification;
   toolsUsed: string[];
@@ -308,16 +278,6 @@ export function useTalaChat(): UseTalaChat {
             ? askOpenRouterDirect(msgs, key, preferredModel)
             : askEdgeFunction(msgs, preferredModel);
 
-        // Graph node 1 — classify. Fired in parallel with the answer so it
-        // costs no latency; only used for audit + admin telemetry. On the
-        // edge-function path (no browser key) skip the extra call and use
-        // the deterministic keyword rules directly.
-        const classifyPromise: Promise<TalaClassification> = key
-          ? classifyMessage(trimmed, key, preferredModel).catch(() =>
-              classifyHeuristically(trimmed),
-            )
-          : Promise.resolve(classifyHeuristically(trimmed));
-
         // Graph node 2 — agent: the tool-calling loop.
         const toolsUsed: string[] = [];
         let reply = await requestReply(wire);
@@ -358,7 +318,8 @@ export function useTalaChat(): UseTalaChat {
         setMessages(messagesRef.current);
 
         // Graph node 3 — audit. Never blocks or breaks the reply.
-        const classification = await classifyPromise;
+        // Use deterministic heuristics only — no extra LLM call needed.
+        const classification = classifyHeuristically(trimmed);
         setLastRun({ classification, toolsUsed });
         writeAuditEntry({
           classification,

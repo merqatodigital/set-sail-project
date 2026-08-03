@@ -286,8 +286,8 @@ export default function TalaManager() {
   });
   const knowledge = useTalaKnowledge();
   const systemPrompt = useMemo(
-    () => buildTalaSystemPrompt(data, knowledge.entries),
-    [data, knowledge.entries],
+    () => buildTalaSystemPrompt(data),
+    [data],
   );
   const [testMessage, setTestMessage] = useState(
     "What rooms do you have and what's the wifi like?",

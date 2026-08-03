@@ -18,7 +18,6 @@ import { buildTalaSystemPrompt, talaGreeting } from "./talaPersona";
 import { useTalaChat, getDevApiKey, setDevApiKey } from "./useTalaChat";
 import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
-import { useTalaKnowledge } from "./useTalaKnowledge";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
 
@@ -55,7 +54,6 @@ export function TalaWidget() {
     // opens the chat — not on every page load for every visitor.
     active: open,
   });
-  const knowledge = useTalaKnowledge();
 
   // Fallback to the human team — always points at the primary WhatsApp number
   // configured in Admin → WhatsApp. Shows as a persistent button and again
@@ -64,8 +62,8 @@ export function TalaWidget() {
     message: `Hi Marina Terrace! I was just chatting with TALA and need a hand: `,
   });
   const systemPrompt = useMemo(
-    () => buildTalaSystemPrompt(data, knowledge.entries),
-    [data, knowledge.entries],
+    () => buildTalaSystemPrompt(data),
+    [data],
   );
   const greeting = useMemo(() => talaGreeting(data), [data]);
 

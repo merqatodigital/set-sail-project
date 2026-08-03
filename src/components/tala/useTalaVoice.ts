@@ -104,6 +104,12 @@ function encodePCM16Wav(samples: Float32Array, sampleRate: number): Blob {
 export type TalaVoiceEngine = "kokoro" | "openrouter" | "browser" | "none";
 export type TalaVoiceStatus = "idle" | "loading" | "speaking";
 
+/** Detect mobile devices — skip Kokoro on mobile to avoid 80MB download + CPU freeze. */
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
 /**
  * Rewrite text the way a person would say it out loud. The TTS phonemizer
  * reads "PHP 3,500", "Mbps" and raw URLs literally, which is most of what
@@ -243,8 +249,15 @@ export interface UseTalaVoiceOptions {
 export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   const siteDefaultVoice = options?.defaultVoiceId || TALA_DEFAULT_VOICE;
   const openRouterReady = Boolean(options?.apiKey && options?.ttsModelId && options?.ttsVoiceId);
+  // On mobile: skip Kokoro entirely (80MB download freezes the CPU).
+  // Use OpenRouter TTS if configured, otherwise browser TTS (robotic but instant).
+  const isMobile = isMobileDevice();
   const provider: "kokoro" | "openrouter" =
-    options?.provider === "openrouter" && openRouterReady ? "openrouter" : "kokoro";
+    isMobile
+      ? openRouterReady ? "openrouter" : "kokoro" // will be overridden to "browser" below
+      : options?.provider === "openrouter" && openRouterReady
+        ? "openrouter"
+        : "kokoro";
   const [enabled, setEnabledState] = useState<boolean>(() => {
     try {
       return localStorage.getItem(TALA_STORAGE.voiceEnabled) !== "off";
@@ -338,9 +351,12 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   // Only when Kokoro is actually the engine in use, though: the whole point
   // of the OpenRouter provider is no local model download, so skip this
   // entirely rather than wasting 80 MB of bandwidth nobody will use.
+  // ALSO skip on mobile: Kokoro WASM freezes mobile CPUs and the 80MB
+  // download is too heavy for cellular data. Mobile gets browser TTS instead.
   const active = options?.active ?? true;
   useEffect(() => {
     if (provider !== "kokoro") return;
+    if (isMobile) return; // skip Kokoro on mobile entirely
     if (!active || !enabled || kokoroRef.current || kokoroLoading.current) return;
     if (typeof window === "undefined") return;
     kokoroLoading.current = true;
@@ -593,6 +609,13 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       if (!chunks.length) return;
       stop();
       queueRef.current = chunks;
+      // On mobile, skip Kokoro wait logic entirely — go straight to browser TTS.
+      // The Kokoro model never loads on mobile (see effect above), so there's
+      // nothing to wait for. Browser TTS is robotic but instant and reliable.
+      if (isMobile) {
+        void playQueue();
+        return;
+      }
       // Natural voice still downloading? Hold the reply instead of speaking
       // it robotically — the wait cap keeps a slow connection from muting
       // TALA forever. Once cached (second visit onward) this never waits.
