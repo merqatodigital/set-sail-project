@@ -107,30 +107,6 @@ function PackageCard({ pkg }: { pkg: PackageItem }) {
                   <td className="px-3 py-2.5 opacity-70">{f.text}</td>
                 </tr>
               ))}
-              {pkg.includeMotorbike && (
-                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
-                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
-                  <td className="px-3 py-2.5 opacity-70">Unlimited motorbike rental</td>
-                </tr>
-              )}
-              {pkg.includeAirportTransfer && (
-                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
-                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
-                  <td className="px-3 py-2.5 opacity-70">Airport transfer both ways</td>
-                </tr>
-              )}
-              {pkg.dailyCoffeeCount > 0 && (
-                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
-                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
-                  <td className="px-3 py-2.5 opacity-70">{pkg.dailyCoffeeCount}x daily coffee credit</td>
-                </tr>
-              )}
-              {pkg.dailyMealCount > 0 && (
-                <tr>
-                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
-                  <td className="px-3 py-2.5 opacity-70">{pkg.dailyMealCount}x daily breakfast</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

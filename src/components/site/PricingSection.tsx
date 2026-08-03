@@ -161,30 +161,6 @@ export function PricingSection() {
                           <span className={pkg.featured ? "text-[#F5EFE2]/80" : "text-[#26221C]/70"}>{line.text}</span>
                         </li>
                       ))}
-                      {pkg.includeMotorbike && (
-                        <li className="flex items-start gap-2.5 text-sm">
-                          <Check className={cn("mt-0.5 h-4 w-4 shrink-0", pkg.featured ? "text-[#D9BA80]" : "text-[#C6A15B]")} />
-                          <span className={pkg.featured ? "text-[#F5EFE2]/80" : "text-[#26221C]/70"}>Unlimited motorbike rental</span>
-                        </li>
-                      )}
-                      {pkg.includeAirportTransfer && (
-                        <li className="flex items-start gap-2.5 text-sm">
-                          <Check className={cn("mt-0.5 h-4 w-4 shrink-0", pkg.featured ? "text-[#D9BA80]" : "text-[#C6A15B]")} />
-                          <span className={pkg.featured ? "text-[#F5EFE2]/80" : "text-[#26221C]/70"}>Airport transfer both ways</span>
-                        </li>
-                      )}
-                      {pkg.dailyCoffeeCount > 0 && (
-                        <li className="flex items-start gap-2.5 text-sm">
-                          <Check className={cn("mt-0.5 h-4 w-4 shrink-0", pkg.featured ? "text-[#D9BA80]" : "text-[#C6A15B]")} />
-                          <span className={pkg.featured ? "text-[#F5EFE2]/80" : "text-[#26221C]/70"}>{pkg.dailyCoffeeCount}x daily coffee credit</span>
-                        </li>
-                      )}
-                      {pkg.dailyMealCount > 0 && (
-                        <li className="flex items-start gap-2.5 text-sm">
-                          <Check className={cn("mt-0.5 h-4 w-4 shrink-0", pkg.featured ? "text-[#D9BA80]" : "text-[#C6A15B]")} />
-                          <span className={pkg.featured ? "text-[#F5EFE2]/80" : "text-[#26221C]/70"}>{pkg.dailyMealCount}x daily breakfast</span>
-                        </li>
-                      )}
                     </ul>
 
                     <button

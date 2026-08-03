@@ -42,7 +42,7 @@ Air Conditioning: Every room is equipped with split-type air conditioning to kee
 Day Pass: A Day Pass is P1040/day and includes high-speed Wi-Fi rooftop desk access and kitchen utility use.
 Weekly Sprint Package: The Weekly Sprint is P15470/week including 7 nights in a private suite 24/7 rooftop access and daily coffee.
 Deep Work Month: The monthly package is P44200/month. It includes a 30-night stay priority desk zone weekly laundry and welcome wine.
-7-Day All-Inclusive: We offer a complete 7-Day All-Inclusive package. For 1 person it is P28500. For 2 persons it is P25500 per person. It includes 7 nights accommodation daily breakfast 3 island hopping tours unlimited motorbike rental airport transfer both ways and daily coffee credit.
+7-Day All-Inclusive: We offer a complete 7-Day All-Inclusive package. For 1 person it is P28500. For 2 persons it is P25500 per person. It includes 7 nights accommodation daily breakfast 3 island hopping tours unlimited motorbike rental San Vicente Airport transfer both ways and daily coffee credit.
 Package Tours: The All-Inclusive package bundles our best tours — Island Hopping Port Barton and Sunset Cruise. No need to book separately.
 Package Motorbike: The All-Inclusive package includes unlimited motorbike rental for the duration of your stay.
 Package Airport Transfer: The All-Inclusive package includes round-trip airport pickup and drop-off from San Vicente Airport.

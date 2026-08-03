@@ -402,7 +402,7 @@ export function buildDefaultData(): CmsData {
           { id: uid("pf"), text: "Daily breakfast at beachfront cafe" },
           { id: uid("pf"), text: "3 island hopping tours selected for you" },
           { id: uid("pf"), text: "Unlimited motorbike rental" },
-          { id: uid("pf"), text: "Airport transfer both ways" },
+          { id: uid("pf"), text: "San Vicente Airport transfer both ways" },
           { id: uid("pf"), text: "Daily coffee credit" },
         ],
         includedTourIds: [],
