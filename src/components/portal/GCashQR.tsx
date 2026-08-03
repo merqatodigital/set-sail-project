@@ -22,7 +22,7 @@ export default function GCashQR({ booking, onDone }: Props) {
     (async () => {
       const { data } = await supabase.storage
         .from("images-payment")
-        .createSignedUrl("gcash-qr.png", 3600);
+        .createSignedUrl("gcash.png", 3600);
       if (data?.signedUrl) setQrUrl(data.signedUrl);
     })();
   }, []);
