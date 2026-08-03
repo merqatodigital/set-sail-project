@@ -1,14 +1,16 @@
 import { useCms } from "@/context/CmsContext";
-import { useCurrency } from "@/context/CurrencyContext";
 import { openTala } from "@/components/tala/talaOpen";
 import type { PackageItem } from "@/types/cms";
 
 // ---------------------------------------------------------------------------
 // View Packages — shows available all-inclusive packages for the guest.
+// Always displays in Philippine Pesos (PHP).
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
 const DARK_CARD = "#16213e";
+
+const fmt = (n: number) => `₱${n.toLocaleString()}`;
 
 interface Props {
   onBack: () => void;
@@ -16,7 +18,6 @@ interface Props {
 
 export default function ViewPackages({ onBack }: Props) {
   const { data } = useCms();
-  const { formatPrice } = useCurrency();
   const packages = [...data.packages].sort((a, b) => a.order - b.order);
 
   return (
@@ -41,7 +42,7 @@ export default function ViewPackages({ onBack }: Props) {
       ) : (
         <div className="space-y-4">
           {packages.map((pkg) => (
-            <PackageCard key={pkg.id} pkg={pkg} formatPrice={formatPrice} />
+            <PackageCard key={pkg.id} pkg={pkg} />
           ))}
         </div>
       )}
@@ -49,12 +50,12 @@ export default function ViewPackages({ onBack }: Props) {
   );
 }
 
-function PackageCard({ pkg, formatPrice }: { pkg: PackageItem; formatPrice: (n: number) => string }) {
+function PackageCard({ pkg }: { pkg: PackageItem }) {
   return (
     <div
       className="rounded-2xl p-5 shadow-lg"
       style={{
-        backgroundColor: pkg.featured ? "#16213e" : "#1a1a2e",
+        backgroundColor: DARK_CARD,
         border: pkg.featured ? `1px solid ${GOLD}44` : "1px solid transparent",
       }}
     >
@@ -70,58 +71,69 @@ function PackageCard({ pkg, formatPrice }: { pkg: PackageItem; formatPrice: (n: 
       <h2 className="text-lg font-semibold">{pkg.name}</h2>
       <p className="mt-1 text-sm opacity-50">{pkg.description}</p>
 
-      {/* Pricing */}
-      <div className="mt-4 space-y-2">
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm opacity-60">1 Person</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl font-semibold" style={{ color: GOLD }}>{formatPrice(pkg.price)}</span>
-            <span className="text-xs opacity-40">/ {pkg.period}</span>
-          </div>
-        </div>
-        {pkg.priceTwo > 0 && (
-          <div className="flex items-baseline justify-between">
-            <span className="text-sm opacity-60">2 People</span>
+      {/* Pricing Box */}
+      <div className="mt-4 rounded-xl p-4" style={{ backgroundColor: "#0f346022" }}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm opacity-60">1 Person</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-semibold" style={{ color: GOLD }}>{formatPrice(pkg.priceTwo)}</span>
+              <span className="text-2xl font-bold" style={{ color: GOLD }}>{fmt(pkg.price)}</span>
               <span className="text-xs opacity-40">/ {pkg.period}</span>
             </div>
           </div>
-        )}
+          {pkg.priceTwo > 0 && (
+            <div className="flex items-center justify-between border-t" style={{ borderColor: `${GOLD}22` }}>
+              <span className="text-sm opacity-60">2 People</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold" style={{ color: GOLD }}>{fmt(pkg.priceTwo)}</span>
+                <span className="text-xs opacity-40">/ {pkg.period}</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Features */}
-      <ul className="mt-4 space-y-2">
-        {pkg.features.map((f) => (
-          <li key={f.id} className="flex items-start gap-2 text-sm">
-            <span style={{ color: GOLD }}>{"\u2713"}</span>
-            <span className="opacity-70">{f.text}</span>
-          </li>
-        ))}
-      </ul>
-
-      {/* Inclusions */}
-      <div className="mt-4 flex flex-wrap gap-2">
-        {pkg.includeMotorbike && (
-          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ backgroundColor: `${GOLD}22`, color: GOLD }}>
-            Motorbike Included
-          </span>
-        )}
-        {pkg.includeAirportTransfer && (
-          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ backgroundColor: `${GOLD}22`, color: GOLD }}>
-            Airport Transfer
-          </span>
-        )}
-        {pkg.dailyCoffeeCount > 0 && (
-          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ backgroundColor: `${GOLD}22`, color: GOLD }}>
-            {pkg.dailyCoffeeCount}x Daily Coffee
-          </span>
-        )}
-        {pkg.dailyMealCount > 0 && (
-          <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ backgroundColor: `${GOLD}22`, color: GOLD }}>
-            {pkg.dailyMealCount}x Daily Meal
-          </span>
-        )}
+      {/* What's Included Table */}
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-50">What's Included</p>
+        <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "#0f346011" }}>
+          <table className="w-full text-sm">
+            <tbody>
+              {pkg.features.map((f, i) => (
+                <tr key={f.id} style={{ borderBottom: i < pkg.features.length - 1 ? `1px solid ${GOLD}11` : "none" }}>
+                  <td className="px-3 py-2.5">
+                    <span style={{ color: GOLD }}>{"\u2713"}</span>
+                  </td>
+                  <td className="px-3 py-2.5 opacity-70">{f.text}</td>
+                </tr>
+              ))}
+              {pkg.includeMotorbike && (
+                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
+                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
+                  <td className="px-3 py-2.5 opacity-70">Unlimited motorbike rental</td>
+                </tr>
+              )}
+              {pkg.includeAirportTransfer && (
+                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
+                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
+                  <td className="px-3 py-2.5 opacity-70">Airport transfer both ways</td>
+                </tr>
+              )}
+              {pkg.dailyCoffeeCount > 0 && (
+                <tr style={{ borderBottom: `1px solid ${GOLD}11` }}>
+                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
+                  <td className="px-3 py-2.5 opacity-70">{pkg.dailyCoffeeCount}x daily coffee credit</td>
+                </tr>
+              )}
+              {pkg.dailyMealCount > 0 && (
+                <tr>
+                  <td className="px-3 py-2.5"><span style={{ color: GOLD }}>{"\u2713"}</span></td>
+                  <td className="px-3 py-2.5 opacity-70">{pkg.dailyMealCount}x daily breakfast</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* CTA */}
