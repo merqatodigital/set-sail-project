@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useCms } from "@/context/CmsContext";
 
 // ---------------------------------------------------------------------------
-// Portal login — guest enters phone number, system finds their bookings.
+// Portal login — guest enters phone + name. If phone matches a booking,
+// name is auto-filled. Always allows login.
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
@@ -15,20 +16,21 @@ interface Props {
 export default function PortalLogin({ onLogin }: Props) {
   const { data } = useCms();
   const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
-    const cleaned = phone.replace(/\s/g, "").replace(/^0/, "+63");
-    if (!cleaned || cleaned.length < 10) {
-      setError("Please enter a valid phone number");
-      return;
-    }
+  const normalize = (p: string) => p.replace(/[\s\-+()]/g, "").replace(/^0/, "63");
 
-    setLoading(true);
+  const handlePhoneChange = (value: string) => {
+    setPhone(value);
     setError("");
 
-    // Search all bookings for matching phone
+    // Auto-fill name if phone matches a booking
+    const cleaned = value.replace(/\s/g, "").replace(/^0/, "+63");
+    const searchPhone = normalize(cleaned);
+
+    if (searchPhone.length < 10) return;
+
     const allBookings = [
       ...data.operations.bookings.map((b) => ({
         name: b.guestName,
@@ -44,29 +46,30 @@ export default function PortalLogin({ onLogin }: Props) {
       })),
     ];
 
-    // Normalize for comparison
-    const normalize = (p: string) => p.replace(/[\s\-+()]/g, "").replace(/^0/, "63");
-    const searchPhone = normalize(cleaned);
-
     const match = allBookings.find((b) => {
       if (!b.phone) return false;
       return normalize(b.phone) === searchPhone;
     });
 
-    setLoading(false);
-
     if (match) {
-      onLogin(cleaned, match.name);
-    } else {
-      // Allow login anyway with a prompt for name
-      setError("no_match");
+      setName(match.name);
     }
   };
 
-  const handleManualLogin = (name: string) => {
-    if (name.trim()) {
-      onLogin(phone, name.trim());
+  const handleSubmit = () => {
+    const cleaned = phone.replace(/\s/g, "").replace(/^0/, "+63");
+    const trimmedName = name.trim();
+
+    if (!cleaned || cleaned.length < 10) {
+      setError("Please enter a valid phone number");
+      return;
     }
+    if (!trimmedName) {
+      setError("Please enter your name");
+      return;
+    }
+
+    onLogin(cleaned, trimmedName);
   };
 
   return (
@@ -77,7 +80,7 @@ export default function PortalLogin({ onLogin }: Props) {
           Guest Portal
         </h1>
         <p className="text-sm opacity-60">
-          Sign in with your phone number to manage your stay
+          Enter your details to access the portal
         </p>
       </div>
 
@@ -92,11 +95,27 @@ export default function PortalLogin({ onLogin }: Props) {
         <input
           type="tel"
           value={phone}
+          onChange={(e) => handlePhoneChange(e.target.value)}
+          placeholder="0917 123 4567"
+          className="mb-4 w-full rounded-lg border px-4 py-3 text-sm focus:outline-none"
+          style={{
+            backgroundColor: "#0f3460",
+            borderColor: `${GOLD}44`,
+            color: "#e8e8e8",
+          }}
+        />
+
+        <label className="mb-2 block text-xs uppercase tracking-wide opacity-50">
+          Your Name
+        </label>
+        <input
+          type="text"
+          value={name}
           onChange={(e) => {
-            setPhone(e.target.value);
+            setName(e.target.value);
             setError("");
           }}
-          placeholder="0917 123 4567"
+          placeholder="Juan Dela Cruz"
           className="mb-4 w-full rounded-lg border px-4 py-3 text-sm focus:outline-none"
           style={{
             backgroundColor: "#0f3460",
@@ -106,60 +125,22 @@ export default function PortalLogin({ onLogin }: Props) {
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
         />
 
-        {error && error !== "no_match" && (
+        {error && (
           <p className="mb-4 text-xs text-red-400">{error}</p>
         )}
 
-        {error === "no_match" && (
-          <div className="mb-4">
-            <p className="mb-3 text-xs text-amber-400">
-              No booking found with this number. Enter your name to continue:
-            </p>
-            <input
-              type="text"
-              placeholder="Your name"
-              className="mb-3 w-full rounded-lg border px-4 py-3 text-sm focus:outline-none"
-              style={{
-                backgroundColor: "#0f3460",
-                borderColor: `${GOLD}44`,
-                color: "#e8e8e8",
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleManualLogin(e.currentTarget.value);
-              }}
-              autoFocus
-            />
-            <button
-              onClick={() => {
-                const input = document.querySelector<HTMLInputElement>(
-                  'input[placeholder="Your name"]',
-                );
-                if (input) handleManualLogin(input.value);
-              }}
-              className="w-full rounded-lg py-3 text-sm font-medium transition"
-              style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {!error && (
-          <button
-            onClick={handleSubmit}
-            disabled={loading || !phone}
-            className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-40"
-            style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
-          >
-            {loading ? "Looking up..." : "Sign In"}
-          </button>
-        )}
+        <button
+          onClick={handleSubmit}
+          disabled={!phone || !name}
+          className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-40"
+          style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
+        >
+          Enter Portal
+        </button>
       </div>
 
       <p className="mt-6 text-center text-xs opacity-40">
-        Your phone number matches your booking records.
-        <br />
-        No password required.
+        No password required. Your phone number links to your bookings.
       </p>
     </div>
   );
