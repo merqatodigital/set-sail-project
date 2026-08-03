@@ -13,6 +13,7 @@ import { AppLoader } from "@/components/AppLoader";
 const BlogList = lazy(() => import("@/pages/BlogList"));
 const BlogPost = lazy(() => import("@/pages/BlogPost"));
 const AdminApp = lazy(() => import("@/admin/AdminApp"));
+const Portal = lazy(() => import("@/pages/Portal"));
 
 export default function App() {
   return (
@@ -42,6 +43,14 @@ export default function App() {
                     }
                   />
                 </Route>
+                <Route
+                  path="/portal"
+                  element={
+                    <Suspense fallback={<AppLoader label="Loading portal…" />}>
+                      <Portal />
+                    </Suspense>
+                  }
+                />
                 <Route
                   path="/admin/*"
                   element={
