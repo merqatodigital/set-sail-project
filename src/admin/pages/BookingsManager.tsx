@@ -25,6 +25,7 @@ const emptyBooking = (): Booking => ({
   status: "pending",
   source: "whatsapp",
   notes: "",
+  packageId: "",
   createdAt: new Date().toISOString(),
 });
 

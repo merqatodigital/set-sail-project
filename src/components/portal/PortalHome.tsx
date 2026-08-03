@@ -83,6 +83,26 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
       <div>
         <h3 className="mb-3 text-lg font-medium">How can we help you today?</h3>
         <div className="space-y-3">
+          {/* View Packages */}
+          <button
+            onClick={() => onNavigate("packages")}
+            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            style={{ backgroundColor: DARK_CARD, border: `1px solid ${GOLD}33` }}
+          >
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              style={{ backgroundColor: `${GOLD}22` }}
+            >
+              {"\u{1F3E6}"}
+            </div>
+            <div>
+              <p className="font-medium">All-Inclusive Packages</p>
+              <p className="text-xs opacity-50">
+                7-Day bundles with tours, meals & transport included
+              </p>
+            </div>
+          </button>
+
           {/* Book Experiences */}
           <button
             onClick={() => onNavigate("tours")}

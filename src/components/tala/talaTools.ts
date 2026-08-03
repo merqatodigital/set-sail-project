@@ -708,6 +708,7 @@ function createBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
     status: "confirmed",
     source: bookingSource(args.source),
     notes: str(args.notes),
+    packageId: "",
     createdAt: new Date().toISOString(),
   };
   ctx.update((d) => ({
@@ -859,6 +860,7 @@ function requestBooking(args: Record<string, unknown>, ctx: TalaToolContext) {
     status: "pending",
     source: "other",
     notes: str(args.notes),
+    packageId: "",
     createdAt: new Date().toISOString(),
   };
 

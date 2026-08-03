@@ -19,6 +19,7 @@ export type SectionKey =
   | "focus"
   | "stay"
   | "pricing"
+  | "packages"
   | "testimonials"
   | "faqs"
   | "cta";
@@ -173,27 +174,23 @@ export interface PricingPackage {
   order: number;
 }
 
-export interface PackageInclusions {
-  id: string;
-  text: string;
-  included: boolean;  // for 1-person vs 2-person packages
-}
-
 export interface PackageItem {
   id: string;
   name: string;
-  price: string;  // PHP price
-  period: string;  // e.g. "7 days"
-  icon: string;   // lucide icon name
+  price: number;        // 1-person price (PHP)
+  priceTwo: number;     // 2-person price (PHP)
+  period: string;       // "7 days"
+  icon: string;         // lucide icon name
   description: string;
   features: PricingFeatureLine[];
-  inclusions: PackageInclusions[];
+  includedTourIds: string[];
+  includeMotorbike: boolean;
+  includeAirportTransfer: boolean;
+  dailyCoffeeCount: number;
+  dailyMealCount: number;
   buttonLabel: string;
   featured: boolean;
   order: number;
-  // 1-person and 2-person pricing
-  priceOne: string;
-  priceTwo: string;
 }
 
 export interface GalleryImage {
@@ -451,6 +448,7 @@ export interface Booking {
   status: BookingStatus;
   source: BookingSource;
   notes: string;
+  packageId?: string; // linked PackageItem id, or empty
   createdAt: string;
 }
 
@@ -620,6 +618,7 @@ export interface CmsData {
   homepage: HomepageContent;
   workspace: WorkspaceContent;
   pricing: PricingPackage[];
+  packages: PackageItem[];
   gallery: GalleryImage[];
   videos: VideoItem[];
   blogPosts: BlogPost[];
