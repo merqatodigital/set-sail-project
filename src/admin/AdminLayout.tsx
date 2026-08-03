@@ -35,7 +35,6 @@ import {
   Bot,
   BookOpen,
   Brain,
-  Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCms } from "@/context/CmsContext";
@@ -87,7 +86,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/facilities", label: "Facilities", icon: Sparkles },
       { to: "/admin/speed", label: "Internet Speed", icon: Zap },
       { to: "/admin/pricing", label: "Pricing", icon: Tags },
-      { to: "/admin/packages", label: "Packages", icon: Package },
       { to: "/admin/gallery", label: "Gallery", icon: Images },
       { to: "/admin/videos", label: "Videos", icon: Video },
       { to: "/admin/blog", label: "Blog", icon: Newspaper },

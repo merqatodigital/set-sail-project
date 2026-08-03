@@ -7,7 +7,6 @@ import { FacilitiesSection } from "@/components/site/FacilitiesSection";
 import { SpeedSection } from "@/components/site/SpeedSection";
 import { RoomsSection } from "@/components/site/RoomsSection";
 import { PricingSection } from "@/components/site/PricingSection";
-import { PackagesSection } from "@/components/site/PackagesSection";
 import { TestimonialsSection, FaqSection } from "@/components/site/TestimonialsFaq";
 import { CtaSection } from "@/components/site/CtaFooter";
 import type { SectionKey } from "@/types/cms";
@@ -23,7 +22,6 @@ const SECTION_MAP: Record<SectionKey, React.ComponentType> = {
   speed: SpeedSection,
   rooms: RoomsSection,
   pricing: PricingSection,
-  packages: PackagesSection,
   testimonials: TestimonialsSection,
   faqs: FaqSection,
   cta: CtaSection,

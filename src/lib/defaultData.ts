@@ -65,10 +65,9 @@ export function buildDefaultData(): CmsData {
         { key: "speed", label: "Internet Speed", visible: true, order: 7 },
         { key: "rooms", label: "Other Rooms", visible: true, order: 8 },
         { key: "pricing", label: "Pricing", visible: true, order: 9 },
-        { key: "packages", label: "Packages", visible: true, order: 10 },
-        { key: "testimonials", label: "Testimonials", visible: true, order: 11 },
-        { key: "faqs", label: "FAQs", visible: true, order: 12 },
-        { key: "cta", label: "Closing CTA", visible: true, order: 13 },
+        { key: "testimonials", label: "Testimonials", visible: true, order: 10 },
+        { key: "faqs", label: "FAQs", visible: true, order: 11 },
+        { key: "cta", label: "Closing CTA", visible: true, order: 12 },
       ],
       hero: {
         eyebrow: "Poblacion, San Vicente, Palawan",

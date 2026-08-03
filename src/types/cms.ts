@@ -19,7 +19,6 @@ export type SectionKey =
   | "focus"
   | "stay"
   | "pricing"
-  | "packages"
   | "testimonials"
   | "faqs"
   | "cta";
