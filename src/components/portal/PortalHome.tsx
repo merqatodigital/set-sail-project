@@ -182,6 +182,26 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
               </p>
             </div>
           </button>
+
+          {/* View Bill */}
+          <button
+            onClick={() => onNavigate("bill")}
+            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
+            style={{ backgroundColor: DARK_CARD }}
+          >
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-full text-xl"
+              style={{ backgroundColor: `${GOLD}22` }}
+            >
+              {"\u{1F4B3}"}
+            </div>
+            <div>
+              <p className="font-medium">View Bill</p>
+              <p className="text-xs opacity-50">
+                See all charges, payments & balance due
+              </p>
+            </div>
+          </button>
         </div>
       </div>
 
