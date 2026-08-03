@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { CmsData } from "@/types/cms";
-import { loadCms, saveCms, resetCms } from "@/lib/storage";
+import { loadCms, loadCmsCached, saveCms, resetCms } from "@/lib/storage";
 
 interface CmsContextValue {
   data: CmsData;
@@ -23,17 +23,30 @@ interface CmsContextValue {
 const CmsContext = createContext<CmsContextValue | null>(null);
 
 export function CmsProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<CmsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Paint instantly from whatever was cached on a previous visit (a plain
+  // synchronous localStorage read, no network) instead of blocking the whole
+  // site behind a round-trip. A first-ever visit with no cache still shows
+  // the spinner; every returning visit skips it entirely.
+  const [data, setData] = useState<CmsData | null>(() => loadCmsCached());
+  const [loading, setLoading] = useState(() => !loadCmsCached());
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    loadCms().then((d) => {
-      setData(d);
-      setLoading(false);
-    });
+    // Always revalidate in the background so edits made elsewhere still
+    // reach this tab — it just isn't a blocking gate for first paint.
+    loadCms()
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(() => {
+        // loadCms() falls back to defaults internally; this only guards
+        // against something upstream throwing so a cached paint is never
+        // left stuck behind the spinner.
+        setLoading(false);
+      });
   }, []);
 
   const persist = useCallback((next: CmsData) => {

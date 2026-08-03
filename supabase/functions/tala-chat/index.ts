@@ -904,7 +904,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       const arrivals = bookings.filter((b) => b.checkIn === today && b.status !== "cancelled");
       const departures = bookings.filter((b) => b.checkOut === today && b.status !== "cancelled");
       const { data: reqs } = await supabase.from("tala_booking_requests").select("*").eq("status", "pending");
-      alerts: string[] = [];
+      const alerts: string[] = [];
       const highlights: string[] = [];
       if (arrivals.length) highlights.push(`${arrivals.length} arriving today`);
       if (departures.length) highlights.push(`${departures.length} departing today`);

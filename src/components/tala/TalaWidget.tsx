@@ -51,6 +51,9 @@ export function TalaWidget() {
     ttsModelId: data.settings.tala.ttsModelId || undefined,
     ttsVoiceId: data.settings.tala.ttsVoiceId || undefined,
     ignoreLocalVoice: true,
+    // Only pull the ~80 MB natural-voice model once the guest actually
+    // opens the chat — not on every page load for every visitor.
+    active: open,
   });
   const knowledge = useTalaKnowledge();
 
