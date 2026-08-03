@@ -5,6 +5,7 @@ import PortalHome from "@/components/portal/PortalHome";
 import BookExperiences from "@/components/portal/BookExperiences";
 import RentMotorbike from "@/components/portal/RentMotorbike";
 import OrderFood from "@/components/portal/OrderFood";
+import MessageReception from "@/components/portal/MessageReception";
 import MyBookings from "@/components/portal/MyBookings";
 import GCashQR from "@/components/portal/GCashQR";
 
@@ -19,6 +20,7 @@ export type PortalView =
   | "tours"
   | "rentals"
   | "food"
+  | "messages"
   | "bookings"
   | "gcash";
 
@@ -135,6 +137,13 @@ export default function Portal() {
           <OrderFood
             guest={guest}
             onOrderComplete={() => setView("home")}
+            onBack={() => setView("home")}
+          />
+        )}
+
+        {view === "messages" && guest && (
+          <MessageReception
+            guest={guest}
             onBack={() => setView("home")}
           />
         )}

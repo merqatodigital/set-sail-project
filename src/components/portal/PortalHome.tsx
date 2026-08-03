@@ -163,9 +163,10 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
             </div>
           </button>
 
-          {/* Message Reception (Phase 2) */}
-          <div
-            className="flex w-full items-center gap-4 rounded-xl p-4 opacity-50"
+          {/* Message Reception */}
+          <button
+            onClick={() => onNavigate("messages")}
+            className="flex w-full items-center gap-4 rounded-xl p-4 text-left transition hover:scale-[1.02]"
             style={{ backgroundColor: DARK_CARD }}
           >
             <div
@@ -176,9 +177,11 @@ export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Pro
             </div>
             <div>
               <p className="font-medium">Message Reception</p>
-              <p className="text-xs opacity-50">Coming soon</p>
+              <p className="text-xs opacity-50">
+                Send a message to our front desk team
+              </p>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 

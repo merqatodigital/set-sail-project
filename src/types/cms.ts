@@ -602,6 +602,18 @@ export interface Operations {
   motorbikeRentals: MotorbikeRental[];
   menuItems: MenuItem[];
   foodOrders: FoodOrder[];
+  guestMessages: GuestMessage[];
+}
+
+export interface GuestMessage {
+  id: string;
+  guestName: string;
+  guestPhone: string;
+  message: string;
+  reply: string;
+  status: "unread" | "read" | "replied";
+  createdAt: string;
+  repliedAt: string;
 }
 
 export interface CmsData {

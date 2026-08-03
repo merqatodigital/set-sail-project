@@ -63,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/tours", label: "Tours", icon: Ship },
       { to: "/admin/rentals", label: "Motorbike Rentals", icon: Bike },
       { to: "/admin/food-orders", label: "Food Orders", icon: UtensilsCrossed },
+      { to: "/admin/messages", label: "Guest Messages", icon: MessageCircle },
       { to: "/admin/staff", label: "Staff & Payroll", icon: Users },
       { to: "/admin/payments", label: "Payments", icon: CircleDollarSign },
     ],

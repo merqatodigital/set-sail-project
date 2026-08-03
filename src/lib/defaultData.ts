@@ -751,5 +751,6 @@ export function buildDefaultOperations(): import("@/types/cms").Operations {
       { id: uid("mi"), name: "Mango Shake", description: "Fresh mango blended with ice", category: "drink", price: 90, active: true, order: 11 },
     ],
     foodOrders: [],
+    guestMessages: [],
   };
 }
