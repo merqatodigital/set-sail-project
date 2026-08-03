@@ -1,17 +1,24 @@
 import { useState, useMemo } from "react";
 import { useCms } from "@/context/CmsContext";
 import { uid, generateReference } from "@/admin/ops/opsUtils";
-import type { MenuItem, FoodOrderItem } from "@/types/cms";
-
-// ---------------------------------------------------------------------------
-// Order Food & Drinks — browse menu, build cart, place order.
-// ---------------------------------------------------------------------------
+import type { MenuItem, FoodOrderItem, MenuCategory } from "@/types/cms";
 
 const GOLD = "#C6A15B";
 const DARK_CARD = "#16213e";
 
-interface CartItem extends FoodOrderItem {
+const CATEGORIES: { key: MenuCategory; label: string; emoji: string }[] = [
+  { key: "breakfast", label: "Breakfast", emoji: "\u2600\uFE0F" },
+  { key: "lunch", label: "Lunch", emoji: "\u{1F31E}" },
+  { key: "dinner", label: "Dinner", emoji: "\u{1F319}" },
+  { key: "drinks", label: "Drinks", emoji: "\u{1F379}" },
+];
+
+interface CartItem {
+  menuItemId: string;
+  name: string;
   quantity: number;
+  price: number;
+  foodCost: number;
 }
 
 interface Props {
@@ -23,7 +30,7 @@ interface Props {
 export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
   const { data, update } = useCms();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [tab, setTab] = useState<"food" | "drink">("food");
+  const [tab, setTab] = useState<MenuCategory>("breakfast");
   const [notes, setNotes] = useState("");
   const [placed, setPlaced] = useState(false);
 
@@ -35,47 +42,56 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
   const filtered = menuItems.filter((m) => m.category === tab);
 
   const addToCart = (item: MenuItem) => {
+    if (item.inventoryCount <= 0) return;
     setCart((prev) => {
       const existing = prev.find((c) => c.menuItemId === item.id);
       if (existing) {
+        if (existing.quantity >= item.inventoryCount) return prev;
         return prev.map((c) =>
           c.menuItemId === item.id ? { ...c, quantity: c.quantity + 1 } : c,
         );
       }
-      return [...prev, { menuItemId: item.id, name: item.name, quantity: 1, price: item.price }];
+      return [...prev, { menuItemId: item.id, name: item.name, quantity: 1, price: item.price, foodCost: item.foodCost }];
     });
   };
 
   const updateQty = (menuItemId: string, delta: number) => {
-    setCart((prev) => {
-      const next = prev
+    setCart((prev) =>
+      prev
         .map((c) => (c.menuItemId === menuItemId ? { ...c, quantity: c.quantity + delta } : c))
-        .filter((c) => c.quantity > 0);
-      return next;
-    });
+        .filter((c) => c.quantity > 0),
+    );
   };
 
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  const totalCost = cart.reduce((s, c) => s + c.foodCost * c.quantity, 0);
 
   const placeOrder = () => {
     if (cart.length === 0) return;
 
+    const now = new Date().toISOString();
     const order = {
       id: uid("fo"),
       reference: generateReference("FO"),
       guestName: guest.name,
       guestPhone: guest.phone,
-      items: cart.map((c) => ({ menuItemId: c.menuItemId, name: c.name, quantity: c.quantity, price: c.price })),
+      items: cart.map((c) => ({ menuItemId: c.menuItemId, name: c.name, quantity: c.quantity, price: c.price, foodCost: c.foodCost })),
       total,
+      totalCost,
       status: "pending" as const,
       notes,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      confirmedAt: "",
+      preparingAt: "",
+      readyAt: "",
+      deliveredAt: "",
+      cancelledAt: "",
     };
 
     const payment = {
       id: uid("pay"),
       reference: generateReference("PY"),
-      date: new Date().toISOString().slice(0, 10),
+      date: now.slice(0, 10),
       category: "food" as const,
       direction: "in" as const,
       amount: total,
@@ -85,12 +101,22 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
       notes: "",
     };
 
+    // Decrement inventory for each ordered item
+    const updatedMenu = menuItems.map((m) => {
+      const ordered = cart.find((c) => c.menuItemId === m.id);
+      if (ordered) {
+        return { ...m, inventoryCount: Math.max(0, m.inventoryCount - ordered.quantity) };
+      }
+      return m;
+    });
+
     update((d) => ({
       ...d,
       operations: {
         ...d.operations,
         foodOrders: [...d.operations.foodOrders, order],
         payments: [...d.operations.payments, payment],
+        menuItems: updatedMenu,
       },
     }));
 
@@ -118,7 +144,6 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Back */}
       <button
         onClick={onBack}
         className="flex items-center gap-1 text-sm opacity-60 transition hover:opacity-100"
@@ -128,19 +153,19 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
 
       <h1 className="text-xl font-semibold">Order Food & Drinks</h1>
 
-      {/* Tabs */}
+      {/* Category Tabs */}
       <div className="flex gap-2">
-        {(["food", "drink"] as const).map((t) => (
+        {CATEGORIES.map((c) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="flex-1 rounded-lg py-2 text-sm font-medium transition"
+            key={c.key}
+            onClick={() => setTab(c.key)}
+            className="flex-1 rounded-lg py-2 text-xs font-medium transition sm:text-sm"
             style={{
-              backgroundColor: tab === t ? GOLD : DARK_CARD,
-              color: tab === t ? "#1a1a2e" : "#e8e8e8",
+              backgroundColor: tab === c.key ? GOLD : DARK_CARD,
+              color: tab === c.key ? "#1a1a2e" : "#e8e8e8",
             }}
           >
-            {t === "food" ? "\u{1F35B} Food" : "\u{1F379} Drinks"}
+            {c.emoji} {c.label}
           </button>
         ))}
       </div>
@@ -149,20 +174,28 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
       <div className="space-y-2">
         {filtered.map((item) => {
           const inCart = cart.find((c) => c.menuItemId === item.id);
+          const soldOut = item.inventoryCount <= 0;
+          const lowStock = item.inventoryCount > 0 && item.inventoryCount < 5;
           return (
             <button
               key={item.id}
-              onClick={() => addToCart(item)}
+              onClick={() => !soldOut && addToCart(item)}
+              disabled={soldOut}
               className="w-full rounded-xl p-4 text-left transition hover:scale-[1.02]"
-              style={{ backgroundColor: DARK_CARD }}
+              style={{
+                backgroundColor: soldOut ? "#1a1a2e88" : DARK_CARD,
+                opacity: soldOut ? 0.5 : 1,
+              }}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <h3 className="font-medium">{item.name}</h3>
                   <p className="mt-1 text-xs opacity-50">{item.description}</p>
+                  {soldOut && <p className="mt-1 text-xs font-medium text-red-400">Sold Out</p>}
+                  {lowStock && <p className="mt-1 text-xs font-medium text-amber-400">Only {item.inventoryCount} left</p>}
                 </div>
                 <div className="flex items-center gap-3">
-                  {inCart && (
+                  {inCart && !soldOut && (
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => updateQty(item.id, -1)}
@@ -174,7 +207,8 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
                       <span className="w-5 text-center text-sm font-medium">{inCart.quantity}</span>
                       <button
                         onClick={() => updateQty(item.id, 1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                        disabled={inCart.quantity >= item.inventoryCount}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold disabled:opacity-30"
                         style={{ backgroundColor: `${GOLD}22`, color: GOLD }}
                       >
                         +
@@ -185,7 +219,7 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
                     <p className="text-sm font-semibold" style={{ color: GOLD }}>
                       {"\u20B1"}{item.price}
                     </p>
-                    {!inCart && <p className="text-[10px] opacity-40">Tap to add</p>}
+                    {!inCart && !soldOut && <p className="text-[10px] opacity-40">Tap to add</p>}
                   </div>
                 </div>
               </div>
@@ -222,7 +256,6 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
             </div>
           </div>
 
-          {/* Notes */}
           <div>
             <label className="mb-1 block text-xs uppercase tracking-wide opacity-50">
               Special Requests
@@ -241,7 +274,6 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
             />
           </div>
 
-          {/* Guest Info */}
           <div className="rounded-lg p-3" style={{ backgroundColor: "#0f346022" }}>
             <p className="text-xs opacity-50">Ordering for</p>
             <p className="text-sm font-medium">{guest.name}</p>

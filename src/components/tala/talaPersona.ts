@@ -78,7 +78,11 @@ Long Stays: Marina Terrace specializes in long stays for digital nomads and remo
 Coworking: Our rooftop coworking space has ocean views Starlink internet backup power and a quiet deep work policy. Day passes weekly sprints and monthly plans available.
 Quiet Environment: Marina Terrace maintains a quiet environment for focused work. No loud events parties or noise disturbances allowed. We are a workspace-first property.
 Weather: San Vicente has two seasons: dry season from November to May and wet season from June to October. The best months for travel are December to April with calm seas and sunny days. July to October brings occasional rain but still many clear days.
-Friendly Locals: San Vicente is a quiet authentic fishing town. Locals are warm and friendly. A gentle po or Taglish phrase is always appreciated but English is widely spoken in tourist areas.`;
+Friendly Locals: San Vicente is a quiet authentic fishing town. Locals are warm and friendly. A gentle po or Taglish phrase is always appreciated but English is widely spoken in tourist areas.
+Menu: We serve an all-day curated menu. Breakfast: Corned Beef with Eggs P350, French Toast P300, Pancakes P350, Cheese Omelette P400, Tropical Yogurt Bowl P320. Lunch: Bruschetta P320, Papas Bravas P300, Linguine Aglio Olio P480, Tagliatelle Puttanesca P550, Tonkatsu Pork Curry P550. Dinner: Shrimp Marinara Linguine P650, Shrimp a la Pobre P650, Mojo Verde Fish Fillet P650, Chicken Cacciatore P600, Paccheri Carbonara P700. Drinks: Bottled Water P25, Coke/Sprite P35, Fresh Buko Juice P60, Iced Tea P50, San Miguel Beer P70, Mango Shake P90.
+Taking Orders: To order food just tell me what you want from the menu and I'll place the order for you. You can also order directly from the Guest Portal at /portal.
+Food Availability: Some items may be sold out for the day. If an item is unavailable I'll let you know and suggest alternatives.
+Meal Periods: Breakfast is served until 11:00 AM. Lunch is served from 11:00 AM to 3:00 PM. Dinner is served from 5:00 PM to 9:00 PM. Drinks are available all day.`;
 
 export function buildTalaSystemPrompt(cms: CmsData): string {
   const today = new Date().toISOString().slice(0, 10);

@@ -557,12 +557,16 @@ export interface MotorbikeRental {
   createdAt: string;
 }
 
+export type MenuCategory = "breakfast" | "lunch" | "dinner" | "drinks";
+
 export interface MenuItem {
   id: string;
   name: string;
   description: string;
-  category: "food" | "drink";
+  category: MenuCategory;
   price: number; // PHP
+  foodCost: number; // PHP — cost of ingredients per portion
+  inventoryCount: number; // portions available (0 = sold out)
   active: boolean;
   order: number;
 }
@@ -572,7 +576,10 @@ export interface FoodOrderItem {
   name: string;
   quantity: number;
   price: number;
+  foodCost: number; // snapshot at order time
 }
+
+export type FoodOrderStatus = "pending" | "confirmed" | "preparing" | "ready" | "delivered" | "cancelled";
 
 export interface FoodOrder {
   id: string;
@@ -581,9 +588,15 @@ export interface FoodOrder {
   guestPhone: string;
   items: FoodOrderItem[];
   total: number;
-  status: "pending" | "preparing" | "delivered" | "cancelled";
+  totalCost: number; // sum of foodCost * quantity
+  status: FoodOrderStatus;
   notes: string;
   createdAt: string;
+  confirmedAt: string;
+  preparingAt: string;
+  readyAt: string;
+  deliveredAt: string;
+  cancelledAt: string;
 }
 
 export interface Operations {
