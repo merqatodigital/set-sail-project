@@ -107,13 +107,21 @@ export function TalaWidget() {
     if (open) setDevKeyState(getDevApiKey());
   }, [open]);
 
-  // Load proactive messages when widget opens (guest mode only)
+  // Proactive updates are personal to an identified guest. Anonymous visitors on
+  // the public site have no identity, so we must never generate or show them —
+  // doing so previously leaked another guest's booking into a nameless greeting.
+  const proactiveGuest: { name: string; phone: string } | null = null;
+
   useEffect(() => {
     if (!open || data.settings.tala.enabled === false) return;
-    // Only load for guest-facing widget (not admin)
+    if (!proactiveGuest?.name || !proactiveGuest?.phone) {
+      setProactiveMessages([]);
+      setShowProactive(false);
+      return;
+    }
     const loadProactive = async () => {
       try {
-        const msgs = await getProactiveMessages("", "", data);
+        const msgs = await getProactiveMessages(proactiveGuest.phone, proactiveGuest.name, data);
         if (msgs.length > 0) {
           setProactiveMessages(msgs);
           setShowProactive(true);
@@ -123,7 +131,7 @@ export function TalaWidget() {
       }
     };
     void loadProactive();
-  }, [open, data]);
+  }, [open, data, proactiveGuest]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
