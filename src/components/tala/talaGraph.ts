@@ -115,11 +115,46 @@ export interface TalaAuditEntry {
 }
 
 /**
+ * Determine if a conversation turn is significant enough to persist to the database.
+ * Only log events that need admin visibility or cross-session persistence.
+ *
+ * Significance rules:
+ * - Tools were used (booking, lead capture, etc.)
+ * - Sentiment is negative/frustrated (needs follow-up)
+ * - Intent is a complaint or booking request
+ * - Guest shared contact info (lead capture)
+ *
+ * Skip logging: greetings, FAQ answers, small talk, general questions.
+ */
+function isSignificantEvent(entry: TalaAuditEntry): boolean {
+  // Always log if tools were used (bookings, leads, etc.)
+  if (entry.toolsUsed.length > 0) return true;
+
+  // Log complaints and frustrated guests
+  if (entry.sentiment === "negative" || entry.sentiment === "frustrated") return true;
+
+  // Log booking and complaint intents
+  if (entry.classification.intent === "booking" || entry.classification.intent === "complaint") return true;
+
+  // Log when contact info is shared (lead capture)
+  const phonePattern = /\b09\d{9}\b|\b\+63\d{10}\b/;
+  const emailPattern = /\b[\w.-]+@[\w.-]+\.\w+\b/;
+  if (phonePattern.test(entry.guestMessage) || emailPattern.test(entry.guestMessage)) return true;
+
+  return false;
+}
+
+/**
  * Audit node — fire-and-forget so logging can never delay or break the
- * guest's answer. INSERT-only from the browser (same policy story as
- * tala_leads: anon can add rows, never alter or read others' details away).
+ * guest's answer. Only writes significant events to minimize database bloat.
+ *
+ * Significance filter:
+ * - Bookings, tool usage, complaints → always logged
+ * - Frustrated/negative sentiment → logged for follow-up
+ * - Greetings, FAQ, small talk → skipped (stays in browser memory only)
  */
 export function writeAuditEntry(entry: TalaAuditEntry): void {
+  if (!isSignificantEvent(entry)) return;
   if (!isSupabaseConnected() || !supabase) return;
   void (async () => {
     try {
