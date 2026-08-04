@@ -21,7 +21,7 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
-import { getProactiveMessages, markProactiveRead, type ProactiveMessage } from "./talaProactive";
+import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
