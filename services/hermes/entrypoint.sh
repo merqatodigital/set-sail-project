@@ -32,4 +32,5 @@ YAML
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
 export API_SERVER_PORT=8642
+export API_SERVER_MODEL_NAME=tala
 exec hermes gateway
