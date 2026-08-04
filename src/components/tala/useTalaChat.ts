@@ -1,177 +1,74 @@
 import { useCallback, useRef, useState } from "react";
 import {
-  OPENROUTER_ENDPOINT,
   TALA_CHAT_ENDPOINT,
-  TALA_FREE_MODELS,
   TALA_MAX_HISTORY,
   TALA_STORAGE,
-  TALA_SUPABASE_ANON_KEY,
   type TalaMessage,
 } from "./talaConfig";
 import {
-  TALA_TOOL_SCHEMAS,
-  executeTalaTool,
   captureGuestLead,
   confirmBookingDraft,
-  type TalaToolContext,
 } from "./talaTools";
 import {
   classifyHeuristically,
   writeAuditEntry,
   type TalaClassification,
 } from "./talaGraph";
-import { detectSentiment, sentimentInstruction } from "./talaSentiment";
+import { detectSentiment } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
 
-interface ToolCallWire {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-}
-
 interface WireMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-  tool_call_id?: string;
+  role: "user" | "assistant";
+  content: string;
 }
-
-interface AssistantReply {
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-}
-
-const MAX_TOOL_HOPS = 3;
 
 function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** @deprecated OpenRouter keys are now accepted only by the private Hermes service. */
 export function getDevApiKey(): string {
+  return "";
+}
+
+/** @deprecated Browser storage of model credentials is intentionally disabled. */
+export function setDevApiKey(_key: string) {
   try {
-    return localStorage.getItem(TALA_STORAGE.devApiKey) ?? "";
+    localStorage.removeItem(TALA_STORAGE.devApiKey);
   } catch {
-    return "";
+    // Storage may be unavailable in private mode.
   }
 }
 
-export function setDevApiKey(key: string) {
+function getTalaSessionKey(): string {
+  const storageKey = "tala.hermesSession";
   try {
-    if (key) localStorage.setItem(TALA_STORAGE.devApiKey, key);
-    else localStorage.removeItem(TALA_STORAGE.devApiKey);
+    const existing = localStorage.getItem(storageKey);
+    if (existing) return existing;
+    const created = `guest:${crypto.randomUUID()}`;
+    localStorage.setItem(storageKey, created);
+    return created;
   } catch {
-    /* storage unavailable (private mode) — dev key just won't persist */
+    return `guest:${crypto.randomUUID()}`;
   }
 }
 
-/**
- * Direct browser → OpenRouter call. Dev/building mode only: used when a key
- * is stored locally on this device. Production traffic should go through the
- * tala-chat edge function so the key is never exposed.
- *
- * @param preferredModel the model chosen in Admin → TALA, tried first before
- *                        falling back to the free-model chain.
- */
-async function requestChatCompletion(
-  model: string,
-  messages: WireMessage[],
-  apiKey: string,
-  includeTools: boolean,
-): Promise<{ ok: true; message: AssistantReply } | { ok: false; status: number; error: string }> {
-  const body: Record<string, unknown> = { model, messages, temperature: 0.5, max_tokens: 600 };
-  if (includeTools) {
-    body.tools = TALA_TOOL_SCHEMAS;
-    body.tool_choice = "auto";
-  }
-  const res = await fetch(OPENROUTER_ENDPOINT, {
+/** The browser talks only to the same-origin server; Hermes is the sole agent. */
+async function askHermes(messages: WireMessage[]): Promise<string> {
+  const res = await fetch(TALA_CHAT_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": window.location.origin,
-      // Header values must be Latin-1 — no em dashes or other non-ASCII characters.
-      "X-Title": "TALA - San Vicente Concierge",
+      "X-TALA-Session": getTalaSessionKey(),
     },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => null);
-    return {
-      ok: false,
-      status: res.status,
-      error: errBody?.error?.message || `HTTP ${res.status}`,
-    };
-  }
-  const data = await res.json();
-  const msg = data?.choices?.[0]?.message;
-  return { ok: true, message: { content: msg?.content ?? null, tool_calls: msg?.tool_calls } };
-}
-
-async function askOpenRouterDirect(
-  messages: WireMessage[],
-  apiKey: string,
-  preferredModel?: string,
-): Promise<AssistantReply> {
-  const chain = preferredModel
-    ? [preferredModel, ...TALA_FREE_MODELS.filter((m) => m !== preferredModel)]
-    : TALA_FREE_MODELS;
-  let lastError = "";
-  for (const model of chain) {
-    try {
-      let result = await requestChatCompletion(model, messages, apiKey, true);
-      // Not every free/open model supports function-calling — if the API
-      // rejects the `tools` param outright, retry that same model without
-      // it rather than treating it as dead.
-      if (!result.ok && result.status === 400 && /tool|function/i.test(result.error)) {
-        result = await requestChatCompletion(model, messages, apiKey, false);
-      }
-      if (!result.ok) {
-        lastError = `${model}: ${result.error}`;
-        // 429 = free-tier rate limit, 404 = model retired — try the next one.
-        if (result.status === 429 || result.status === 404 || result.status >= 500) continue;
-        throw new Error(lastError);
-      }
-      if (result.message.content || result.message.tool_calls?.length) return result.message;
-      lastError = `${model}: empty response`;
-    } catch (e) {
-      lastError = e instanceof Error ? e.message : String(e);
-    }
-  }
-  throw new Error(lastError || "All free models are busy right now.");
-}
-
-/** Production path: Supabase Edge Function proxy (key lives in Supabase secrets). */
-async function askEdgeFunction(
-  messages: WireMessage[],
-  preferredModel?: string,
-): Promise<AssistantReply> {
-  if (!TALA_CHAT_ENDPOINT) throw new Error("Supabase is not configured.");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (TALA_SUPABASE_ANON_KEY) {
-    headers.apikey = TALA_SUPABASE_ANON_KEY;
-    headers.Authorization = `Bearer ${TALA_SUPABASE_ANON_KEY}`;
-  }
-  const res = await fetch(TALA_CHAT_ENDPOINT, {
-    method: "POST",
-    headers,
-    // Tool schemas are NOT sent here — the edge function only trusts its own
-    // hardcoded copy (see supabase/functions/tala-chat/index.ts), not
-    // anything a client could supply.
-    body: JSON.stringify({ messages, model: preferredModel || undefined }),
+    body: JSON.stringify({ messages }),
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
-  }
-  // The edge function already runs the full agent<->tools loop server-side
-  // and returns only the final text as { reply }. It never sends tool_calls
-  // back to the client — that's why this reads `reply`, not `message`.
-  const content = typeof data?.reply === "string" ? data.reply.trim() : "";
-  if (!content) {
-    throw new Error("TALA returned an empty reply.");
-  }
-  return { content, tool_calls: undefined };
+  if (!res.ok) throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
+  const reply = typeof data?.reply === "string" ? data.reply.trim() : "";
+  if (!reply) throw new Error("TALA returned an empty reply.");
+  return reply;
 }
 
 /**
@@ -265,85 +162,17 @@ export function useTalaChat(): UseTalaChat {
         void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
       }
 
-      let wire: WireMessage[] = [
-        { role: "system", content: systemPrompt },
-        ...history.slice(-TALA_MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
-      ];
-
-      // Sentiment analysis — inject context-aware instructions into the prompt
+      void systemPrompt;
+      const wire: WireMessage[] = history
+        .slice(-TALA_MAX_HISTORY)
+        .map((message) => ({ role: message.role, content: message.content }));
       const sentiment = detectSentiment(trimmed);
-      const sentimentNote = sentimentInstruction(sentiment);
-      if (sentimentNote) {
-        wire.splice(1, 0, { role: "system", content: `[Guest sentiment: ${sentiment.sentiment} (${Math.round(sentiment.confidence * 100)}% confidence). ${sentimentNote}]` });
-      }
-
-      // Time-of-day context injection for proactive behavior
-      const hour = new Date().getHours();
-      if (hour >= 16 && hour <= 17) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's late afternoon — sunset session is happening now. Mention it if relevant.]" });
-      } else if (hour >= 7 && hour <= 10) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's morning — breakfast is being served. Mention it if relevant.]" });
-      } else if (hour >= 12 && hour <= 14) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
-      }
-
-      // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
-      // Runs in PARALLEL with the LLM call to save 200-500ms
-      const weatherPromise = import("./talaWeather")
-        .then(({ buildWeatherContext }) => buildWeatherContext())
-        .catch(() => null);
 
       try {
-        // Priority: key entered in Admin → TALA (works instantly, no deploy
-        // needed) → device-local dev key (building on this browser only) →
-        // Supabase edge function (production path, key stays server-side).
-        const key = options?.adminApiKey || getDevApiKey();
-        const requestReply = (msgs: WireMessage[]) =>
-          key
-            ? askOpenRouterDirect(msgs, key, preferredModel)
-            : askEdgeFunction(msgs, preferredModel);
-
-        // Graph node 2 — agent: the tool-calling loop.
+        // Hermes is the driver. Tool calls, memory, skills, and OpenRouter
+        // execution all complete inside the private Hermes service.
         const toolsUsed: string[] = [];
-        let reply = await requestReply(wire);
-
-        // Inject weather context into wire after LLM call returns (parallel)
-        const weatherCtx = await weatherPromise;
-        if (weatherCtx?.suggestion) {
-          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
-        }
-        let hops = 0;
-        while (reply.tool_calls?.length && hops < MAX_TOOL_HOPS) {
-          hops++;
-          wire = [
-            ...wire,
-            { role: "assistant", content: reply.content, tool_calls: reply.tool_calls },
-          ];
-          // Execute ALL tool calls in parallel (saves 50-200ms per extra tool)
-          const toolCtx: TalaToolContext = {
-            cms: options?.cms!,
-            update: options?.owner ? persistCms : undefined,
-            owner: !!options?.owner,
-          };
-          const toolResults = await Promise.all(
-            reply.tool_calls.map(async (call) => {
-              toolsUsed.push(call.function.name);
-              const result = options?.cms
-                ? await executeTalaTool(
-                    { id: call.id, name: call.function.name, arguments: call.function.arguments },
-                    toolCtx,
-                  )
-                : { error: "Tool unavailable — no site data loaded." };
-              const draft = (result as { draft?: BookingDraft }).draft;
-              if (draft) setPendingDraft(draft);
-              return { role: "tool" as const, tool_call_id: call.id, content: JSON.stringify(result) };
-            }),
-          );
-          wire = [...wire, ...toolResults];
-          reply = await requestReply(wire);
-        }
-
-        const finalText = reply.content?.trim();
+        const finalText = await askHermes(wire);
         if (!finalText) throw new Error("TALA didn't have a reply.");
 
         messagesRef.current = [
