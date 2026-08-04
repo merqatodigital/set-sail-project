@@ -32,7 +32,7 @@ async function proxyTalaToHermes(request: Request, env: unknown): Promise<Respon
 
   const hermesUrl = runtimeValue(env, "HERMES_API_URL").replace(/\/$/, "");
   const hermesKey = runtimeValue(env, "HERMES_API_KEY");
-  const model = runtimeValue(env, "HERMES_MODEL") || "openai/gpt-oss-20b";
+  const model = runtimeValue(env, "HERMES_API_MODEL") || "tala";
   if (!hermesUrl || !hermesKey) {
     return json({ error: "TALA's Hermes service is not configured." }, 503);
   }
