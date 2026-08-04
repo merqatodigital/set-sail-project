@@ -45,7 +45,8 @@ def _iso(value: str) -> date:
 @mcp.tool()
 def get_resort_snapshot() -> dict[str, Any]:
     """Return public resort facts and inventory counts without guest PII."""
-    cms, ops = _cms(), _ops(_cms())
+    cms = _cms()
+    ops = _ops(cms)
     return {
         "site_name": (cms.get("settings") or {}).get("siteName"),
         "rooms": [{"name": r.get("name"), "capacity": r.get("capacity"), "price": r.get("price")} for r in _rooms(cms)],
@@ -98,28 +99,6 @@ def create_booking_request(guest_name: str, room_type: str, check_in: str, check
            "source": "tala_hermes", "status": "pending"}
     created = _request("POST", "tala_booking_requests", row)
     return {"success": True, "status": "pending", "request": created[0] if created else row}
-
-@mcp.tool()
-def create_guest_request(guest_name: str, request: str, department: str = "guest_relations",
-                         guest_phone: str = "", urgency: str = "normal") -> dict[str, Any]:
-    """Create a pending guest service request."""
-    departments = {"guest_relations", "front_desk", "housekeeping", "maintenance", "finance"}
-    urgencies = {"low", "normal", "high", "urgent"}
-    row = {"guest_name": guest_name.strip()[:200], "guest_phone": guest_phone.strip()[:50],
-           "request": request.strip()[:1500], "department": department if department in departments else "guest_relations",
-           "urgency": urgency if urgency in urgencies else "normal", "status": "pending", "source": "tala_hermes"}
-    created = _request("POST", "tala_guest_requests", row)
-    return {"success": True, "request": created[0] if created else row}
-
-@mcp.tool()
-def create_staff_task(title: str, category: str = "general", due_date: str | None = None,
-                      notes: str = "") -> dict[str, Any]:
-    """Create a pending staff task; completion remains human-controlled."""
-    row = {"title": title.strip()[:300], "category": category.strip()[:80],
-           "due_date": due_date[:10] if due_date else None, "notes": notes.strip()[:1500],
-           "status": "pending", "source": "tala_hermes"}
-    created = _request("POST", "tala_staff_tasks", row)
-    return {"success": True, "task": created[0] if created else row}
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
