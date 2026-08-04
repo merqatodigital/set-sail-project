@@ -1,0 +1,26 @@
+services:
+  hermes:
+    build:
+      context: .
+      dockerfile: services/hermes/Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      API_SERVER_KEY: ${HERMES_API_KEY}
+      HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      RESORT_CMS_KEY: ${RESORT_CMS_KEY:-marina_terrace_payload}
+      HERMES_HOME: /data/hermes
+    volumes:
+      - hermes-data:/data/hermes
+    ports:
+      - "127.0.0.1:8642:8642"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+volumes:
+  hermes-data:
