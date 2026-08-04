@@ -7,12 +7,10 @@
 DROP TABLE IF EXISTS tala_knowledge CASCADE;
 
 -- 2. Auto-purge briefings older than 30 days
--- Runs as a PostgreSQL function that can be called manually or via pg_cron
 CREATE OR REPLACE FUNCTION purge_old_briefings()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM tala_briefings
-  WHERE created_at < NOW() - INTERVAL '30 days';
+  DELETE FROM tala_briefings WHERE generated_at < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -20,8 +18,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION purge_old_audit_log()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM tala_audit_log
-  WHERE created_at < NOW() - INTERVAL '30 days';
+  DELETE FROM tala_audit_log WHERE created_at < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -29,9 +26,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION purge_old_proactive_messages()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM tala_proactive_messages
-  WHERE created_at < NOW() - INTERVAL '14 days'
-    AND read = TRUE;
+  DELETE FROM tala_proactive_messages WHERE created_at < NOW() - INTERVAL '14 days' AND read = TRUE;
 END;
 $$ LANGUAGE plpgsql;
 
