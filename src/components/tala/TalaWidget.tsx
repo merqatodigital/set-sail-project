@@ -21,7 +21,7 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
-import { getProactiveMessages, markProactiveRead, type ProactiveMessage } from "./talaProactive";
+import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
@@ -107,23 +107,15 @@ export function TalaWidget() {
     if (open) setDevKeyState(getDevApiKey());
   }, [open]);
 
-  // Load proactive messages when widget opens (guest mode only)
+  // Proactive updates are personal to an identified guest. The public widget has
+  // no guest identity, so nothing is generated here — passing empty identifiers
+  // previously matched arbitrary bookings and rendered nameless greetings with
+  // another guest's room and dates.
   useEffect(() => {
-    if (!open || data.settings.tala.enabled === false) return;
-    // Only load for guest-facing widget (not admin)
-    const loadProactive = async () => {
-      try {
-        const msgs = await getProactiveMessages("", "", data);
-        if (msgs.length > 0) {
-          setProactiveMessages(msgs);
-          setShowProactive(true);
-        }
-      } catch {
-        // proactive messaging must never break the chat
-      }
-    };
-    void loadProactive();
-  }, [open, data]);
+    if (!open) return;
+    setProactiveMessages([]);
+    setShowProactive(false);
+  }, [open]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });

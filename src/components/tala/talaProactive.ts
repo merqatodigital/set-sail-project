@@ -39,6 +39,11 @@ export async function generateProactiveMessages(
   guestName: string,
   cms: CmsData,
 ): Promise<ProactiveMessage[]> {
+  // Never generate personal updates without a real identity: an empty phone
+  // makes notes.includes("") true for every booking, which would surface
+  // another guest's stay details to an anonymous visitor.
+  if (!guestName.trim() || !guestPhone.trim()) return [];
+
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const tomorrow = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
@@ -49,7 +54,7 @@ export async function generateProactiveMessages(
   // Find guest's bookings
   const myBookings = cms.operations.bookings.filter(
     (b) => b.guestName.toLowerCase() === guestName.toLowerCase() ||
-           b.notes?.includes(guestPhone),
+           (!!guestPhone.trim() && !!b.notes?.includes(guestPhone)),
   );
 
   const myTours = cms.operations.tourBookings.filter(
