@@ -304,7 +304,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   // of the reply sitting silently on screen before anything is spoken.
   // Silence reads as far more "broken" than a brief robotic-voice opener, so
   // this now falls back to the browser voice much sooner.
-  const KOKORO_WAIT_CAP_MS = 8000;
+  const KOKORO_WAIT_CAP_MS = 3500;
   const voiceIdRef = useRef(voiceId);
   voiceIdRef.current = voiceId;
 
@@ -359,54 +359,56 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     if (isMobile) return; // skip Kokoro on mobile entirely
     if (!active || !enabled || kokoroRef.current || kokoroLoading.current) return;
     if (typeof window === "undefined") return;
-    kokoroLoading.current = true;
-    setEngine((e) => (e === "none" ? "browser" : e));
-    setLoadProgress(0);
 
-    (async () => {
-      try {
-        const { KokoroTTS } = await import("kokoro-js");
-        // WebGPU inference has real, reported bugs on some Windows GPU/driver
-        // combinations that corrupt the generated audio into static/noise —
-        // the model runs without error, but the output samples are garbage.
-        // WASM (CPU) is slower to load but produces correct audio everywhere,
-        // so we use it unconditionally rather than opportunistically trying
-        // WebGPU first.
-        //
-        // dtype: q8 gives the most humanlike output on CPU. Lower quants
-        // (q4/q4f16) load faster but audibly degrade the voice into a
-        // robotic tone, so we stick with q8.
-        const loadWith = (dtype: "q8") =>
-          KokoroTTS.from_pretrained(TALA_KOKORO_MODEL, {
-            dtype,
-            device: "wasm",
-            progress_callback: (p: { status?: string; progress?: number }) => {
-              if (typeof p?.progress === "number") {
-                setLoadProgress(Math.round(p.progress));
-              }
-            },
-          });
-        const tts = (await loadWith("q8")) as unknown as KokoroInstance;
-        kokoroRef.current = tts;
-        setEngine("kokoro");
-      } catch (e) {
-        // WASM blocked / download failed / old browser: stay on browser voices.
-        console.warn("[TALA] Kokoro TTS unavailable, using browser voice.", e);
-        setEngine("browser");
-      } finally {
-        setLoadProgress(null);
-        kokoroLoading.current = false;
-        // Flush any reply that was held back waiting for the natural voice.
-        if (pendingSpeakRef.current) {
-          pendingSpeakRef.current = false;
-          if (waitTimerRef.current) {
-            clearTimeout(waitTimerRef.current);
-            waitTimerRef.current = null;
+    // Use requestIdleCallback to start download during browser idle time
+    // so it doesn't compete with page rendering or user interaction
+    const startDownload = () => {
+      kokoroLoading.current = true;
+      setEngine((e) => (e === "none" ? "browser" : e));
+      setLoadProgress(0);
+
+      (async () => {
+        try {
+          const { KokoroTTS } = await import("kokoro-js");
+          const loadWith = (dtype: "q8") =>
+            KokoroTTS.from_pretrained(TALA_KOKORO_MODEL, {
+              dtype,
+              device: "wasm",
+              progress_callback: (p: { status?: string; progress?: number }) => {
+                if (typeof p?.progress === "number") {
+                  setLoadProgress(Math.round(p.progress));
+                }
+              },
+            });
+          const tts = (await loadWith("q8")) as unknown as KokoroInstance;
+          kokoroRef.current = tts;
+          setEngine("kokoro");
+        } catch (e) {
+          console.warn("[TALA] Kokoro TTS unavailable, using browser voice.", e);
+          setEngine("browser");
+        } finally {
+          setLoadProgress(null);
+          kokoroLoading.current = false;
+          if (pendingSpeakRef.current) {
+            pendingSpeakRef.current = false;
+            if (waitTimerRef.current) {
+              clearTimeout(waitTimerRef.current);
+              waitTimerRef.current = null;
+            }
+            void playQueueRef.current?.();
           }
-          void playQueueRef.current?.();
         }
-      }
-    })();
+      })();
+    };
+
+    // Use requestIdleCallback to start download during browser idle time
+    // so it doesn't compete with page rendering or user interaction
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(startDownload, { timeout: 5000 });
+    } else {
+      // Fallback: start after a short delay if requestIdleCallback not supported
+      setTimeout(startDownload, 100);
+    }
   }, [enabled, provider, active]);
 
   const playQueue = useCallback(async () => {

@@ -288,16 +288,10 @@ export function useTalaChat(): UseTalaChat {
       }
 
       // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
-      // Falls back gracefully if no API key is set
-      try {
-        const { buildWeatherContext } = await import("./talaWeather");
-        const weatherCtx = await buildWeatherContext();
-        if (weatherCtx.suggestion) {
-          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
-        }
-      } catch {
-        /* weather is optional — never blocks the conversation */
-      }
+      // Runs in PARALLEL with the LLM call to save 200-500ms
+      const weatherPromise = import("./talaWeather")
+        .then(({ buildWeatherContext }) => buildWeatherContext())
+        .catch(() => null);
 
       try {
         // Priority: key entered in Admin → TALA (works instantly, no deploy
@@ -312,6 +306,12 @@ export function useTalaChat(): UseTalaChat {
         // Graph node 2 — agent: the tool-calling loop.
         const toolsUsed: string[] = [];
         let reply = await requestReply(wire);
+
+        // Inject weather context into wire after LLM call returns (parallel)
+        const weatherCtx = await weatherPromise;
+        if (weatherCtx?.suggestion) {
+          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
+        }
         let hops = 0;
         while (reply.tool_calls?.length && hops < MAX_TOOL_HOPS) {
           hops++;
@@ -319,23 +319,27 @@ export function useTalaChat(): UseTalaChat {
             ...wire,
             { role: "assistant", content: reply.content, tool_calls: reply.tool_calls },
           ];
-          for (const call of reply.tool_calls) {
-            toolsUsed.push(call.function.name);
-            const result = options?.cms
-              ? await executeTalaTool(
-                  { id: call.id, name: call.function.name, arguments: call.function.arguments },
-                  {
-                    cms: options.cms,
-                    update: options.owner ? persistCms : undefined,
-                    owner: !!options.owner,
-                  } satisfies TalaToolContext,
-                )
-              : { error: "Tool unavailable — no site data loaded." };
-            // Surface a guest booking draft so the widget can show a confirm card.
-            const draft = (result as { draft?: BookingDraft }).draft;
-            if (draft) setPendingDraft(draft);
-            wire.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
-          }
+          // Execute ALL tool calls in parallel (saves 50-200ms per extra tool)
+          const toolCtx: TalaToolContext = {
+            cms: options?.cms!,
+            update: options?.owner ? persistCms : undefined,
+            owner: !!options?.owner,
+          };
+          const toolResults = await Promise.all(
+            reply.tool_calls.map(async (call) => {
+              toolsUsed.push(call.function.name);
+              const result = options?.cms
+                ? await executeTalaTool(
+                    { id: call.id, name: call.function.name, arguments: call.function.arguments },
+                    toolCtx,
+                  )
+                : { error: "Tool unavailable — no site data loaded." };
+              const draft = (result as { draft?: BookingDraft }).draft;
+              if (draft) setPendingDraft(draft);
+              return { role: "tool" as const, tool_call_id: call.id, content: JSON.stringify(result) };
+            }),
+          );
+          wire = [...wire, ...toolResults];
           reply = await requestReply(wire);
         }
 

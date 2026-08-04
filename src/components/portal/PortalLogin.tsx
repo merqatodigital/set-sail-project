@@ -89,6 +89,13 @@ export default function PortalLogin({ onLogin }: Props) {
         className="w-full rounded-2xl p-6 shadow-lg"
         style={{ backgroundColor: DARK_CARD }}
       >
+        {/* Privacy Notice */}
+        <p className="mb-4 rounded-lg p-3 text-[11px] leading-relaxed opacity-50" style={{ backgroundColor: "#0f3460" }}>
+          We collect your name and phone number to manage your booking and provide concierge services.
+          Your data is stored securely and retained for 2 years after checkout. For details, see our{" "}
+          <a href="/privacy" className="underline transition-colors hover:opacity-80">Privacy Policy</a>.
+          You can request access, correction, or deletion of your data by contacting us.
+        </p>
         <label className="mb-2 block text-xs uppercase tracking-wide opacity-50">
           Phone Number
         </label>
