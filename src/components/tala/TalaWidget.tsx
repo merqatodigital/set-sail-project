@@ -107,31 +107,15 @@ export function TalaWidget() {
     if (open) setDevKeyState(getDevApiKey());
   }, [open]);
 
-  // Proactive updates are personal to an identified guest. Anonymous visitors on
-  // the public site have no identity, so we must never generate or show them —
-  // doing so previously leaked another guest's booking into a nameless greeting.
-  const proactiveGuest: { name: string; phone: string } | null = null;
-
+  // Proactive updates are personal to an identified guest. The public widget has
+  // no guest identity, so nothing is generated here — passing empty identifiers
+  // previously matched arbitrary bookings and rendered nameless greetings with
+  // another guest's room and dates.
   useEffect(() => {
-    if (!open || data.settings.tala.enabled === false) return;
-    if (!proactiveGuest?.name || !proactiveGuest?.phone) {
-      setProactiveMessages([]);
-      setShowProactive(false);
-      return;
-    }
-    const loadProactive = async () => {
-      try {
-        const msgs = await getProactiveMessages(proactiveGuest.phone, proactiveGuest.name, data);
-        if (msgs.length > 0) {
-          setProactiveMessages(msgs);
-          setShowProactive(true);
-        }
-      } catch {
-        // proactive messaging must never break the chat
-      }
-    };
-    void loadProactive();
-  }, [open, data, proactiveGuest]);
+    if (!open) return;
+    setProactiveMessages([]);
+    setShowProactive(false);
+  }, [open]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
