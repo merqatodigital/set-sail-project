@@ -1,14 +1,24 @@
 // ---------------------------------------------------------------------------
 // TALA — central configuration.
 //
-// TALA is the resort identity of the private Hermes Agent service.
-// The browser is only an interface: all reasoning, OpenRouter access, memory,
-// skills, schedules, and operational tools execute in Hermes. Voice remains
-// in-browser: Kokoro-82M for speech out and Web Speech API for speech in.
+// TALA is the site's AI concierge, ported from the KAPWA Resort OS agent
+// (github.com/merqatodigital/working-AI-agent). The Python backend's
+// LangGraph pipeline is replaced here by a single chat completion against
+// OpenRouter, proxied through the `tala-chat` Supabase Edge Function so the
+// API key stays server-side. Voice is fully in-browser and free:
+// Kokoro-82M (open source) for speech out, Web Speech API for speech in.
 // ---------------------------------------------------------------------------
 
-/** Same-origin server route that authenticates privately to Hermes. */
-export const TALA_CHAT_ENDPOINT = "/api/tala/chat";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+
+/** Supabase Edge Function endpoint that proxies OpenRouter (keeps the key secret). */
+export const TALA_CHAT_ENDPOINT = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/tala-chat` : null;
+
+export const TALA_SUPABASE_ANON_KEY = SUPABASE_KEY ?? null;
+
+/** Direct OpenRouter endpoint — used only in dev mode with a locally stored key. */
+export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
  * OpenRouter's hosted text-to-speech endpoint — same key/billing as the chat

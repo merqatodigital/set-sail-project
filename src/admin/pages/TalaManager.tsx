@@ -33,8 +33,19 @@ import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
 import { useTalaKnowledge } from "@/components/tala/useTalaKnowledge";
 import { TALA_KOKORO_VOICES } from "@/components/tala/talaConfig";
 
-// TALA settings. Hermes is the only agent driver. Model credentials stay in
-// the private Hermes runtime and are never stored in CMS data or the browser.
+// ---------------------------------------------------------------------------
+// TALA settings — admin picks the OpenRouter model AND (for fast iteration
+// while building) can paste an API key straight in here.
+//
+// Trade-off, stated plainly: this page's data is the same data the public
+// site loads to render itself, so anything saved here — including this key
+// — is technically readable by anyone who inspects the site's network
+// requests. That's the same pattern this codebase already uses for the
+// WhatsApp chatbot's API key field (see WhatsAppManager.tsx), so it's not a
+// new risk class, just the same one applied to TALA. Fine for a key you're
+// fine rotating during active building; swap it for the private Supabase
+// Edge Function secret (never exposed) before this is production-final.
+// ---------------------------------------------------------------------------
 
 type SyncState = "idle" | "saving" | "verifying" | "synced" | "error";
 
@@ -81,6 +92,8 @@ export default function TalaManager() {
   const [femaleOnly, setFemaleOnly] = useState(true);
 
   const [sync, setSync] = useState<SyncState>("idle");
+  const [keyInput, setKeyInput] = useState(tala.apiKey);
+  const [showKey, setShowKey] = useState(false);
 
   // ---- Leads TALA has captured via the log_interested_guest tool.
   const [leads, setLeads] = useState<TalaLead[] | null>(null);
@@ -254,13 +267,20 @@ export default function TalaManager() {
     notify(on ? "TALA enabled on the site" : "TALA hidden from the site");
   };
 
+  const saveKey = async () => {
+    const trimmed = keyInput.trim();
+    patchTala((t) => ({ ...t, apiKey: trimmed, updatedAt: new Date().toISOString() }));
+    notify(trimmed ? "API key saved — TALA is live" : "API key cleared");
+    await confirmSynced((cloudTala) => cloudTala?.apiKey === trimmed);
+  };
+
   // ---- Live test — runs the exact same pipeline a visitor's browser would,
   // right here in admin, so there's no back-and-forth to the public site.
   const chat = useTalaChat();
   const voice = useTalaVoice({
     defaultVoiceId: tala.voiceId || undefined,
-    provider: "kokoro",
-    apiKey: undefined,
+    provider: tala.voiceProvider,
+    apiKey: tala.apiKey || undefined,
     ttsModelId: tala.ttsModelId || undefined,
     ttsVoiceId: tala.ttsVoiceId || undefined,
   });
@@ -285,6 +305,8 @@ export default function TalaManager() {
   const runTest = async () => {
     voice.stop();
     const reply = await chat.send(testMessage, systemPrompt, {
+      model: tala.modelId || undefined,
+      adminApiKey: tala.apiKey || undefined,
       cms: data,
     });
     if (reply) voice.speak(reply);
@@ -336,7 +358,7 @@ export default function TalaManager() {
     <div>
       <PageHeader
         title="TALA — AI Voice Concierge"
-        description="Hermes Agent runs TALA's reasoning, memory, resort skills, schedules, and OpenRouter model."
+        description="Pick which AI model powers TALA's answers. The voice itself (Kokoro, in-browser) is separate and always free."
         actions={
           <Link to="/admin/tala/knowledge">
             <Button variant="outline" size="sm">
@@ -348,7 +370,10 @@ export default function TalaManager() {
 
       {/* Readiness strip — everything you'd otherwise check on the live site */}
       <div className="mb-6 flex flex-wrap gap-2">
-        <StatusChip tone="green" label="Driver: Hermes Agent" />
+        <StatusChip
+          tone={tala.apiKey ? "green" : "gray"}
+          label={tala.apiKey ? "API key set" : "No key — using free fallback"}
+        />
         <StatusChip
           tone="green"
           label={
@@ -409,33 +434,364 @@ export default function TalaManager() {
       </Card>
 
       <Card className="mb-6 p-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1F3D2B]/10">
-            <Sparkles className="h-5 w-5 text-[#1F3D2B]" />
-          </div>
+        <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="font-serif text-lg text-[#26221C]">Hermes Agent is TALA's driver</p>
-            <p className="mt-1 text-sm leading-relaxed text-[#26221C]/55">
-              TALA's OpenRouter key, model, memory, skills, schedules, and resort tools are managed
-              by the private Hermes service. No AI key is stored in this dashboard or sent to a guest browser.
+            <p className="font-serif text-lg text-[#26221C]">OpenRouter API Key</p>
+            <p className="mt-1 text-sm text-[#26221C]/55">
+              Paste your key here to make TALA work right now, no deploy step needed. Fast for
+              building — see the note below on why this isn't where a final production key should
+              live.
             </p>
           </div>
+          <Badge
+            className={tala.apiKey ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}
+          >
+            {tala.apiKey ? "Key set — TALA is live" : "No key yet"}
+          </Badge>
         </div>
-      </Card>      <Card className="mb-6 p-6">
-        <div className="mb-4">
-          <p className="font-serif text-lg text-[#26221C]">TALA voice</p>
-          <p className="mt-1 text-sm text-[#26221C]/55">
-            Kokoro runs locally in the browser, so the buyer's OpenRouter key remains private in Hermes.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <Field label="API Key">
+              <div className="relative">
+                <Input
+                  type={showKey ? "text" : "password"}
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder="sk-or-v1-…"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#26221C]/40 hover:text-[#26221C]"
+                  aria-label={showKey ? "Hide key" : "Show key"}
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </Field>
+          </div>
+          <Button onClick={saveKey} disabled={keyInput === tala.apiKey}>
+            Save Key
+          </Button>
         </div>
-        <Field label="Female voice">
-          <Select value={tala.voiceId} onChange={(e) => void chooseVoice(e.target.value)}>
-            {TALA_KOKORO_VOICES.filter((voiceOption) => voiceOption.gender === "female").map((voiceOption) => (
-              <option key={voiceOption.id} value={voiceOption.id}>{voiceOption.label}</option>
-            ))}
+      </Card>
+
+      <Card className="mb-6 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="font-serif text-lg text-[#26221C]">Model</p>
+            <p className="mt-1 text-sm text-[#26221C]/55">
+              All current OpenRouter models, free and paid, A–Z. Free models cost nothing to run;
+              paid models are billed to your OpenRouter account per use.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadModels} disabled={loadingModels}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loadingModels ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
+
+        {loadError && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{loadError}</p>
+          </div>
+        )}
+
+        <Field
+          label="Active model"
+          hint="Leave on the default to let TALA automatically use free models with fallback."
+        >
+          <Select
+            value={tala.modelId}
+            onChange={(e) => void chooseModel(e.target.value)}
+            disabled={loadingModels}
+          >
+            <option value="">— Default: automatic free-model fallback —</option>
+            {models && models.free.length > 0 && (
+              <optgroup label={`Free models (${models.free.length})`}>
+                {models.free.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {models && models.paid.length > 0 && (
+              <optgroup label={`Paid models (${models.paid.length})`}>
+                {models.paid.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} — {formatPrice(m)}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </Select>
         </Field>
-      </Card>      <Card className="mb-6 p-6">
+
+        {selected && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-[#FAF6EF] px-4 py-3 text-sm">
+            <Badge
+              className={
+                selected.isFree ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+              }
+            >
+              {selected.isFree ? "Free" : "Paid"}
+            </Badge>
+            <span className="text-[#26221C]/70">{selected.id}</span>
+            {!selected.isFree && (
+              <span className="text-[#26221C]/50">· {formatPrice(selected)}</span>
+            )}
+            {selected.contextLength && (
+              <span className="text-[#26221C]/50">
+                · {selected.contextLength.toLocaleString()} token context
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Sync indicator — the "green light" */}
+        <div className="mt-4 flex items-center gap-2 text-sm">
+          {sync === "idle" && (
+            <span className="text-[#26221C]/40">No changes yet this session.</span>
+          )}
+          {sync === "saving" && (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-[#26221C]/50" />
+              <span className="text-[#26221C]/60">Saving…</span>
+            </>
+          )}
+          {sync === "verifying" && (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-[#26221C]/50" />
+              <span className="text-[#26221C]/60">Confirming it reached the live site…</span>
+            </>
+          )}
+          {sync === "synced" && (
+            <>
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="font-medium text-green-700">
+                Synced — TALA on the live site is now using this model.
+              </span>
+            </>
+          )}
+          {sync === "error" && (
+            <>
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <span className="text-red-600">
+                Saved locally, but couldn't confirm the cloud copy. Refresh this page to check
+                again.
+              </span>
+            </>
+          )}
+        </div>
+      </Card>
+
+      <Card className="mb-6 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="font-serif text-lg text-[#26221C]">Voice</p>
+            <p className="mt-1 text-sm text-[#26221C]/55">
+              Kokoro runs free, entirely in the visitor's browser — but the ~80 MB model has to
+              download before she can speak the first time. OpenRouter's hosted voices use the same
+              key as your chat brain above: real per-character cost, but no download wait.
+            </p>
+          </div>
+          <Badge
+            className={
+              voice.engine === "kokoro" || voice.engine === "openrouter"
+                ? "bg-green-100 text-green-700"
+                : "bg-amber-100 text-amber-700"
+            }
+          >
+            {voice.engine === "openrouter"
+              ? "OpenRouter — ready"
+              : voice.engine === "kokoro"
+                ? "Kokoro — loaded"
+                : voice.loadProgress !== null
+                  ? `Loading ${voice.loadProgress}%`
+                  : "Not loaded yet"}
+          </Badge>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-[#FAF6EF] p-1">
+          <button
+            onClick={() => void chooseVoiceProvider("kokoro")}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+              tala.voiceProvider === "kokoro"
+                ? "bg-white text-[#26221C] shadow-sm"
+                : "text-[#26221C]/50 hover:text-[#26221C]"
+            }`}
+          >
+            Kokoro — free, in-browser
+          </button>
+          <button
+            onClick={() => void chooseVoiceProvider("openrouter")}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+              tala.voiceProvider === "openrouter"
+                ? "bg-white text-[#26221C] shadow-sm"
+                : "text-[#26221C]/50 hover:text-[#26221C]"
+            }`}
+          >
+            OpenRouter — paid, no lag
+          </button>
+        </div>
+
+        {tala.voiceProvider === "kokoro" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#26221C]">
+                Female voices — tap <span className="font-mono">▶</span> to hear, tap the row to choose
+              </p>
+              <label className="flex items-center gap-1.5 text-xs text-[#26221C]/60">
+                <input
+                  type="checkbox"
+                  checked={femaleOnly}
+                  onChange={(e) => setFemaleOnly(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#1F3D2B]"
+                />
+                Female only
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {TALA_KOKORO_VOICES.filter((v) => (femaleOnly ? v.gender === "female" : true)).map((v) => {
+                const isChosen = tala.voiceId === v.id;
+                const isPlaying = voice.previewId === v.id;
+                const name = v.label.split(" — ")[0];
+                return (
+                  <div
+                    key={v.id}
+                    className={`flex items-center gap-2 rounded-xl border p-2.5 transition ${
+                      isChosen
+                        ? "border-[#C6A15B] bg-[#C6A15B]/10 shadow-sm"
+                        : "border-[#26221C]/10 bg-white hover:border-[#C6A15B]/40"
+                    }`}
+                  >
+                    {/* Green light on the chosen voice */}
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        isChosen ? "bg-green-500 shadow-[0_0_8px_2px_rgba(34,197,94,0.5)]" : "bg-[#26221C]/15"
+                      }`}
+                      title={isChosen ? "TALA's live voice" : ""}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void chooseVoice(v.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-medium text-[#26221C]">{name}</p>
+                      <p className="truncate text-[11px] text-[#26221C]/50">
+                        {v.gender === "female" ? "Female" : "Male"} · {v.accent === "british" ? "British" : "American"}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => voice.preview(v.id)}
+                      disabled={Boolean(voice.previewId)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition ${
+                        isPlaying ? "bg-[#C6A15B]" : "bg-[#1F3D2B] hover:opacity-90"
+                      }`}
+                      title="Play sample"
+                    >
+                      {isPlaying ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <PlayCircle className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-[11px] text-[#26221C]/45">
+              All Kokoro voices are free and run in the visitor's browser. The green-lit voice is what every guest
+              hears. Pick one, then use “Test TALA Live” below to confirm.
+            </p>
+          </div>
+        )}
+
+        {tala.voiceProvider === "openrouter" && (
+          <div className="space-y-4">
+            {!tala.apiKey && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  No API key set yet — add one in the OpenRouter API Key card above. OpenRouter TTS
+                  uses that same key.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#26221C]">Voice model</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadTtsModels}
+                disabled={loadingTtsModels}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingTtsModels ? "animate-spin" : ""}`} />{" "}
+                Refresh
+              </Button>
+            </div>
+
+            {ttsLoadError && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>{ttsLoadError}</p>
+              </div>
+            )}
+
+            <Field
+              label="Model"
+              hint="Hosted TTS models on OpenRouter — MiniMax, GPT-4o Mini TTS, Voxtral, and others."
+            >
+              <Select
+                value={tala.ttsModelId}
+                onChange={(e) => void chooseTtsModel(e.target.value)}
+                disabled={loadingTtsModels}
+              >
+                <option value="">— Choose a voice model —</option>
+                {ttsModels?.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} — {formatPrice(m)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field
+              label="Voice ID"
+              hint='Each model defines its own voice set — check its OpenRouter page. Examples: OpenAI uses "nova" or "alloy"; Voxtral uses "en_paul_happy".'
+            >
+              <div className="flex gap-2">
+                <Input
+                  value={ttsVoiceIdInput}
+                  onChange={(e) => setTtsVoiceIdInput(e.target.value)}
+                  placeholder="e.g. nova"
+                />
+                <Button
+                  onClick={() => void saveTtsVoiceId()}
+                  disabled={ttsVoiceIdInput === tala.ttsVoiceId}
+                >
+                  Save
+                </Button>
+              </div>
+            </Field>
+
+            {tala.ttsModelId && !tala.ttsVoiceId && (
+              <p className="text-xs text-amber-700">
+                Pick a voice ID above — TALA will fall back to the standard browser voice until one
+                is set.
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card className="mb-6 p-6">
         <div className="mb-4">
           <p className="font-serif text-lg text-[#26221C]">Test TALA Live</p>
           <p className="mt-1 text-sm text-[#26221C]/55">
