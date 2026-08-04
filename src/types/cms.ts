@@ -205,6 +205,10 @@ export interface VideoItem {
   type: "youtube" | "vimeo" | "upload";
   url: string;
   order: number;
+  /** Which homepage section this video appears in */
+  section?: string;
+  /** Position within the section: top, middle, or bottom */
+  position?: string;
 }
 
 export type BlogStatus = "draft" | "published" | "scheduled";

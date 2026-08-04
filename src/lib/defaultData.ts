@@ -478,15 +478,7 @@ export function buildDefaultData(): CmsData {
       { id: uid("gal"), mediaId: "img_community", caption: "Community", order: 7 },
       { id: uid("gal"), mediaId: "img_sunset", caption: "Sunset Workspace", order: 8 },
     ],
-    videos: [
-      {
-        id: uid("vid"),
-        title: "A Day at Marina Terrace",
-        type: "youtube",
-        url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        order: 0,
-      },
-    ],
+    videos: [],
     blogCategories: [
       { id: uid("cat"), name: "Remote Work", slug: "remote-work" },
       { id: uid("cat"), name: "Palawan Travel", slug: "palawan-travel" },
