@@ -8,10 +8,10 @@ HERMES_HOME="${HERMES_HOME:-/data/hermes}"
 export HERMES_HOME
 mkdir -p "${HERMES_HOME}/skills/resort-operations"
 cp -R /opt/tala/skills/resort-operations/. "${HERMES_HOME}/skills/resort-operations/"
-cat > "${HERMES_HOME}/config.yaml" <<YAML
+cat > "${HERMES_HOME}/config.yaml" <<'YAML'
 model:
   provider: openrouter
-  default: ${HERMES_MODEL:-openai/gpt-oss-20b}
+  default: ${HERMES_MODEL}
 toolsets:
   - hermes-api-server
 mcp_servers:
@@ -21,15 +21,13 @@ mcp_servers:
     env:
       SUPABASE_URL: "${SUPABASE_URL}"
       SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY}"
-      RESORT_CMS_KEY: "${RESORT_CMS_KEY:-marina_terrace_payload}"
+      RESORT_CMS_KEY: "${RESORT_CMS_KEY}"
     tools:
       include:
         - get_resort_snapshot
         - check_room_availability
         - list_tours
         - create_booking_request
-        - create_guest_request
-        - create_staff_task
 YAML
 export API_SERVER_ENABLED=true
 export API_SERVER_HOST=0.0.0.0
