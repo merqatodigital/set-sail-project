@@ -394,6 +394,7 @@ export type Database = {
           id: string
           intent: string
           reply_preview: string
+          sentiment: string | null
           tools_used: string[]
           urgency: string
         }
@@ -404,6 +405,7 @@ export type Database = {
           id?: string
           intent?: string
           reply_preview?: string
+          sentiment?: string | null
           tools_used?: string[]
           urgency?: string
         }
@@ -414,6 +416,7 @@ export type Database = {
           id?: string
           intent?: string
           reply_preview?: string
+          sentiment?: string | null
           tools_used?: string[]
           urgency?: string
         }
@@ -533,42 +536,6 @@ export type Database = {
         }
         Relationships: []
       }
-      tala_knowledge: {
-        Row: {
-          body: string
-          created_at: string
-          enabled: boolean
-          id: string
-          label: string
-          sort_order: number
-          tags: string
-          topic: string
-          updated_at: string
-        }
-        Insert: {
-          body?: string
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          label: string
-          sort_order?: number
-          tags?: string
-          topic: string
-          updated_at?: string
-        }
-        Update: {
-          body?: string
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          label?: string
-          sort_order?: number
-          tags?: string
-          topic?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       tala_leads: {
         Row: {
           contact: string
@@ -596,6 +563,42 @@ export type Database = {
           note?: string
           source?: string
           source_url?: string
+        }
+        Relationships: []
+      }
+      tala_proactive_messages: {
+        Row: {
+          created_at: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          message: string
+          read: boolean
+          sent: boolean
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          message: string
+          read?: boolean
+          sent?: boolean
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          message?: string
+          read?: boolean
+          sent?: boolean
+          title?: string
+          type?: string
         }
         Relationships: []
       }
@@ -862,6 +865,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      purge_old_audit_log: { Args: never; Returns: undefined }
+      purge_old_briefings: { Args: never; Returns: undefined }
+      purge_old_proactive_messages: { Args: never; Returns: undefined }
       room_availability_conflicts: {
         Args: { p_check_in: string; p_check_out: string }
         Returns: {
