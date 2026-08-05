@@ -12,23 +12,6 @@ type TalaWireMessage = {
   content: string;
 };
 
-type HermesAgentId = "supervisor" | "finance" | "leads" | "email" | "developer" | "operations";
-
-const WORKFORCE_PROMPTS: Record<HermesAgentId, string> = {
-  supervisor:
-    "You are the Hermes Workforce Supervisor for this resort. Use the workforce-supervisor skill. Break work into clear tasks, use delegate_task when specialists can work in parallel, use verified resort tools, and never claim an action succeeded unless a tool returned success.",
-  finance:
-    "You are the resort Financial Agent. Use the resort-finance skill and live resort tools. Analyze revenue, expenses, occupancy, payroll, margin, and cash flow. Do not move money, change prices, refund, or alter records. Prepare recommendations and drafts for owner approval.",
-  leads:
-    "You are the resort Lead Generation Agent. Use the lead-generation skill. Review existing leads, research only approved public sources, qualify prospects, and prepare personalized follow-up. Do not send unsolicited outreach or expose guest information.",
-  email:
-    "You are the resort Email Agent. Use the email-operations skill. Classify communication and prepare concise, accurate replies using verified resort information. Draft only unless an approved email connection and explicit send approval are present.",
-  developer:
-    "You are the resort Developer Agent. Use the developer-agent skill. Inspect code, reproduce issues, work on a branch, run tests, and prepare a draft pull request. Never push to main, merge, deploy, delete data, or expose credentials.",
-  operations:
-    "You are the resort Operations Agent. Use the resort-operations skill and live resort tools. Coordinate bookings, tours, rentals, food, guest messages, staff tasks, and daily briefings. Protected changes require owner approval.",
-};
-
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 function runtimeValue(env: unknown, name: string): string {
@@ -42,34 +25,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
-}
-
-function safeEqual(left: string, right: string): boolean {
-  const length = Math.max(left.length, right.length);
-  let mismatch = left.length ^ right.length;
-  for (let index = 0; index < length; index++) {
-    mismatch |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
-  }
-  return mismatch === 0;
-}
-
-function hasWorkforceAccess(request: Request, env: unknown): boolean {
-  const expected = runtimeValue(env, "HERMES_WORKFORCE_ACCESS_KEY");
-  const supplied = request.headers.get("x-hermes-workforce-key") || "";
-  return Boolean(expected && supplied && safeEqual(expected, supplied));
-}
-
-function normalizeMessages(value: unknown, limit = 32): TalaWireMessage[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-    .filter((item) => item.role === "user" || item.role === "assistant")
-    .map((item) => ({
-      role: item.role as "user" | "assistant",
-      content: String(item.content || "").slice(0, 12_000),
-    }))
-    .filter((item) => item.content.trim())
-    .slice(-limit);
 }
 
 async function callHermes(options: {
@@ -142,72 +97,6 @@ async function proxyTalaToHermes(request: Request, env: unknown): Promise<Respon
     : `guest:${crypto.randomUUID()}`;
 
   return callHermes({ url: hermesUrl, key: hermesKey, model, sessionKey, messages });
-}
-
-async function hermesStatus(request: Request, env: unknown): Promise<Response> {
-  if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
-  if (!hasWorkforceAccess(request, env)) return json({ error: "Invalid workforce access key." }, 401);
-  const url = runtimeValue(env, "HERMES_WORKFORCE_API_URL").replace(/\/$/, "");
-  const key = runtimeValue(env, "HERMES_WORKFORCE_API_KEY");
-  let hermes = false;
-  if (url && key) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5_000);
-    try {
-      const response = await fetch(`${url}/health`, {
-        signal: controller.signal,
-        headers: { authorization: `Bearer ${key}` },
-      });
-      hermes = response.ok;
-    } catch {
-      hermes = false;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  return json({
-    connections: {
-      hermes,
-      openrouter: hermes,
-      supabase: Boolean(runtimeValue(env, "SUPABASE_URL") || runtimeValue(env, "VITE_SUPABASE_URL")),
-      email: Boolean(runtimeValue(env, "RESEND_API_KEY") || runtimeValue(env, "GMAIL_CLIENT_ID")),
-      github: Boolean(runtimeValue(env, "GITHUB_TOKEN")),
-    },
-  });
-}
-
-async function proxyWorkforceToHermes(request: Request, env: unknown): Promise<Response> {
-  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
-  if (!hasWorkforceAccess(request, env)) return json({ error: "Invalid workforce access key." }, 401);
-  const url = runtimeValue(env, "HERMES_WORKFORCE_API_URL").replace(/\/$/, "");
-  const key = runtimeValue(env, "HERMES_WORKFORCE_API_KEY");
-  const model = runtimeValue(env, "HERMES_WORKFORCE_MODEL") || "hermes-workforce";
-  if (!url || !key) return json({ error: "Hermes Workforce is not configured." }, 503);
-  const declaredSize = Number(request.headers.get("content-length") || 0);
-  if (declaredSize > 200_000) return json({ error: "request too large" }, 413);
-  let payload: { agent?: unknown; messages?: unknown };
-  try {
-    payload = (await request.json()) as { agent?: unknown; messages?: unknown };
-  } catch {
-    return json({ error: "invalid JSON body" }, 400);
-  }
-  const agent = String(payload.agent || "") as HermesAgentId;
-  if (!(agent in WORKFORCE_PROMPTS)) return json({ error: "unknown workforce agent" }, 400);
-  const messages = normalizeMessages(payload.messages, 48);
-  if (!messages.length || messages[messages.length - 1]?.role !== "user") {
-    return json({ error: "a user task is required" }, 400);
-  }
-  const requestedSession = request.headers.get("x-hermes-session") || "";
-  const sessionKey = /^[a-zA-Z0-9._:-]{8,200}$/.test(requestedSession)
-    ? `workforce:${agent}:${requestedSession}`
-    : `workforce:${agent}:${crypto.randomUUID()}`;
-  return callHermes({
-    url,
-    key,
-    model,
-    sessionKey,
-    messages: [{ role: "system", content: WORKFORCE_PROMPTS[agent] }, ...messages],
-  });
 }
 
 async function getServerEntry(): Promise<ServerEntry> {
