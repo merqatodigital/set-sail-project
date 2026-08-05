@@ -127,22 +127,22 @@ async function hermesSettings(request: Request): Promise<Response> {
   const { db } = owner;
 
   if (request.method === "GET") {
-    const [{ data: settings, error: settingsError }, { data: secrets, error: secretsError }] = await Promise.all([
+    const [{ data: settings, error: settingsError }, { data: secretStatus, error: secretsError }] = await Promise.all([
       db.from("hermes_settings").select("*").eq("resort_id", HERMES_RESORT_ID).maybeSingle(),
-      db.schema("private").from("hermes_secrets").select("*").eq("resort_id", HERMES_RESORT_ID).maybeSingle(),
+      db.rpc("hermes_secret_status", { p_resort_id: HERMES_RESORT_ID }),
     ]);
     if (settingsError || secretsError) {
       console.error("Unable to read Hermes settings", settingsError || secretsError);
       return json({ error: "Unable to load Hermes settings." }, 500);
     }
-    const secretRow = (secrets || {}) as Record<string, unknown>;
+    const secretRow = (Array.isArray(secretStatus) ? secretStatus[0] : secretStatus || {}) as Record<string, unknown>;
     return json({
       settings: publicSettings(settings as Record<string, unknown> | null),
       secretsSet: {
-        OPENROUTER_API_KEY: Boolean(secretRow.openrouter_api_key),
-        SUPABASE_SERVICE_ROLE_KEY: Boolean(secretRow.supabase_service_role_key),
-        GITHUB_TOKEN: Boolean(secretRow.github_token),
-        RESEND_API_KEY: Boolean(secretRow.resend_api_key),
+        OPENROUTER_API_KEY: Boolean(secretRow.openrouter_key_saved),
+        SUPABASE_SERVICE_ROLE_KEY: Boolean(secretRow.supabase_key_saved),
+        GITHUB_TOKEN: Boolean(secretRow.github_token_saved),
+        RESEND_API_KEY: Boolean(secretRow.resend_key_saved),
       },
     });
   }
@@ -183,10 +183,14 @@ async function hermesSettings(request: Request): Promise<Response> {
   }
   const changedSecrets = Object.fromEntries(Object.entries(secretValues).filter(([, value]) => value));
   if (Object.keys(changedSecrets).length) {
-    const { error: secretsError } = await db.schema("private").from("hermes_secrets").upsert(
-      { resort_id: HERMES_RESORT_ID, ...changedSecrets },
-      { onConflict: "resort_id" },
-    );
+    const { error: secretsError } = await db.rpc("save_hermes_secrets", {
+      p_resort_id: HERMES_RESORT_ID,
+      p_runtime_access_key: null,
+      p_openrouter_api_key: secretValues.openrouter_api_key || null,
+      p_supabase_service_role_key: secretValues.supabase_service_role_key || null,
+      p_github_token: secretValues.github_token || null,
+      p_resend_api_key: secretValues.resend_api_key || null,
+    });
     if (secretsError) {
       console.error("Unable to save Hermes secrets", secretsError);
       return json({ error: "Settings saved, but the private keys could not be saved." }, 500);
