@@ -334,7 +334,7 @@ export default function HermesWorkforce() {
   if (!ownerToken) {
     return (
       <div>
-        <PageHeader title="Hermes Workforce" subtitle="Private back-office AI team for the resort owner." />
+        <PageHeader title="Hermes Workforce" description="Private back-office AI team for the resort owner." />
         <Card className="max-w-xl space-y-4 border-[#C6A15B]/35 p-6">
           <div className="flex items-center gap-2 font-medium text-[#26221C]">
             <ShieldCheck className="h-4 w-4 text-[#C6A15B]" /> Owner sign-in required
@@ -358,7 +358,7 @@ export default function HermesWorkforce() {
     <div>
       <PageHeader
         title="Hermes Workforce"
-        subtitle={`Private back-office AI team — signed in as ${ownerEmail}.`}
+        description={`Private back-office AI team — signed in as ${ownerEmail}.`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => void verify()} disabled={verifying}>
