@@ -1,0 +1,4 @@
+{$HERMES_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy hermes-workforce:8650
+}

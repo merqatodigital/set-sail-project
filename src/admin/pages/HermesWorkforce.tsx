@@ -6,19 +6,25 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Code2,
+  Database,
+  Eye,
+  EyeOff,
+  Github,
   KeyRound,
   Loader2,
   Mail,
   Megaphone,
   RefreshCw,
+  Save,
   Send,
+  Server,
   Settings2,
   ShieldCheck,
   Sparkles,
   Users,
   XCircle,
 } from "lucide-react";
-import { Button, Input } from "@/components/ui";
+import { Button, Card, Field, Input } from "@/components/ui";
 import { PageHeader } from "../shared/PageHeader";
 
 type AgentId = "supervisor" | "finance" | "leads" | "email" | "developer" | "operations";
@@ -31,7 +37,39 @@ type ConnectionStatus = {
   github: boolean;
 };
 
+type HermesSettings = {
+  OPENROUTER_API_KEY: string;
+  HERMES_MODEL: string;
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+  RESORT_CMS_KEY: string;
+  TALA_GITHUB_REPOSITORY: string;
+  GITHUB_TOKEN: string;
+  RESEND_API_KEY: string;
+  RESEND_FROM_EMAIL: string;
+};
+
+type RuntimeStatus = {
+  configured: boolean;
+  gateway: boolean;
+  connections: ConnectionStatus;
+  settings?: Partial<HermesSettings>;
+  secretsSet?: Partial<Record<keyof HermesSettings, boolean>>;
+};
+
 const ACCESS_KEY_STORAGE = "hermes.workforceAccessKey";
+const RUNTIME_URL_STORAGE = "hermes.runtimeUrl";
+const EMPTY_SETTINGS: HermesSettings = {
+  OPENROUTER_API_KEY: "",
+  HERMES_MODEL: "openai/gpt-oss-20b",
+  SUPABASE_URL: "",
+  SUPABASE_SERVICE_ROLE_KEY: "",
+  RESORT_CMS_KEY: "marina_terrace_payload",
+  TALA_GITHUB_REPOSITORY: "merqatodigital/set-sail-project",
+  GITHUB_TOKEN: "",
+  RESEND_API_KEY: "",
+  RESEND_FROM_EMAIL: "",
+};
 
 const AGENTS: Array<{
   id: AgentId;
@@ -92,6 +130,14 @@ function readAccessKey() {
   }
 }
 
+function readRuntimeUrl() {
+  try {
+    return localStorage.getItem(RUNTIME_URL_STORAGE) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function connectionLabel(value: boolean) {
   return value ? "Connected" : "Not connected";
 }
@@ -100,6 +146,12 @@ export default function HermesWorkforce() {
   const [agentId, setAgentId] = useState<AgentId>("supervisor");
   const [accessKey, setAccessKey] = useState(readAccessKey);
   const [keyInput, setKeyInput] = useState(readAccessKey);
+  const [runtimeUrl, setRuntimeUrl] = useState(readRuntimeUrl);
+  const [runtimeUrlInput, setRuntimeUrlInput] = useState(readRuntimeUrl);
+  const [settings, setSettings] = useState<HermesSettings>(EMPTY_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [working, setWorking] = useState(false);
@@ -110,31 +162,77 @@ export default function HermesWorkforce() {
   const selected = useMemo(() => AGENTS.find((agent) => agent.id === agentId)!, [agentId]);
   const SelectedIcon = selected.icon;
 
-  const refreshStatus = async (key = accessKey) => {
-    if (!key) return;
+  const refreshStatus = async (key = accessKey, url = runtimeUrl) => {
+    if (!key || !url) return;
     setError("");
     try {
-      const response = await fetch("/api/hermes/status", {
-        headers: { "X-Hermes-Workforce-Key": key },
+      const response = await fetch(`${url.replace(/\/$/, "")}/status`, {
+        headers: { Authorization: `Bearer ${key}` },
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Unable to reach Hermes.");
-      setStatus(data.connections as ConnectionStatus);
+      const runtime = data as RuntimeStatus;
+      setStatus(runtime.connections);
+      if (runtime.settings) {
+        setSettings((current) => ({ ...current, ...runtime.settings }));
+      }
+      if (!runtime.configured) setShowSettings(true);
     } catch (reason) {
       setStatus(null);
+      setShowSettings(true);
       setError(reason instanceof Error ? reason.message : "Unable to reach Hermes.");
     }
   };
 
   useEffect(() => {
-    if (accessKey) void refreshStatus(accessKey);
-  }, [accessKey]);
+    if (accessKey && runtimeUrl) void refreshStatus(accessKey, runtimeUrl);
+  }, [accessKey, runtimeUrl]);
 
   const unlock = () => {
     const value = keyInput.trim();
-    if (!value) return;
+    const url = runtimeUrlInput.trim().replace(/\/$/, "");
+    if (!value || !/^https?:\/\//i.test(url)) {
+      setError("Enter the Hermes server URL and access key.");
+      return;
+    }
     sessionStorage.setItem(ACCESS_KEY_STORAGE, value);
+    localStorage.setItem(RUNTIME_URL_STORAGE, url);
     setAccessKey(value);
+    setRuntimeUrl(url);
+    setShowSettings(true);
+  };
+
+  const patchSetting = (key: keyof HermesSettings, value: string) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfiguration = async () => {
+    if (!runtimeUrl || !accessKey || savingSettings) return;
+    setSavingSettings(true);
+    setError("");
+    try {
+      const response = await fetch(`${runtimeUrl}/configure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
+        body: JSON.stringify({ settings }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Unable to save Hermes settings.");
+      setSettings((current) => ({
+        ...current,
+        OPENROUTER_API_KEY: "",
+        SUPABASE_SERVICE_ROLE_KEY: "",
+        GITHUB_TOKEN: "",
+        RESEND_API_KEY: "",
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      await refreshStatus();
+      setShowSettings(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save Hermes settings.");
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const changeAgent = (next: AgentId) => {
@@ -153,18 +251,19 @@ export default function HermesWorkforce() {
     setError("");
     setWorking(true);
     try {
-      const response = await fetch("/api/hermes/workforce", {
+      const response = await fetch(`${runtimeUrl}/workforce`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Hermes-Workforce-Key": accessKey,
-          "X-Hermes-Session": sessionRef.current,
+          Authorization: `Bearer ${accessKey}`,
         },
-        body: JSON.stringify({ agent: agentId, messages: nextMessages }),
+        body: JSON.stringify({ agent: agentId, messages: nextMessages, session: sessionRef.current }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Hermes could not complete the task.");
-      setMessages((current) => [...current, { role: "assistant", content: data.reply }]);
+      const reply = data?.choices?.[0]?.message?.content?.trim();
+      if (!reply) throw new Error("Hermes returned an empty reply.");
+      setMessages((current) => [...current, { role: "assistant", content: reply }]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Hermes could not complete the task.");
     } finally {
@@ -172,7 +271,7 @@ export default function HermesWorkforce() {
     }
   };
 
-  if (!accessKey) {
+  if (!accessKey || !runtimeUrl) {
     return (
       <div>
         <PageHeader
@@ -183,20 +282,29 @@ export default function HermesWorkforce() {
           <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-[#C6A15B]/15">
             <KeyRound className="h-5 w-5 text-[#8A6B32]" />
           </div>
-          <h2 className="font-serif text-2xl text-[#26221C]">Unlock the workforce</h2>
+          <h2 className="font-serif text-2xl text-[#26221C]">Connect your Hermes server</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#26221C]/55">
-            Enter the private workforce access key configured on the resort server. It is kept only
-            for this browser session and is never saved to the website CMS.
+            Enter the address and private access key for this resort’s Hermes runtime. The key is kept only for this browser session.
           </p>
-          <div className="mt-6 flex gap-2">
+          <div className="mt-6 space-y-4">
+            <Field label="Hermes Server URL">
+              <Input
+                value={runtimeUrlInput}
+                onChange={(event) => setRuntimeUrlInput(event.target.value)}
+                placeholder="https://hermes.yourresort.com"
+              />
+            </Field>
+            <Field label="Server Access Key">
             <Input
               type="password"
               value={keyInput}
               onChange={(event) => setKeyInput(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && unlock()}
-              placeholder="Workforce access key"
+              placeholder="Private Hermes access key"
             />
-            <Button onClick={unlock}>Continue</Button>
+            </Field>
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            <Button className="w-full" onClick={unlock}><Server className="h-4 w-4" /> Connect server</Button>
           </div>
         </div>
       </div>
@@ -209,11 +317,85 @@ export default function HermesWorkforce() {
         title="Hermes Workforce"
         description="One supervisor and specialized agents using the resort’s existing data, tools and knowledge."
         actions={
-          <Button variant="outline" size="sm" onClick={() => void refreshStatus()}>
-            <RefreshCw className="h-4 w-4" /> Check connections
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)}>
+              <Settings2 className="h-4 w-4" /> Settings
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void refreshStatus()}>
+              <RefreshCw className="h-4 w-4" /> Check connections
+            </Button>
+          </div>
         }
       />
+
+      {showSettings && (
+        <Card className="mb-6 space-y-6 border-[#C6A15B]/35 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-serif text-2xl text-[#26221C]">Hermes Setup</h2>
+              <p className="mt-1 text-sm text-[#26221C]/55">The owner configures every connection here. Secret values are stored only in the private Hermes data volume.</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowSecrets((value) => !value)}>
+              {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showSecrets ? "Hide" : "Show"} secrets
+            </Button>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
+              <div className="flex items-center gap-2 font-medium text-[#26221C]"><Bot className="h-4 w-4 text-[#C6A15B]" /> AI Model</div>
+              <Field label="OpenRouter API Key">
+                <Input type={showSecrets ? "text" : "password"} value={settings.OPENROUTER_API_KEY} onChange={(e) => patchSetting("OPENROUTER_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
+              </Field>
+              <Field label="OpenRouter Model">
+                <Input value={settings.HERMES_MODEL} onChange={(e) => patchSetting("HERMES_MODEL", e.target.value)} placeholder="openai/gpt-oss-20b" />
+              </Field>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
+              <div className="flex items-center gap-2 font-medium text-[#26221C]"><Database className="h-4 w-4 text-[#C6A15B]" /> Resort Data</div>
+              <Field label="Supabase Project URL">
+                <Input value={settings.SUPABASE_URL} onChange={(e) => patchSetting("SUPABASE_URL", e.target.value)} placeholder="https://project.supabase.co" />
+              </Field>
+              <Field label="Supabase Service Role Key">
+                <Input type={showSecrets ? "text" : "password"} value={settings.SUPABASE_SERVICE_ROLE_KEY} onChange={(e) => patchSetting("SUPABASE_SERVICE_ROLE_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
+              </Field>
+              <Field label="Resort Data Key">
+                <Input value={settings.RESORT_CMS_KEY} onChange={(e) => patchSetting("RESORT_CMS_KEY", e.target.value)} />
+              </Field>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
+              <div className="flex items-center gap-2 font-medium text-[#26221C]"><Github className="h-4 w-4 text-[#C6A15B]" /> Developer Agent</div>
+              <Field label="GitHub Repository">
+                <Input value={settings.TALA_GITHUB_REPOSITORY} onChange={(e) => patchSetting("TALA_GITHUB_REPOSITORY", e.target.value)} placeholder="owner/repository" />
+              </Field>
+              <Field label="GitHub Fine-Grained Token">
+                <Input type={showSecrets ? "text" : "password"} value={settings.GITHUB_TOKEN} onChange={(e) => patchSetting("GITHUB_TOKEN", e.target.value)} placeholder="Leave blank to keep the saved token" />
+              </Field>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
+              <div className="flex items-center gap-2 font-medium text-[#26221C]"><Mail className="h-4 w-4 text-[#C6A15B]" /> Email Agent</div>
+              <Field label="Resend API Key">
+                <Input type={showSecrets ? "text" : "password"} value={settings.RESEND_API_KEY} onChange={(e) => patchSetting("RESEND_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
+              </Field>
+              <Field label="From Email Address">
+                <Input type="email" value={settings.RESEND_FROM_EMAIL} onChange={(e) => patchSetting("RESEND_FROM_EMAIL", e.target.value)} placeholder="reservations@yourresort.com" />
+              </Field>
+            </div>
+          </div>
+
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#26221C]/10 pt-5">
+            <p className="text-xs text-[#26221C]/45">Saving restarts the real Hermes gateway with the new private configuration.</p>
+            <Button onClick={() => void saveConfiguration()} disabled={savingSettings}>
+              {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save and start Hermes
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         {([
@@ -339,11 +521,14 @@ export default function HermesWorkforce() {
                 className="ml-auto flex items-center gap-1 hover:text-[#26221C]"
                 onClick={() => {
                   sessionStorage.removeItem(ACCESS_KEY_STORAGE);
+                  localStorage.removeItem(RUNTIME_URL_STORAGE);
                   setAccessKey("");
+                  setRuntimeUrl("");
+                  setRuntimeUrlInput("");
                   setStatus(null);
                 }}
               >
-                <Settings2 className="h-3.5 w-3.5" /> Change access key
+                <Settings2 className="h-3.5 w-3.5" /> Change Hermes server
               </button>
             </div>
           </footer>

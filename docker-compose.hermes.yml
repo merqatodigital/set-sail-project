@@ -1,4 +1,20 @@
 services:
+  hermes-proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      hermes-workforce:
+        condition: service_healthy
+    environment:
+      HERMES_DOMAIN: ${HERMES_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./services/hermes/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
   tala-agent:
     build:
       context: .
@@ -16,9 +32,9 @@ services:
     volumes:
       - tala-agent-data:/data/hermes
     ports:
-      - "127.0.0.1:8642:8642"
+      - "127.0.0.1:8642:8650"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -45,9 +61,9 @@ services:
       - hermes-workforce-data:/data/hermes
       - .:/workspace/set-sail-project:ro
     ports:
-      - "127.0.0.1:8643:8642"
+      - "127.0.0.1:8643:8650"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -56,3 +72,5 @@ services:
 volumes:
   tala-agent-data:
   hermes-workforce-data:
+  caddy-data:
+  caddy-config:

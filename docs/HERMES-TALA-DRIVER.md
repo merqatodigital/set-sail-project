@@ -6,9 +6,10 @@ Set Sail remains the Resort OS. TALA remains the guest-facing concierge with its
 
 - `tala-agent` is the guest-safe Hermes service. Its MCP allowlist contains only public resort facts, availability, tours, motorbikes, and pending booking requests.
 - `hermes-workforce` is the owner/admin service. It has separate memory, credentials, sessions, skills, and back-office MCP tools.
-- Admin uses `/api/hermes/status` and `/api/hermes/workforce` through the Set Sail server.
-- The workforce route requires `HERMES_WORKFORCE_ACCESS_KEY` in addition to the private Hermes API key.
-- Both services use the buyer's private `OPENROUTER_API_KEY`.
+- The workforce container includes an authenticated setup manager on port 8650. It writes secrets only to the private Hermes volume and restarts the real gateway after configuration.
+- Admin connects directly to the resort's HTTPS Hermes address using a server access key kept only in the browser session.
+- The owner enters OpenRouter, Supabase, GitHub, and email settings inside Admin → Hermes Workforce → Settings.
+- Caddy supplies HTTPS for the workforce manager at `HERMES_DOMAIN`.
 - Both services use the full pinned NousResearch Hermes runtime.
 - Supabase service-role credentials never enter the browser.
 
@@ -23,14 +24,15 @@ Set Sail remains the Resort OS. TALA remains the guest-facing concierge with its
 
 ## Start
 
-1. Copy `.env.hermes.example` to `.env.hermes` and configure the secrets on the private server.
-2. Start both services with `docker compose --env-file .env.hermes -f docker-compose.hermes.yml up --build -d`.
-3. Give the Set Sail server the `HERMES_TALA_*`, `HERMES_WORKFORCE_*`, and `HERMES_WORKFORCE_ACCESS_KEY` values.
-4. Open Admin → Hermes Workforce and enter the workforce access key.
-5. Verify connection status, then test Operations and Finance against existing resort data.
+1. Point a DNS name such as `hermes.yourresort.com` to the Docker server.
+2. Copy `.env.hermes.example` to `.env.hermes`. Set only `HERMES_DOMAIN`, `HERMES_TALA_API_KEY`, and `HERMES_WORKFORCE_API_KEY`; provider and resort connections can remain blank.
+3. Start the services with `docker compose --env-file .env.hermes -f docker-compose.hermes.yml up --build -d`.
+4. Open Admin → Hermes Workforce. Enter `https://<HERMES_DOMAIN>` and the `HERMES_WORKFORCE_API_KEY` value.
+5. Open Settings, enter the resort's OpenRouter, Supabase, GitHub, and email connections, then select **Save and start Hermes**.
+6. Verify the five connection cards, then run the Operations and Finance agents against Marina Terrace data.
 
 ## Safety
 
-Keep ports 8642 and 8643 on loopback or a private network. Use separate keys and data volumes for guest TALA and the workforce. Financial changes, external messages, reservation changes, code merges, deployments, credentials, and destructive actions remain human-controlled.
+Keep ports 8642 and 8643 on loopback. Only Caddy ports 80 and 443 are public. Use separate keys and data volumes for guest TALA and the workforce. Financial changes, external messages, reservation changes, code merges, deployments, credentials, and destructive actions remain human-controlled.
 
 The current admin passkey is temporary. Replace it with Supabase Auth before exposing workforce access to production users.
