@@ -232,6 +232,26 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
+async function openRouterModels(request: Request): Promise<Response> {
+  if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) return json({ error: "OpenRouter model catalog is temporarily unavailable." }, 502);
+    return new Response(await response.text(), {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
+    });
+  } catch (error) {
+    console.error("OpenRouter model catalog failed", error);
+    return json({ error: "OpenRouter model catalog is temporarily unavailable." }, 502);
+  }
+}
+
 function isH3SwallowedErrorBody(body: string): boolean {
   try {
     const payload = JSON.parse(body) as { unhandled?: unknown; message?: unknown };
@@ -246,6 +266,9 @@ export default {
     try {
       if (new URL(request.url).pathname === "/api/tala/chat") {
         return await proxyTalaToHermes(request, env);
+      }
+      if (new URL(request.url).pathname === "/api/openrouter/models") {
+        return await openRouterModels(request);
       }
       if (new URL(request.url).pathname === "/api/hermes/status") {
         return await hermesStatus(request, env);

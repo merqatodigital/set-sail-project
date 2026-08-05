@@ -56,8 +56,11 @@ type Verification = {
 };
 
 type HermesSettings = {
+  AI_PROVIDER: string;
   OPENROUTER_API_KEY: string;
   HERMES_MODEL: string;
+  OLLAMA_BASE_URL: string;
+  OLLAMA_MODEL: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   RESORT_CMS_KEY: string;
@@ -80,8 +83,11 @@ const ACCESS_KEY_STORAGE = "hermes.workforceAccessKey";
 const RUNTIME_URL_STORAGE = "hermes.runtimeUrl";
 const MARINA_HERMES_URL = "https://hermes.nomads.merqato.digital";
 const EMPTY_SETTINGS: HermesSettings = {
+  AI_PROVIDER: "openrouter",
   OPENROUTER_API_KEY: "",
   HERMES_MODEL: "openai/gpt-oss-20b",
+  OLLAMA_BASE_URL: "http://host.docker.internal:11434/v1",
+  OLLAMA_MODEL: "",
   SUPABASE_URL: "",
   SUPABASE_SERVICE_ROLE_KEY: "",
   RESORT_CMS_KEY: "marina_terrace_payload",
@@ -176,6 +182,8 @@ export default function HermesWorkforce() {
   const [verification, setVerification] = useState<Verification | null>(null);
   const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<Array<{ id: string; name: string; size: number }>>([]);
+  const [ollamaLoading, setOllamaLoading] = useState(false);
   const [modelFilter, setModelFilter] = useState<"all" | "free" | "paid">("free");
   const [modelSearch, setModelSearch] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -191,12 +199,15 @@ export default function HermesWorkforce() {
   const filteredModels = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();
     return models.filter((model) => {
-      if (!model.toolCalling) return false;
       if (modelFilter === "free" && !model.free) return false;
       if (modelFilter === "paid" && model.free) return false;
       return !query || model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query);
     });
   }, [modelFilter, modelSearch, models]);
+  const selectedOpenRouterModel = useMemo(
+    () => models.find((model) => model.id === settings.HERMES_MODEL),
+    [models, settings.HERMES_MODEL],
+  );
 
   const refreshStatus = async (key = accessKey, url = runtimeUrl) => {
     if (!key || !url) return;
@@ -222,19 +233,72 @@ export default function HermesWorkforce() {
   };
 
   const loadModels = async (key = accessKey, url = runtimeUrl) => {
-    if (!key || !url || modelsLoading) return;
+    if (modelsLoading) return;
     setModelsLoading(true);
     try {
-      const response = await fetch(`${url.replace(/\/$/, "")}/models`, {
-        headers: { Authorization: `Bearer ${key}` },
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Unable to load OpenRouter models.");
-      setModels(Array.isArray(data?.models) ? data.models : []);
+      let loaded: OpenRouterModel[] = [];
+      if (key && url) {
+        try {
+          const response = await fetch(`${url.replace(/\/$/, "")}/models`, {
+            headers: { Authorization: `Bearer ${key}` },
+          });
+          const data = await response.json().catch(() => null);
+          if (response.ok && Array.isArray(data?.models)) loaded = data.models;
+        } catch {
+          // The public catalog below keeps model selection usable while Hermes is offline.
+        }
+      }
+      if (!loaded.length) {
+        let response = await fetch("/api/openrouter/models");
+        if (!response.ok) response = await fetch("https://openrouter.ai/api/v1/models");
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !Array.isArray(data?.data)) throw new Error("Unable to load OpenRouter models.");
+        loaded = data.data.map((item: Record<string, unknown>) => {
+          const pricing = item.pricing && typeof item.pricing === "object" ? item.pricing as Record<string, unknown> : {};
+          const promptPrice = String(pricing.prompt ?? "0");
+          const completionPrice = String(pricing.completion ?? "0");
+          const free = (Number(promptPrice) === 0 && Number(completionPrice) === 0) || String(item.id || "").endsWith(":free");
+          const supported = Array.isArray(item.supported_parameters) ? item.supported_parameters : [];
+          return {
+            id: String(item.id || ""),
+            name: String(item.name || item.id || ""),
+            free,
+            contextLength: Number(item.context_length || 0),
+            promptPrice,
+            completionPrice,
+            toolCalling: supported.includes("tools"),
+          };
+        }).filter((model: OpenRouterModel) => model.id);
+      }
+      setModels(loaded);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load OpenRouter models.");
     } finally {
       setModelsLoading(false);
+    }
+  };
+
+  const syncOllamaModels = async () => {
+    if (!runtimeUrl || !accessKey || ollamaLoading) return;
+    setOllamaLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${runtimeUrl}/ollama/models`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
+        body: JSON.stringify({ baseUrl: settings.OLLAMA_BASE_URL }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Unable to sync the Ollama machine.");
+      const loaded = Array.isArray(data?.models) ? data.models : [];
+      setOllamaModels(loaded);
+      if (loaded.length && !loaded.some((model: { id: string }) => model.id === settings.OLLAMA_MODEL)) {
+        patchSetting("OLLAMA_MODEL", loaded[0].id);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to sync the Ollama machine.");
+    } finally {
+      setOllamaLoading(false);
     }
   };
 
@@ -437,7 +501,7 @@ export default function HermesWorkforce() {
           </p>
           <p className="mt-1 text-sm opacity-75">
             {operational
-              ? `The live Hermes agent, ${settings.HERMES_MODEL}, and Marina resort data all passed.`
+              ? `The live Hermes agent, ${settings.AI_PROVIDER === "ollama" ? settings.OLLAMA_MODEL : settings.HERMES_MODEL}, and Marina resort data all passed.`
               : "A green light appears only after the real agent, selected OpenRouter model, and Supabase data pass live tests."}
           </p>
         </div>
@@ -459,10 +523,29 @@ export default function HermesWorkforce() {
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
               <div className="flex items-center gap-2 font-medium text-[#26221C]"><Bot className="h-4 w-4 text-[#C6A15B]" /> AI Model</div>
-              <Field label="OpenRouter API Key">
-                <Input type={showSecrets ? "text" : "password"} value={settings.OPENROUTER_API_KEY} onChange={(e) => patchSetting("OPENROUTER_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
-              </Field>
-              <Field label="OpenRouter Model">
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#26221C]/5 p-1">
+                <button
+                  type="button"
+                  onClick={() => patchSetting("AI_PROVIDER", "openrouter")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${settings.AI_PROVIDER !== "ollama" ? "bg-white text-[#26221C] shadow-sm" : "text-[#26221C]/50"}`}
+                >
+                  OpenRouter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patchSetting("AI_PROVIDER", "ollama")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${settings.AI_PROVIDER === "ollama" ? "bg-white text-[#26221C] shadow-sm" : "text-[#26221C]/50"}`}
+                >
+                  Ollama Machine
+                </button>
+              </div>
+
+              {settings.AI_PROVIDER !== "ollama" ? (
+                <>
+                  <Field label="OpenRouter API Key">
+                    <Input type={showSecrets ? "text" : "password"} value={settings.OPENROUTER_API_KEY} onChange={(e) => patchSetting("OPENROUTER_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
+                  </Field>
+                  <Field label="OpenRouter Model">
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {(["free", "paid", "all"] as const).map((filter) => (
@@ -509,11 +592,45 @@ export default function HermesWorkforce() {
                   </select>
                   <p className="text-xs text-[#26221C]/45">
                     {modelsLoading
-                      ? "Loading live OpenRouter models…"
-                      : `${filteredModels.length} Hermes-compatible ${modelFilter === "all" ? "" : modelFilter} models available.`}
+                      ? "Loading the live OpenRouter catalog…"
+                      : `${filteredModels.length} current ${modelFilter === "all" ? "" : modelFilter} OpenRouter models available.`}
                   </p>
+                  {selectedOpenRouterModel && (
+                    <p className={`rounded-lg px-3 py-2 text-xs ${selectedOpenRouterModel.toolCalling ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+                      {selectedOpenRouterModel.toolCalling
+                        ? "Agent tools supported: suitable for the complete Hermes workforce."
+                        : "Chat-only model: selectable, but the green operational test may fail because this model does not advertise tool calling."}
+                    </p>
+                  )}
                 </div>
-              </Field>
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <Field label="Ollama Machine URL">
+                    <Input
+                      value={settings.OLLAMA_BASE_URL}
+                      onChange={(event) => patchSetting("OLLAMA_BASE_URL", event.target.value)}
+                      placeholder="http://host.docker.internal:11434/v1"
+                    />
+                  </Field>
+                  <Button variant="outline" className="w-full" onClick={() => void syncOllamaModels()} disabled={ollamaLoading}>
+                    <RefreshCw className={`h-4 w-4 ${ollamaLoading ? "animate-spin" : ""}`} />
+                    {ollamaLoading ? "Syncing machine" : "Sync installed Ollama models"}
+                  </Button>
+                  <Field label="Installed Ollama Model">
+                    <select
+                      value={settings.OLLAMA_MODEL}
+                      onChange={(event) => patchSetting("OLLAMA_MODEL", event.target.value)}
+                      className="h-11 w-full rounded-lg border border-[#26221C]/15 bg-white px-3 text-sm text-[#26221C] outline-none focus:border-[#C6A15B]"
+                    >
+                      {!ollamaModels.length && <option value={settings.OLLAMA_MODEL}>{settings.OLLAMA_MODEL || "Sync a machine to choose a model"}</option>}
+                      {ollamaModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+                    </select>
+                  </Field>
+                  <p className="text-xs leading-relaxed text-[#26221C]/45">Hermes connects to Ollama through the machine address and uses a 64K agent context.</p>
+                </>
+              )}
             </div>
 
             <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
@@ -553,7 +670,10 @@ export default function HermesWorkforce() {
           {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#26221C]/10 pt-5">
             <p className="text-xs text-[#26221C]/45">Saving restarts the real Hermes gateway with the new private configuration.</p>
-            <Button onClick={() => void saveConfiguration()} disabled={savingSettings || verifying || !settings.HERMES_MODEL}>
+            <Button
+              onClick={() => void saveConfiguration()}
+              disabled={savingSettings || verifying || (settings.AI_PROVIDER === "ollama" ? !settings.OLLAMA_MODEL : !settings.HERMES_MODEL)}
+            >
               {savingSettings || verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {verifying ? "Testing Hermes" : "Save, start and verify Hermes"}
             </Button>
@@ -563,13 +683,12 @@ export default function HermesWorkforce() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         {([
-          ["Hermes", status?.hermes ?? false],
-          ["OpenRouter", status?.openrouter ?? false],
-          ["Resort data", status?.supabase ?? false],
-          ["Email", status?.email ?? false],
-          ["GitHub", status?.github ?? false],
-        ] as Array<[string, boolean]>).map(([label, connected]) => {
-          const checkKey = label === "Hermes" ? "hermes" : label === "OpenRouter" ? "openrouter" : label === "Resort data" ? "supabase" : label.toLowerCase() as keyof ConnectionStatus;
+          ["Hermes", "hermes", status?.hermes ?? false],
+          [settings.AI_PROVIDER === "ollama" ? "Ollama" : "OpenRouter", "openrouter", status?.openrouter ?? false],
+          ["Resort data", "supabase", status?.supabase ?? false],
+          ["Email", "email", status?.email ?? false],
+          ["GitHub", "github", status?.github ?? false],
+        ] as Array<[string, keyof ConnectionStatus, boolean]>).map(([label, checkKey, connected]) => {
           const detail = verification?.checks[checkKey]?.detail;
           return (
           <div key={label} className="rounded-xl border border-[#26221C]/10 bg-white px-4 py-3">
