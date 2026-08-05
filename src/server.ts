@@ -110,14 +110,14 @@ async function requireHermesOwner(request: Request) {
 
 function publicSettings(row: Record<string, unknown> | null) {
   return {
-    AI_PROVIDER: String(row?.ai_provider || "openrouter"),
+    AI_PROVIDER: String(row?.provider || "openrouter"),
     HERMES_MODEL: String(row?.openrouter_model || "openai/gpt-oss-20b"),
     OLLAMA_BASE_URL: String(row?.ollama_base_url || "http://host.docker.internal:11434/v1"),
     OLLAMA_MODEL: String(row?.ollama_model || ""),
     SUPABASE_URL: String(row?.supabase_url || ""),
     RESORT_CMS_KEY: String(row?.resort_cms_key || "marina_terrace_payload"),
     TALA_GITHUB_REPOSITORY: String(row?.github_repository || "merqatodigital/set-sail-project"),
-    RESEND_FROM_EMAIL: String(row?.from_email || ""),
+    RESEND_FROM_EMAIL: String(row?.resend_from_email || ""),
   };
 }
 
@@ -160,14 +160,14 @@ async function hermesSettings(request: Request): Promise<Response> {
   if (aiProvider !== "openrouter" && aiProvider !== "ollama") return json({ error: "Choose OpenRouter or Ollama." }, 400);
   const settingsRow = {
     resort_id: HERMES_RESORT_ID,
-    ai_provider: aiProvider,
+    provider: aiProvider,
     openrouter_model: settingText(body.HERMES_MODEL, 240),
     ollama_base_url: settingText(body.OLLAMA_BASE_URL, 1024),
     ollama_model: settingText(body.OLLAMA_MODEL, 240),
     supabase_url: settingText(body.SUPABASE_URL, 1024),
     resort_cms_key: settingText(body.RESORT_CMS_KEY, 240),
     github_repository: settingText(body.TALA_GITHUB_REPOSITORY, 240),
-    from_email: settingText(body.RESEND_FROM_EMAIL, 320),
+    resend_from_email: settingText(body.RESEND_FROM_EMAIL, 320),
   };
   const secretValues = {
     openrouter_api_key: settingText(body.OPENROUTER_API_KEY, 4096),
