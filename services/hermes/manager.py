@@ -37,7 +37,10 @@ LAST_VERIFICATION: dict[str, Any] = {
 }
 
 ALLOWED_SETTINGS = {
+    "AI_PROVIDER",
     "OPENROUTER_API_KEY",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
     "RESORT_CMS_KEY",
@@ -87,15 +90,35 @@ def _write_env(values: dict[str, str]) -> None:
 
 
 def _configured(values: dict[str, str]) -> bool:
-    return all(values.get(key) for key in ("OPENROUTER_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"))
+    provider = values.get("AI_PROVIDER", "openrouter")
+    model_ready = (
+        bool(values.get("OLLAMA_BASE_URL") and values.get("OLLAMA_MODEL"))
+        if provider == "ollama"
+        else bool(values.get("OPENROUTER_API_KEY") and values.get("HERMES_MODEL"))
+    )
+    return model_ready and bool(values.get("SUPABASE_URL") and values.get("SUPABASE_SERVICE_ROLE_KEY"))
 
 
 def _write_config(values: dict[str, str]) -> None:
-    model = values.get("HERMES_MODEL", "openai/gpt-oss-20b")
-    common = f"""model:
+    provider = values.get("AI_PROVIDER", "openrouter")
+    if provider == "ollama":
+        model = values.get("OLLAMA_MODEL", "")
+        base_url = values.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434/v1").rstrip("/")
+        model_config = f"""model:
+  provider: custom
+  default: {model}
+  base_url: {base_url}
+  api_key: none
+  context_length: 64000
+  ollama_num_ctx: 64000
+"""
+    else:
+        model = values.get("HERMES_MODEL", "openai/gpt-oss-20b")
+        model_config = f"""model:
   provider: openrouter
   default: {model}
-toolsets:
+"""
+    common = model_config + f"""toolsets:
   - hermes-api-server
 memory:
   memory_enabled: true
@@ -175,6 +198,26 @@ def _openrouter_models() -> list[dict[str, Any]]:
     return sorted(models, key=lambda model: (not model["free"], not model["toolCalling"], model["name"].lower()))
 
 
+def _ollama_models(base_url: str) -> list[dict[str, Any]]:
+    parsed = urllib.parse.urlparse(base_url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Enter a valid Ollama machine URL.")
+    root = base_url.strip().rstrip("/")
+    if root.endswith("/v1"):
+        root = root[:-3]
+    status, payload = _json_request(f"{root}/api/tags", timeout=20)
+    if status != 200 or not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+        raise RuntimeError("Ollama machine is unreachable or did not return its model list.")
+    result = []
+    for item in payload["models"]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("model") or "").strip()
+        if name:
+            result.append({"id": name, "name": name, "size": int(item.get("size") or 0)})
+    return sorted(result, key=lambda model: model["name"].lower())
+
+
 def _check_supabase(values: dict[str, str]) -> tuple[bool, str]:
     url = values.get("SUPABASE_URL", "").rstrip("/")
     key = values.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -246,7 +289,8 @@ def _verify_runtime() -> dict[str, Any]:
                 if isinstance(message, dict):
                     answer = str(message.get("content") or "").strip()
         model_ok = status == 200 and bool(answer)
-        detail = f"Live response received from {values.get('HERMES_MODEL', 'selected model')}." if model_ok else str(response.get("error") if isinstance(response, dict) else "No model response.")
+        selected_model = values.get("OLLAMA_MODEL") if values.get("AI_PROVIDER") == "ollama" else values.get("HERMES_MODEL")
+        detail = f"Live response received from {selected_model or 'selected model'}." if model_ok else str(response.get("error") if isinstance(response, dict) else "No model response.")
         checks["hermes"] = {"ok": model_ok, "detail": "Hermes completed a live agent request." if model_ok else detail}
         checks["openrouter"] = {"ok": model_ok, "detail": detail}
 
@@ -431,6 +475,13 @@ class Handler(BaseHTTPRequestHandler):
             LAST_VERIFICATION = {"state": "not_run", "ready": False, "checks": {}, "checkedAt": None}
             started = _restart_gateway()
             self._send(200, {"ok": True, "configured": _configured(current), "gatewayStarting": started})
+            return
+        if self.path == "/ollama/models":
+            try:
+                base_url = str(payload.get("baseUrl") or _read_env().get("OLLAMA_BASE_URL") or "").strip()
+                self._send(200, {"models": _ollama_models(base_url)})
+            except Exception as exc:
+                self._send(502, {"error": str(exc)})
             return
         if self.path == "/verify":
             self._send(200, _verify_runtime())

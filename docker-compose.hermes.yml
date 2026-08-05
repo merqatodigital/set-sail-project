@@ -1,6 +1,6 @@
 services:
   hermes-proxy:
-    image: caddy:2-alpine
+    image: public.ecr.aws/docker/library/caddy:2-alpine
     restart: unless-stopped
     depends_on:
       hermes-workforce:
@@ -21,7 +21,10 @@ services:
       dockerfile: services/hermes/Dockerfile
     restart: unless-stopped
     environment:
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       API_SERVER_KEY: ${HERMES_TALA_API_KEY}
       HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
       HERMES_ROLE: tala
@@ -46,7 +49,10 @@ services:
       dockerfile: services/hermes/Dockerfile
     restart: unless-stopped
     environment:
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       API_SERVER_KEY: ${HERMES_WORKFORCE_API_KEY}
       HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
       HERMES_ROLE: workforce

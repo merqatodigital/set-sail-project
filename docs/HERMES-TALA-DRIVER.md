@@ -8,7 +8,8 @@ Set Sail remains the Resort OS. TALA remains the guest-facing concierge with its
 - `hermes-workforce` is the owner/admin service. It has separate memory, credentials, sessions, skills, and back-office MCP tools.
 - The workforce container includes an authenticated setup manager on port 8650. It writes secrets only to the private Hermes volume and restarts the real gateway after configuration.
 - Admin connects directly to the resort's HTTPS Hermes address using a server access key kept only in the browser session.
-- The owner enters OpenRouter, Supabase, GitHub, and email settings inside Admin → Hermes Workforce → Settings.
+- The owner enters OpenRouter, Supabase, GitHub, and email settings inside Admin → Hermes Workforce → Settings. The OpenRouter list is loaded live and separates free and paid models.
+- The owner can switch the same Hermes runtime to Ollama and sync models installed on a Windows/macOS host through `host.docker.internal:11434`.
 - Caddy supplies HTTPS for the workforce manager at `HERMES_DOMAIN`.
 - Both services use the full pinned NousResearch Hermes runtime.
 - Supabase service-role credentials never enter the browser.

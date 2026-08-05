@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM public.ecr.aws/docker/library/python:3.11-slim
 ARG HERMES_REPOSITORY=https://github.com/NousResearch/hermes-agent.git
 ARG HERMES_COMMIT=36cb5ae5530a75def7df3195e49b7a4aa2add482
 RUN apt-get update && apt-get install -y --no-install-recommends curl git ca-certificates nodejs npm ffmpeg ripgrep && rm -rf /var/lib/apt/lists/*
