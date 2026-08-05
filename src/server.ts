@@ -220,7 +220,15 @@ async function runtimeConfig(db: any): Promise<{ config: HermesRuntimeConfig } |
     console.error("Unable to read Hermes runtime configuration", error);
     return { error: json({ error: "Hermes secure runtime bridge is not installed yet." }, 503) };
   }
-  return { config };
+  // The connected Supabase project is the trusted default. The owner does not
+  // need to copy the same project URL or service key into the Hermes form.
+  return {
+    config: {
+      ...config,
+      supabase_url: config.supabase_url || runtimeValue(undefined, "SUPABASE_URL"),
+      supabase_service_role_key: config.supabase_service_role_key || runtimeValue(undefined, "SUPABASE_SERVICE_ROLE_KEY"),
+    },
+  };
 }
 
 function providerChecks(config: HermesRuntimeConfig, liveModel = false) {
