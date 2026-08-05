@@ -116,6 +116,45 @@ export type Database = {
         }
         Relationships: []
       }
+      hermes_runs: {
+        Row: {
+          agent: string
+          created_at: string
+          created_by: string | null
+          id: string
+          model: string
+          request: string
+          resort_id: string
+          result: string
+          status: string
+          task_id: string | null
+        }
+        Insert: {
+          agent: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model?: string
+          request?: string
+          resort_id?: string
+          result?: string
+          status?: string
+          task_id?: string | null
+        }
+        Update: {
+          agent?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model?: string
+          request?: string
+          resort_id?: string
+          result?: string
+          status?: string
+          task_id?: string | null
+        }
+        Relationships: []
+      }
       hermes_settings: {
         Row: {
           created_at: string
@@ -129,8 +168,6 @@ export type Database = {
           resend_from_email: string | null
           resort_cms_key: string
           resort_id: string
-          runtime_url: string | null
-          supabase_url: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -146,8 +183,6 @@ export type Database = {
           resend_from_email?: string | null
           resort_cms_key?: string
           resort_id: string
-          runtime_url?: string | null
-          supabase_url?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -163,8 +198,6 @@ export type Database = {
           resend_from_email?: string | null
           resort_cms_key?: string
           resort_id?: string
-          runtime_url?: string | null
-          supabase_url?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -940,31 +973,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      hermes_runtime_config: {
-        Args: { p_resort_id: string }
-        Returns: {
-          github_repository: string
-          github_token: string
-          ollama_base_url: string
-          ollama_model: string
-          openrouter_api_key: string
-          openrouter_model: string
-          provider: string
-          resend_api_key: string
-          resend_from_email: string
-          supabase_service_role_key: string
-          supabase_url: string
-        }[]
-      }
-      hermes_secret_status: {
-        Args: { p_resort_id: string }
-        Returns: {
-          github_token_saved: boolean
-          openrouter_key_saved: boolean
-          resend_key_saved: boolean
-          supabase_key_saved: boolean
-        }[]
-      }
       purge_old_audit_log: { Args: never; Returns: undefined }
       purge_old_briefings: { Args: never; Returns: undefined }
       purge_old_proactive_messages: { Args: never; Returns: undefined }
@@ -975,17 +983,6 @@ export type Database = {
           check_out: string
           room_type: string
         }[]
-      }
-      save_hermes_secrets: {
-        Args: {
-          p_github_token?: string
-          p_openrouter_api_key?: string
-          p_resend_api_key?: string
-          p_resort_id: string
-          p_runtime_access_key?: string
-          p_supabase_service_role_key?: string
-        }
-        Returns: undefined
       }
     }
     Enums: {
