@@ -116,6 +116,60 @@ export type Database = {
         }
         Relationships: []
       }
+      hermes_settings: {
+        Row: {
+          created_at: string
+          github_repository: string
+          last_verification: Json
+          last_verified_at: string | null
+          ollama_base_url: string | null
+          ollama_model: string | null
+          openrouter_model: string | null
+          provider: string
+          resend_from_email: string | null
+          resort_cms_key: string
+          resort_id: string
+          runtime_url: string | null
+          supabase_url: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          github_repository?: string
+          last_verification?: Json
+          last_verified_at?: string | null
+          ollama_base_url?: string | null
+          ollama_model?: string | null
+          openrouter_model?: string | null
+          provider?: string
+          resend_from_email?: string | null
+          resort_cms_key?: string
+          resort_id: string
+          runtime_url?: string | null
+          supabase_url?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          github_repository?: string
+          last_verification?: Json
+          last_verified_at?: string | null
+          ollama_base_url?: string | null
+          ollama_model?: string | null
+          openrouter_model?: string | null
+          provider?: string
+          resend_from_email?: string | null
+          resort_cms_key?: string
+          resort_id?: string
+          runtime_url?: string | null
+          supabase_url?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           category: string
@@ -314,6 +368,27 @@ export type Database = {
           notes?: string
           reference?: string
           related_id?: string
+        }
+        Relationships: []
+      }
+      resort_members: {
+        Row: {
+          created_at: string
+          resort_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          resort_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          resort_id?: string
+          role?: string
+          user_id?: string
         }
         Relationships: []
       }
