@@ -176,7 +176,7 @@ export default function HermesWorkforce() {
   const [runtimeUrl, setRuntimeUrl] = useState(readRuntimeUrl);
   const [runtimeUrlInput, setRuntimeUrlInput] = useState(readRuntimeUrl);
   const [settings, setSettings] = useState<HermesSettings>(EMPTY_SETTINGS);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(true);
   const [showSecrets, setShowSecrets] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -509,7 +509,7 @@ export default function HermesWorkforce() {
         description="One supervisor and specialized agents using the resort’s existing data, tools and knowledge."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)} disabled={!ownerToken}>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)}>
               <Settings2 className="h-4 w-4" /> Settings
             </Button>
             <Button variant="outline" size="sm" onClick={() => void verifyRuntime()} disabled={verifying || !accessKey}>
@@ -570,7 +570,7 @@ export default function HermesWorkforce() {
         </div>
       </div>
 
-      {showSettings && ownerToken && (
+      {showSettings && (
         <Card className="mb-6 space-y-6 border-[#C6A15B]/35 p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -739,10 +739,10 @@ export default function HermesWorkforce() {
             <p className="text-xs text-[#26221C]/45">Saving restarts the real Hermes gateway with the new private configuration.</p>
             <Button
               onClick={() => void saveConfiguration()}
-              disabled={savingSettings || verifying || (settings.AI_PROVIDER === "ollama" ? !settings.OLLAMA_MODEL : !settings.HERMES_MODEL)}
+              disabled={!ownerToken || savingSettings || verifying || (settings.AI_PROVIDER === "ollama" ? !settings.OLLAMA_MODEL : !settings.HERMES_MODEL)}
             >
               {savingSettings || verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {verifying ? "Testing Hermes" : "Save, start and verify Hermes"}
+              {!ownerToken ? "Sign in to save settings" : verifying ? "Testing Hermes" : "Save, start and verify Hermes"}
             </Button>
           </div>
         </Card>
