@@ -130,8 +130,6 @@ function ChatTab({
       model: modelId,
       adminApiKey: adminKey,
       cms,
-      ops,
-      refreshOps,
       owner: true,
     });
   }, [draft, tala, siteName, modelId, adminKey, cms, ops, refreshOps]);

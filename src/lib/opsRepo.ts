@@ -178,6 +178,10 @@ function tourFromRow(r: any): Tour {
     capacity: num(r.capacity, 1),
     inclusions: Array.isArray(r.inclusions) ? r.inclusions : [],
     active: bool(r.active, true),
+    boatCost: num(r.boat_cost),
+    guideCost: num(r.guide_cost),
+    lunchCost: num(r.lunch_cost),
+    entranceFee: num(r.entrance_fee),
     order: num(r.sort_order),
   };
 }
@@ -240,6 +244,7 @@ function tourBookingFromRow(r: any): TourBooking {
     guests: num(r.guests, 1),
     amount: num(r.amount),
     paidAmount: num(r.paid_amount),
+    cost: num(r.cost),
     status: r.status,
     notes: str(r.notes),
     createdAt: str(r.created_at),
