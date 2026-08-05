@@ -66,6 +66,19 @@ async function callHermes(options: {
   }
 }
 
+function normalizeMessages(value: unknown, limit = 32): TalaWireMessage[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .filter((item) => item.role === "user" || item.role === "assistant")
+    .map((item) => ({
+      role: item.role as "user" | "assistant",
+      content: String(item.content || "").slice(0, 12_000),
+    }))
+    .filter((item) => item.content.trim())
+    .slice(-limit);
+}
+
 async function proxyTalaToHermes(request: Request, env: unknown): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
