@@ -252,13 +252,11 @@ export default function HermesWorkforce() {
     }
   };
 
-  const refreshStatus = async (key = accessKey, url = runtimeUrl) => {
-    if (!key || !url) return;
+  const refreshStatus = async () => {
+    if (!ownerToken) return;
     setError("");
     try {
-      const response = await fetch(`${url.replace(/\/$/, "")}/status`, {
-        headers: { Authorization: `Bearer ${key}` },
-      });
+      const response = await fetch("/api/hermes/status", { headers: ownerHeaders() });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Unable to reach Hermes.");
       const runtime = data as RuntimeStatus;
@@ -346,13 +344,13 @@ export default function HermesWorkforce() {
   };
 
   const verifyRuntime = async () => {
-    if (!runtimeUrl || !accessKey || verifying) return false;
+    if (!ownerToken || verifying) return false;
     setVerifying(true);
     setError("");
     try {
-      const response = await fetch(`${runtimeUrl}/verify`, {
+      const response = await fetch("/api/hermes/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
+        headers: ownerHeaders(),
         body: "{}",
       });
       const data = await response.json().catch(() => null);
@@ -395,9 +393,9 @@ export default function HermesWorkforce() {
   }, []);
 
   useEffect(() => {
-    void loadModels(accessKey, runtimeUrl);
-    if (accessKey && runtimeUrl) void refreshStatus(accessKey, runtimeUrl);
-  }, [accessKey, runtimeUrl]);
+    void loadModels();
+    if (ownerToken) void refreshStatus();
+  }, [ownerToken]);
 
   const unlock = () => {
     const value = keyInput.trim();
@@ -436,7 +434,6 @@ export default function HermesWorkforce() {
         GITHUB_TOKEN: Boolean(settings.GITHUB_TOKEN) || current.GITHUB_TOKEN,
         RESEND_API_KEY: Boolean(settings.RESEND_API_KEY) || current.RESEND_API_KEY,
       }));
-      const runtimeSettings = settings;
       setSettings((current) => ({
         ...current,
         OPENROUTER_API_KEY: "",
@@ -444,18 +441,6 @@ export default function HermesWorkforce() {
         GITHUB_TOKEN: "",
         RESEND_API_KEY: "",
       }));
-      if (!runtimeUrl || !accessKey) {
-        setError("Settings are saved securely. Connect the Hermes runtime when its server is online, then run the green-light test.");
-        return;
-      }
-      const response = await fetch(`${runtimeUrl}/configure`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
-        body: JSON.stringify({ settings: runtimeSettings }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Settings were saved, but Hermes could not be updated.");
-      await new Promise((resolve) => setTimeout(resolve, 2500));
       const ready = await verifyRuntime();
       await refreshStatus();
       if (ready) setShowSettings(false);
@@ -482,12 +467,9 @@ export default function HermesWorkforce() {
     setError("");
     setWorking(true);
     try {
-      const response = await fetch(`${runtimeUrl}/workforce`, {
+      const response = await fetch("/api/hermes/workforce", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessKey}`,
-        },
+        headers: ownerHeaders(),
         body: JSON.stringify({ agent: agentId, messages: nextMessages, session: sessionRef.current }),
       });
       const data = await response.json().catch(() => null);
@@ -512,7 +494,7 @@ export default function HermesWorkforce() {
             <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)}>
               <Settings2 className="h-4 w-4" /> Settings
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void verifyRuntime()} disabled={verifying || !accessKey}>
+            <Button variant="outline" size="sm" onClick={() => void verifyRuntime()} disabled={verifying || !ownerToken}>
               <RefreshCw className={`h-4 w-4 ${verifying ? "animate-spin" : ""}`} />
               {verifying ? "Running live test" : "Check connections"}
             </Button>
@@ -534,15 +516,10 @@ export default function HermesWorkforce() {
         </Card>
       )}
 
-      {ownerToken && !accessKey && (
-        <Card className="mb-6 max-w-xl space-y-4 border-[#C6A15B]/35 p-6">
-          <div className="flex items-center gap-2 font-medium text-[#26221C]"><Server className="h-4 w-4 text-[#C6A15B]" /> Hermes runtime connection</div>
-          <p className="text-sm leading-relaxed text-[#26221C]/60">Your settings are saved in Supabase. Add the server address and access key only when the Hermes runtime is online; the key stays in this browser session.</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Hermes Server URL"><Input value={runtimeUrlInput} onChange={(event) => setRuntimeUrlInput(event.target.value)} placeholder="https://hermes.yourresort.com" /></Field>
-            <Field label="Server Access Key"><Input type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && unlock()} placeholder="Private access key" /></Field>
-          </div>
-          <div className="flex gap-3"><Button onClick={unlock}><Server className="h-4 w-4" /> Connect server</Button><Button variant="outline" onClick={() => setShowSettings(true)}><Settings2 className="h-4 w-4" /> Configure settings</Button></div>
+      {ownerToken && (
+        <Card className="mb-6 max-w-xl border-[#C6A15B]/35 p-5">
+          <div className="flex items-center gap-2 font-medium text-[#26221C]"><Server className="h-4 w-4 text-[#C6A15B]" /> Hermes runs inside TALA</div>
+          <p className="mt-2 text-sm leading-relaxed text-[#26221C]/60">No Docker address or browser access key is needed for OpenRouter. TALA sends your selected model and private settings through its secured server connection.</p>
         </Card>
       )}
 

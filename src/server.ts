@@ -199,6 +199,134 @@ async function hermesSettings(request: Request): Promise<Response> {
   return json({ ok: true });
 }
 
+type HermesRuntimeConfig = {
+  provider: string;
+  openrouter_model: string;
+  ollama_base_url: string;
+  ollama_model: string;
+  supabase_url: string;
+  github_repository: string;
+  resend_from_email: string;
+  openrouter_api_key: string;
+  supabase_service_role_key: string;
+  github_token: string;
+  resend_api_key: string;
+};
+
+async function runtimeConfig(db: any): Promise<{ config: HermesRuntimeConfig } | { error: Response }> {
+  const { data, error } = await db.rpc("hermes_runtime_config", { p_resort_id: HERMES_RESORT_ID });
+  const config = (Array.isArray(data) ? data[0] : data) as HermesRuntimeConfig | null;
+  if (error || !config) {
+    console.error("Unable to read Hermes runtime configuration", error);
+    return { error: json({ error: "Hermes secure runtime bridge is not installed yet." }, 503) };
+  }
+  return { config };
+}
+
+function providerChecks(config: HermesRuntimeConfig, liveModel = false) {
+  const openrouter = config.provider === "openrouter" && Boolean(config.openrouter_api_key && config.openrouter_model);
+  const ollama = config.provider === "ollama" && Boolean(config.ollama_base_url && config.ollama_model);
+  const modelReady = liveModel && (openrouter || ollama);
+  return {
+    hermes: modelReady,
+    openrouter: openrouter || ollama,
+    supabase: Boolean(config.supabase_url && config.supabase_service_role_key),
+    email: Boolean(config.resend_from_email && config.resend_api_key),
+    github: Boolean(config.github_repository && config.github_token),
+  };
+}
+
+async function callOpenRouter(config: HermesRuntimeConfig, messages: Array<{ role: "system" | "user" | "assistant"; content: string }>): Promise<Response> {
+  if (config.provider !== "openrouter") {
+    return json({ error: "Ollama needs the local Hermes connector. Select OpenRouter to run Hermes from this site now." }, 503);
+  }
+  if (!config.openrouter_api_key || !config.openrouter_model) {
+    return json({ error: "Add an OpenRouter API key and model in Hermes Setup first." }, 400);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${config.openrouter_api_key}`,
+      },
+      body: JSON.stringify({ model: config.openrouter_model, messages, stream: false }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const reason = typeof payload?.error === "string" ? payload.error : payload?.error?.message;
+      console.error("OpenRouter Hermes request failed", response.status, reason);
+      return json({ error: reason || "OpenRouter rejected the selected model." }, 502);
+    }
+    return json(payload);
+  } catch (error) {
+    console.error("OpenRouter Hermes connection failed", error);
+    return json({ error: "OpenRouter could not be reached from Hermes." }, 502);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function hermesRuntimeStatus(request: Request, liveTest = false): Promise<Response> {
+  if (request.method !== (liveTest ? "POST" : "GET")) return json({ error: "method not allowed" }, 405);
+  const owner = await requireHermesOwner(request);
+  if ("error" in owner) return owner.error;
+  const loaded = await runtimeConfig(owner.db);
+  if ("error" in loaded) return loaded.error;
+  const { config } = loaded;
+  let connections = providerChecks(config, false);
+  let modelDetail = config.provider === "ollama"
+    ? (connections.openrouter ? "Ollama machine and model saved." : "Ollama machine URL or model is missing.")
+    : (connections.openrouter ? "OpenRouter key and model saved." : "OpenRouter key or model is missing.");
+  if (liveTest && config.provider === "openrouter") {
+    const test = await callOpenRouter(config, [{ role: "user", content: "Reply with exactly OK." }]);
+    if (test.ok) {
+      connections = providerChecks(config, true);
+      modelDetail = "Selected OpenRouter model answered a live Hermes test.";
+    } else {
+      const payload = await test.json().catch(() => null) as { error?: string } | null;
+      modelDetail = payload?.error || "The selected OpenRouter model did not pass the live test.";
+    }
+  }
+  const checks = {
+    hermes: { ok: connections.hermes, detail: connections.hermes ? "Hermes is responding through TALA." : modelDetail },
+    openrouter: { ok: connections.openrouter, detail: modelDetail },
+    supabase: { ok: connections.supabase, detail: connections.supabase ? "Private resort-data connection saved." : "Add the Supabase project URL and service key." },
+    email: { ok: connections.email, detail: connections.email ? "Resend email connection saved." : "Resend is optional until Email Agent sending is enabled." },
+    github: { ok: connections.github, detail: connections.github ? "GitHub developer connection saved." : "GitHub is optional until Developer Agent work is enabled." },
+  };
+  const ready = connections.hermes && connections.openrouter && connections.supabase;
+  return json({
+    configured: Boolean(connections.openrouter || connections.supabase),
+    connections,
+    verification: { state: ready ? "ready" : "failed", ready, checks, checkedAt: Date.now() },
+  });
+}
+
+async function hermesWorkforce(request: Request): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+  const owner = await requireHermesOwner(request);
+  if ("error" in owner) return owner.error;
+  const loaded = await runtimeConfig(owner.db);
+  if ("error" in loaded) return loaded.error;
+  let payload: { agent?: unknown; messages?: unknown };
+  try {
+    payload = await request.json() as { agent?: unknown; messages?: unknown };
+  } catch {
+    return json({ error: "invalid JSON body" }, 400);
+  }
+  const agent = String(payload.agent || "") as HermesAgentId;
+  if (!(agent in WORKFORCE_PROMPTS)) return json({ error: "unknown workforce agent" }, 400);
+  const messages = normalizeMessages(payload.messages, 48);
+  if (!messages.length || messages[messages.length - 1]?.role !== "user") {
+    return json({ error: "a user task is required" }, 400);
+  }
+  return callOpenRouter(loaded.config, [{ role: "system", content: WORKFORCE_PROMPTS[agent] }, ...messages]);
+}
+
 function normalizeMessages(value: unknown, limit = 32): TalaWireMessage[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -414,10 +542,13 @@ export default {
         return await hermesSettings(request);
       }
       if (new URL(request.url).pathname === "/api/hermes/status") {
-        return await hermesStatus(request, env);
+        return await hermesRuntimeStatus(request);
+      }
+      if (new URL(request.url).pathname === "/api/hermes/verify") {
+        return await hermesRuntimeStatus(request, true);
       }
       if (new URL(request.url).pathname === "/api/hermes/workforce") {
-        return await proxyWorkforceToHermes(request, env);
+        return await hermesWorkforce(request);
       }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
