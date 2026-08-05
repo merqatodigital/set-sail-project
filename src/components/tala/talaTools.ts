@@ -299,6 +299,33 @@ export const TALA_TOOL_SCHEMAS = [
   {
     type: "function",
     function: {
+      name: "handoff_to_workforce",
+      description:
+        "Create a pending back-office task for the Hermes Workforce when a guest request needs finance, lead follow-up, email, development, or resort operations work. This does not claim the work is complete.",
+      parameters: {
+        type: "object",
+        properties: {
+          department: {
+            type: "string",
+            enum: ["finance", "leads", "email", "developer", "operations"],
+            description: "Hermes specialist that should own the work.",
+          },
+          summary: { type: "string", description: "Concise, actionable description of the work required." },
+          guestName: { type: "string", description: "Guest or lead name, when known." },
+          guestContact: { type: "string", description: "Guest email or phone, when known." },
+          urgency: {
+            type: "string",
+            enum: ["normal", "high", "urgent"],
+            description: "Operational urgency. Defaults to normal.",
+          },
+        },
+        required: ["department", "summary"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "remember_guest",
       description: "Store a fact about a guest so TALA can recall it later. Requires guestKey (phone/email/name) and the fact.",
       parameters: {
@@ -1209,6 +1236,33 @@ async function setReminderFrontend(args: Record<string, unknown>) {
   return { success: true, message: "Reminder set: " + title };
 }
 
+async function handoffToWorkforceFrontend(args: Record<string, unknown>) {
+  const department = str(args.department).toLowerCase();
+  const summary = str(args.summary);
+  const urgency = str(args.urgency).toLowerCase() || "normal";
+  const allowedDepartments = new Set(["finance", "leads", "email", "developer", "operations"]);
+  const allowedUrgencies = new Set(["normal", "high", "urgent"]);
+  if (!allowedDepartments.has(department) || !summary) {
+    return { error: "A valid workforce department and summary are required." };
+  }
+  if (!isSupabaseConnected() || !supabase) return { error: "Supabase not connected." };
+  const details = [
+    `[Hermes:${department}]`,
+    allowedUrgencies.has(urgency) ? `[${urgency}]` : "[normal]",
+    summary,
+    str(args.guestName) ? `Guest: ${str(args.guestName)}` : "",
+    str(args.guestContact) ? `Contact: ${str(args.guestContact)}` : "",
+  ].filter(Boolean).join(" | ");
+  const category = department === "operations" ? "general" : department === "leads" ? "booking" : "staff";
+  const { data, error } = await supabase
+    .from("tala_tasks")
+    .insert({ title: details.slice(0, 300), due: "", category, status: "pending" })
+    .select("id,title,status,category,created_at")
+    .single();
+  if (error) return { error: "Couldn't hand this work to the Hermes Workforce." };
+  return { success: true, task: data, message: `Sent to the Hermes ${department} agent for back-office follow-up.` };
+}
+
 // ---- Memory (frontend) --------------------------------------------------
 async function rememberGuestFrontend(args: Record<string, unknown>) {
   const guestKey = str(args.guestKey);
@@ -1297,6 +1351,8 @@ export async function executeTalaTool(
       return sendBriefingFrontend(args);
     case "set_reminder":
       return setReminderFrontend(args);
+    case "handoff_to_workforce":
+      return handoffToWorkforceFrontend(args);
     case "remember_guest":
       return rememberGuestFrontend(args);
     case "recall_guest":

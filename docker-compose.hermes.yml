@@ -1,0 +1,58 @@
+services:
+  tala-agent:
+    build:
+      context: .
+      dockerfile: services/hermes/Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      API_SERVER_KEY: ${HERMES_TALA_API_KEY}
+      HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
+      HERMES_ROLE: tala
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      RESORT_CMS_KEY: ${RESORT_CMS_KEY:-marina_terrace_payload}
+      HERMES_HOME: /data/hermes
+    volumes:
+      - tala-agent-data:/data/hermes
+    ports:
+      - "127.0.0.1:8642:8642"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  hermes-workforce:
+    build:
+      context: .
+      dockerfile: services/hermes/Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      API_SERVER_KEY: ${HERMES_WORKFORCE_API_KEY}
+      HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
+      HERMES_ROLE: workforce
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      RESORT_CMS_KEY: ${RESORT_CMS_KEY:-marina_terrace_payload}
+      TALA_GITHUB_REPOSITORY: ${TALA_GITHUB_REPOSITORY:-merqatodigital/set-sail-project}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      HERMES_HOME: /data/hermes
+    volumes:
+      - hermes-workforce-data:/data/hermes
+      - .:/workspace/set-sail-project:ro
+    ports:
+      - "127.0.0.1:8643:8642"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  tala-agent-data:
+  hermes-workforce-data:

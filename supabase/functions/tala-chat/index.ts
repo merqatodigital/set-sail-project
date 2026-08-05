@@ -877,6 +877,47 @@ export async function handleRequest(req: Request): Promise<Response> {
     },
   );
 
+  const handoffToWorkforceTool = tool(
+    async ({ department, summary, guestName, guestContact, urgency }: {
+      department: "finance" | "leads" | "email" | "developer" | "operations";
+      summary: string;
+      guestName?: string;
+      guestContact?: string;
+      urgency?: "normal" | "high" | "urgent";
+    }) => {
+      const allowedDepartments = new Set(["finance", "leads", "email", "developer", "operations"]);
+      const selectedDepartment = allowedDepartments.has(department) ? department : "operations";
+      if (!summary?.trim()) return JSON.stringify({ error: "A task summary is required." });
+      const selectedUrgency = ["normal", "high", "urgent"].includes(urgency ?? "") ? urgency : "normal";
+      const title = [
+        `[Hermes:${selectedDepartment}]`,
+        `[${selectedUrgency}]`,
+        summary.trim(),
+        guestName?.trim() ? `Guest: ${guestName.trim()}` : "",
+        guestContact?.trim() ? `Contact: ${guestContact.trim()}` : "",
+      ].filter(Boolean).join(" | ").slice(0, 300);
+      const category = selectedDepartment === "operations" ? "general" : selectedDepartment === "leads" ? "booking" : "staff";
+      const { data, error } = await supabase
+        .from("tala_tasks")
+        .insert({ title, due: "", category, status: "pending" })
+        .select("id,title,status,category,created_at")
+        .single();
+      if (error) return JSON.stringify({ error: "Couldn't hand this work to the Hermes Workforce." });
+      return JSON.stringify({ success: true, task: data, message: `Sent to the Hermes ${selectedDepartment} agent for back-office follow-up.` });
+    },
+    {
+      name: "handoff_to_workforce",
+      description: "Create a pending back-office task for the Hermes Workforce when a guest request needs finance, lead follow-up, email, development, or resort operations work. Never claim the work is complete.",
+      schema: z.object({
+        department: z.enum(["finance", "leads", "email", "developer", "operations"]),
+        summary: z.string().min(1).max(1000),
+        guestName: z.string().max(200).nullable().optional(),
+        guestContact: z.string().max(300).nullable().optional(),
+        urgency: z.enum(["normal", "high", "urgent"]).nullable().optional(),
+      }),
+    },
+  );
+
   // ---- Memory ----------------------------------------------------------------
   // tala_guest_memory table carries small facts across sessions.
 
@@ -973,6 +1014,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     sendWhatsAppTool,
     sendBriefingTool,
     setReminderTool,
+    handoffToWorkforceTool,
     // ---- Memory -----------------------------------------------------------
     rememberGuestTool,
     recallGuestTool,
