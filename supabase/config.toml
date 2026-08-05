@@ -2,3 +2,5 @@ project_id = "nfirbrpnmgsrvoomtokn"
 
 [functions.tala-chat]
 verify_jwt = false
+[functions.hermes]
+verify_jwt = false
