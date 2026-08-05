@@ -9,5 +9,5 @@ RUN git clone "${HERMES_REPOSITORY}" /opt/hermes-agent && cd /opt/hermes-agent &
 COPY services/hermes /opt/tala
 RUN chmod +x /opt/tala/entrypoint.sh
 WORKDIR /opt/hermes-agent
-EXPOSE 8642
+EXPOSE 8650
 ENTRYPOINT ["/opt/tala/entrypoint.sh"]
