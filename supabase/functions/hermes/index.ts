@@ -479,10 +479,12 @@ async function handleHandoffs(db: ReturnType<typeof admin>): Promise<Response> {
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) return json({ error: `Unable to read TALA handoffs: ${error.message}` }, 500);
-  const handoffs = (data ?? []).map((row: Json) => ({
-    ...row,
-    agent: agentForCategory(String(row.category ?? "")),
-  }));
+  const handoffs = (data ?? [])
+    .filter((row: Json) => !["done", "completed", "cancelled"].includes(String(row.status ?? "").toLowerCase()))
+    .map((row: Json) => ({
+      ...row,
+      agent: agentForCategory(String(row.category ?? "")),
+    }));
   return json({ handoffs });
 }
 

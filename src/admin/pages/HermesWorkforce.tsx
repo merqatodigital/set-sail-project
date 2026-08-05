@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bot,
   CheckCircle2,
@@ -129,6 +129,47 @@ const CHECK_LABELS: Array<{ id: CheckId; label: string; icon: typeof Bot }> = [
   { id: "ollama", label: "Local Machine Connector", icon: Laptop },
 ];
 
+function maskReportPhoneNumbers(content: string) {
+  return content.replace(/\+?\d[\d\s().-]{7,}\d/g, (candidate) => {
+    const digits = candidate.replace(/\D/g, "");
+    return digits.length >= 8 ? `Phone ending ${digits.slice(-4)}` : candidate;
+  });
+}
+
+function ReportContent({ content }: { content: string }) {
+  const blocks: ReactNode[] = [];
+  const lines = maskReportPhoneNumbers(content).split("\n");
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line || /^\|?\s*[-:]+(?:\s*\|\s*[-:]+)+\s*\|?$/.test(line)) return;
+    const clean = line.replace(/\*\*/g, "");
+
+    if (clean.startsWith("### ")) {
+      blocks.push(<h4 key={index} className="pt-2 text-sm font-semibold text-[#5E431A]">{clean.slice(4)}</h4>);
+    } else if (clean.startsWith("## ")) {
+      blocks.push(<h3 key={index} className="pt-3 text-base font-semibold text-[#26221C]">{clean.slice(3)}</h3>);
+    } else if (clean.startsWith("# ")) {
+      blocks.push(<h2 key={index} className="pt-3 font-serif text-xl text-[#26221C]">{clean.slice(2)}</h2>);
+    } else if (clean.startsWith("|")) {
+      const cells = clean.split("|").slice(1, -1).map((cell) => cell.trim());
+      blocks.push(
+        <div key={index} className="grid gap-2 rounded-lg border border-[#26221C]/10 bg-white/65 px-3 py-2 text-xs sm:grid-flow-col sm:auto-cols-fr">
+          {cells.map((cell, cellIndex) => <span key={cellIndex} className="break-words">{cell}</span>)}
+        </div>,
+      );
+    } else if (/^[-*]\s+/.test(clean)) {
+      blocks.push(<p key={index} className="pl-4 text-sm before:mr-2 before:text-[#C6A15B] before:content-['•']">{clean.replace(/^[-*]\s+/, "")}</p>);
+    } else if (/^>\s?/.test(clean)) {
+      blocks.push(<p key={index} className="border-l-2 border-[#C6A15B]/60 pl-3 text-sm italic">{clean.replace(/^>\s?/, "")}</p>);
+    } else {
+      blocks.push(<p key={index} className="text-sm">{clean}</p>);
+    }
+  });
+
+  return <div className="space-y-2">{blocks}</div>;
+}
+
 export default function HermesWorkforce() {
   const [agentId, setAgentId] = useState<AgentId>("supervisor");
   const [settings, setSettings] = useState<HermesSettings>(DEFAULT_SETTINGS);
@@ -156,6 +197,10 @@ export default function HermesWorkforce() {
   const selected = useMemo(() => AGENTS.find((agent) => agent.id === agentId)!, [agentId]);
   const SelectedIcon = selected.icon;
   const operational = verification?.ready === true;
+  const activeHandoffs = useMemo(
+    () => handoffs.filter((handoff) => !["done", "completed", "cancelled"].includes(handoff.status.toLowerCase())),
+    [handoffs],
+  );
 
   const filteredModels = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();
@@ -537,12 +582,12 @@ export default function HermesWorkforce() {
             Refresh
           </button>
         </div>
-        {!handoffs.length && (
+        {!activeHandoffs.length && (
           <p className="text-sm text-[#26221C]/50">
             No open handoffs. TALA sends back-office work here by creating a task in a “hermes” category.
           </p>
         )}
-        {handoffs.map((handoff) => (
+        {activeHandoffs.map((handoff) => (
           <div key={handoff.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-[#26221C]/10 px-4 py-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-[#26221C]">{handoff.title}</p>
@@ -587,6 +632,7 @@ export default function HermesWorkforce() {
         <Card className="flex min-h-[420px] flex-col p-6">
           <div className="flex items-center gap-2 border-b border-[#26221C]/10 pb-4 font-medium text-[#26221C]">
             <SelectedIcon className="h-4 w-4 text-[#C6A15B]" /> {selected.name}
+            <span className="ml-auto rounded-full bg-[#C6A15B]/15 px-2.5 py-1 text-xs font-medium text-[#76541C]">Drafts only</span>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto py-4">
             {!messages.length && (
@@ -600,11 +646,11 @@ export default function HermesWorkforce() {
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`whitespace-pre-wrap rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${
                   message.role === "user" ? "bg-[#26221C]/5 text-[#26221C]" : "bg-[#C6A15B]/10 text-[#26221C]"
                 }`}
               >
-                {message.content}
+                {message.role === "assistant" ? <ReportContent content={message.content} /> : <span className="whitespace-pre-wrap">{message.content}</span>}
               </div>
             ))}
             {working && (
@@ -613,7 +659,10 @@ export default function HermesWorkforce() {
               </p>
             )}
           </div>
-          <div className="flex gap-2 border-t border-[#26221C]/10 pt-4">
+          <p className="border-t border-[#26221C]/10 pt-3 text-xs leading-relaxed text-[#26221C]/50">
+            Hermes prepares analysis and drafts. Sending email, changing reservations or prices, moving money, or pushing code needs your explicit approval.
+          </p>
+          <div className="flex gap-2 pt-3">
             <Input
               value={input}
               onChange={(event) => setInput(event.target.value)}
