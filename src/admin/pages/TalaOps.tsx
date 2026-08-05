@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Bike,
+  BedDouble,
   Bot,
   Brain,
   CheckCircle2,
   Circle,
+  CloudSun,
   ClipboardList,
   Lightbulb,
   Loader2,
   MessageCircle,
+  Package,
   Plus,
   Send,
   Sparkles,
@@ -21,6 +25,10 @@ import { PageHeader, TabBar } from "../shared/PageHeader";
 import { useTalaChat } from "@/components/tala/useTalaChat";
 import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
+import { useOperations } from "../ops/useOperations";
+import type { OperationsSnapshot } from "@/lib/opsRepo";
+import { fetchSanVicenteWeather, type WeatherNow } from "@/lib/weather";
+import { sendWhatsAppTemplate } from "@/lib/whatsappSend";
 import {
   addTalaBriefing,
   addTalaGoal,
@@ -49,6 +57,7 @@ export default function TalaOps() {
   const { notify } = useToast();
   const tala = useTalaChat();
   const [tab, setTab] = useState<Tab>("chat");
+  const { data: ops, refresh: refreshOps } = useOperations();
 
   return (
     <div>
@@ -68,8 +77,10 @@ export default function TalaOps() {
           { id: "leads", label: "Leads" },
         ]}
       />
-      {tab === "chat" && <ChatTab tala={tala} cms={data} notify={notify} />}
-      {tab === "briefing" && <BriefingTab cms={data} notify={notify} />}
+      {tab === "chat" && (
+        <ChatTab tala={tala} cms={data} ops={ops} refreshOps={refreshOps} notify={notify} />
+      )}
+      {tab === "briefing" && <BriefingTab cms={data} ops={ops} notify={notify} />}
       {tab === "goals" && <GoalsTab notify={notify} />}
       {tab === "tasks" && <TasksTab notify={notify} />}
       {tab === "wins" && <WinsTab cms={data} notify={notify} />}
@@ -88,7 +99,7 @@ function operatorPrompt(siteName: string): string {
     `You are TALA, the AI operations concierge for ${siteName} in San Vicente, Palawan.`,
     `You are speaking with the OWNER or STAFF (not a guest). Be direct, concise and useful.`,
     `You can reference bookings, tours, staff, payments and tasks. When asked for a morning update, give a tight rundown of today's arrivals, departures, tours, bikes out, in-house guests, and any unpaid payroll or money notes.`,
-    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, and log_payment (record revenue or expense). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
+    `You can ACT on the owner's behalf using tools: create_booking, update_booking (confirm/cancel/check-in/out), create_tour_booking, update_rental (mark a motorbike rented/returned/maintenance), run_payroll (compute staff pay for a date range), mark_pay_record_paid, log_payment (record revenue or expense), check_inventory (stock levels — linens, towels, bathroom, food, gas, fuel), adjust_inventory (log stock used or restocked), and send_whatsapp_message (send a real WhatsApp text right now — only works if that person messaged this number in the last 24h, otherwise tell the owner to use a template from Admin -> Bookings/WhatsApp instead). Only use these when the owner clearly asks you to make a change, and report the resulting reference/status back.`,
     `Never invent numbers — use what is in context. If you don't know, say so. Keep replies to 1-4 sentences unless detail is asked for.`,
   ].join("\n");
 }
@@ -96,10 +107,14 @@ function operatorPrompt(siteName: string): string {
 function ChatTab({
   tala,
   cms,
+  ops,
+  refreshOps,
   notify,
 }: {
   tala: ReturnType<typeof useTalaChat>;
   cms: import("@/types/cms").CmsData;
+  ops: OperationsSnapshot;
+  refreshOps: () => Promise<void>;
   notify: ReturnType<typeof useToast>["notify"];
 }) {
   const [draft, setDraft] = useState("");
@@ -115,9 +130,11 @@ function ChatTab({
       model: modelId,
       adminApiKey: adminKey,
       cms,
+      ops,
+      refreshOps,
       owner: true,
     });
-  }, [draft, tala, siteName, modelId, adminKey, cms]);
+  }, [draft, tala, siteName, modelId, adminKey, cms, ops, refreshOps]);
 
   return (
     <Card className="p-6">
@@ -128,20 +145,15 @@ function ChatTab({
       <div className="mb-4 max-h-96 space-y-3 overflow-y-auto rounded-lg bg-[#FAF6EF] p-4">
         {tala.messages.length === 0 && (
           <p className="text-sm text-[#26221C]/45">
-            Ask TALA for today's rundown, "what needs my attention?", or "summarise
-            this week's bookings". She uses the same brain as the guest orb.
+            Ask TALA for today's rundown, "what needs my attention?", or "summarise this week's
+            bookings". She uses the same brain as the guest orb.
           </p>
         )}
         {tala.messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+          <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
-                m.role === "user"
-                  ? "bg-[#26221C] text-white"
-                  : "bg-white text-[#26221C] shadow-sm"
+                m.role === "user" ? "bg-[#26221C] text-white" : "bg-white text-[#26221C] shadow-sm"
               }`}
             >
               {m.content}
@@ -157,9 +169,7 @@ function ChatTab({
           </div>
         )}
       </div>
-      {tala.error && (
-        <p className="mb-3 text-xs text-red-500">{tala.error}</p>
-      )}
+      {tala.error && <p className="mb-3 text-xs text-red-500">{tala.error}</p>}
       <div className="flex items-end gap-2">
         <Textarea
           value={draft}
@@ -178,9 +188,9 @@ function ChatTab({
         </Button>
       </div>
       <p className="mt-2 text-[11px] text-[#26221C]/40">
-        Brain: Admin → TALA model {modelId ? `(${modelId})` : "(free fallback)"}.
-        If chat is blank/erroring, set the model + API key in Admin → TALA, or
-        ensure the tala-chat edge function secret is set.
+        Brain: Admin → TALA model {modelId ? `(${modelId})` : "(free fallback)"}. If chat is
+        blank/erroring, set the model + API key in Admin → TALA, or ensure the tala-chat edge
+        function secret is set.
       </p>
     </Card>
   );
@@ -191,13 +201,20 @@ function ChatTab({
 // ---------------------------------------------------------------------------
 function BriefingTab({
   cms,
+  ops,
   notify,
 }: {
   cms: import("@/types/cms").CmsData;
+  ops: OperationsSnapshot;
   notify: ReturnType<typeof useToast>["notify"];
 }) {
   const [briefings, setBriefings] = useState<TalaBriefing[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [weather, setWeather] = useState<WeatherNow | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [yesterdayWins, setYesterdayWins] = useState<TalaWin[]>([]);
+
+  const live = computeBriefing(ops, cms.homepage.rooms);
 
   const load = useCallback(() => {
     fetchTalaBriefings().then(setBriefings);
@@ -206,13 +223,28 @@ function BriefingTab({
     load();
   }, [load]);
 
+  useEffect(() => {
+    setWeatherLoading(true);
+    fetchSanVicenteWeather().then((w) => {
+      setWeather(w);
+      setWeatherLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    fetchTalaWins().then((wins) =>
+      setYesterdayWins(wins.filter((w) => w.brief_date === yesterday)),
+    );
+  }, []);
+
   const generate = useCallback(async () => {
     setGenerating(true);
     // Prefer the server-side SQL function (same logic as the daily cron).
     let saved = await generateTalaBriefing();
     // Fallback: if the RPC isn't deployed yet, compute in-browser + insert.
     if (!saved) {
-      const snap = computeBriefing(cms);
+      const snap = computeBriefing(ops, cms.homepage.rooms);
       saved = await addTalaBriefing({
         brief_date: snap.briefDate,
         summary: snap.summary,
@@ -226,15 +258,33 @@ function BriefingTab({
     } else {
       notify("Could not save briefing (Supabase not connected?).", "error");
     }
-  }, [cms, notify, load]);
+  }, [ops, cms.homepage.rooms, notify, load]);
 
   const sendToWhatsApp = useCallback(
     async (b: TalaBriefing) => {
-      const link = buildBriefingWhatsAppLink(b, cms.settings.whatsapp);
       if (!cms.settings.whatsapp.numbers.length) {
         notify("No WhatsApp number set. Add one in Admin → WhatsApp.", "error");
         return;
       }
+      const cloudApi = cms.settings.whatsapp.cloudApi;
+      const templateName = cloudApi?.enabled ? cloudApi.templates.dailyBrief.trim() : "";
+      if (templateName) {
+        const primary =
+          cms.settings.whatsapp.numbers.find((n) => n.isPrimary) ??
+          cms.settings.whatsapp.numbers[0];
+        const to = primary.number;
+        const result = await sendWhatsAppTemplate(to, templateName, cloudApi.templateLanguage, [
+          b.summary,
+        ]);
+        if (result.success) {
+          await markBriefingWhatsappSent(b.id);
+          notify("Briefing sent over WhatsApp.", "success");
+          load();
+          return;
+        }
+        notify(`Cloud API send failed (${result.error}). Opening wa.me link instead.`, "error");
+      }
+      const link = buildBriefingWhatsAppLink(b, cms.settings.whatsapp);
       window.open(link, "_blank");
       await markBriefingWhatsappSent(b.id);
       notify("Opened WhatsApp with the briefing pre-filled.", "success");
@@ -245,6 +295,80 @@ function BriefingTab({
 
   return (
     <div>
+      {/* Live snapshot — always current, refreshes with ops data + weather,
+          independent of whether today's stored briefing has been generated
+          yet. This is what makes the console feel "alive" between the
+          scheduled 7am briefings, not just a static report you generate once. */}
+      <Card className="mb-6 p-6">
+        <p className="mb-3 flex items-center gap-2 font-serif text-lg text-[#26221C]">
+          <CloudSun className="h-4 w-4 text-[#C6A15B]" /> Right now in San Vicente
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45">Weather</p>
+            {weatherLoading ? (
+              <p className="mt-1 text-sm text-[#26221C]/45">Loading…</p>
+            ) : weather ? (
+              <p className="mt-1 text-sm font-medium text-[#26221C]">
+                {Math.round(weather.tempC)}°C · {weather.description}
+                <span className="block text-xs font-normal text-[#26221C]/45">
+                  Wind {Math.round(weather.windKph)} km/h
+                </span>
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-[#26221C]/45">Unavailable right now.</p>
+            )}
+          </div>
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45 flex items-center gap-1">
+              <BedDouble className="h-3 w-3" /> Open tonight
+            </p>
+            <p className="mt-1 text-sm font-medium text-[#26221C]">
+              {live.roomsOpenToday.length > 0 ? live.roomsOpenToday.join(", ") : "Fully booked"}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45 flex items-center gap-1">
+              <Bike className="h-3 w-3" /> Bikes ready
+            </p>
+            <p className="mt-1 text-sm font-medium text-[#26221C]">
+              {live.bikesAvailable} ready · {live.bikesOut} out
+              {live.bikesMaintenance ? ` · ${live.bikesMaintenance} in maintenance` : ""}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45">Needs you</p>
+            <p className="mt-1 text-sm font-medium text-[#26221C]">
+              {live.pendingBookings > 0
+                ? `${live.pendingBookings} booking${live.pendingBookings > 1 ? "s" : ""} to confirm`
+                : "Nothing pending"}
+            </p>
+          </div>
+          <div className="rounded-lg bg-[#FAF6EF] p-3">
+            <p className="text-[11px] uppercase tracking-wide text-[#26221C]/45 flex items-center gap-1">
+              <Package className="h-3 w-3" /> Stock
+            </p>
+            <p className="mt-1 text-sm font-medium text-[#26221C]">
+              {live.lowStockItems.length > 0
+                ? `Low: ${live.lowStockItems.join(", ")}`
+                : "All stocked up"}
+            </p>
+          </div>
+        </div>
+        {yesterdayWins.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-1.5 text-[11px] uppercase tracking-wide text-[#26221C]/45">
+              Yesterday's wins
+            </p>
+            <ul className="space-y-1 text-sm text-[#26221C]/70">
+              {yesterdayWins.map((w) => (
+                <li key={w.id}>• {w.text}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
       <Card className="mb-6 p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -260,10 +384,7 @@ function BriefingTab({
             Generate briefing
           </Button>
           {briefings && briefings.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={() => sendToWhatsApp(briefings[0])}
-            >
+            <Button variant="outline" onClick={() => sendToWhatsApp(briefings[0])}>
               <MessageCircle className="h-4 w-4" />
               Send to WhatsApp
             </Button>
@@ -279,9 +400,7 @@ function BriefingTab({
                 </span>
               )}
             </p>
-            <p className="text-sm leading-relaxed text-[#26221C]">
-              {briefings[0].summary}
-            </p>
+            <p className="text-sm leading-relaxed text-[#26221C]">{briefings[0].summary}</p>
             {briefings[0].highlights.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {briefings[0].highlights.map((h, i) => (
@@ -297,8 +416,8 @@ function BriefingTab({
           </div>
         ) : (
           <p className="text-sm text-[#26221C]/45">
-            No briefing yet. Click "Generate briefing" to compute today's rundown
-            from live bookings, tours, staff and payments.
+            No briefing yet. Click "Generate briefing" to compute today's rundown from live
+            bookings, tours, staff and payments.
           </p>
         )}
       </Card>
@@ -366,10 +485,18 @@ function GoalsTab({ notify }: { notify: ReturnType<typeof useToast>["notify"] })
       </div>
       <div className="mb-5 grid gap-2 md:grid-cols-[1fr_2fr_auto]">
         <Field label="Goal title">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fill 3 day-passes this week" />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Fill 3 day-passes this week"
+          />
         </Field>
         <Field label="Notes (optional)">
-          <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What success looks like" />
+          <Input
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            placeholder="What success looks like"
+          />
         </Field>
         <div className="flex items-end">
           <Button onClick={add} disabled={!title.trim()}>
@@ -384,19 +511,22 @@ function GoalsTab({ notify }: { notify: ReturnType<typeof useToast>["notify"] })
       ) : (
         <div className="space-y-3">
           {goals.map((g) => (
-            <div key={g.id} className="flex items-start gap-3 rounded-lg border border-[#26221C]/10 p-3">
+            <div
+              key={g.id}
+              className="flex items-start gap-3 rounded-lg border border-[#26221C]/10 p-3"
+            >
               {g.status === "done" ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
               ) : (
                 <Circle className="mt-0.5 h-4 w-4 text-[#C6A15B]" />
               )}
               <div>
-                <p className={`text-sm font-medium ${g.status === "done" ? "text-[#26221C]/45 line-through" : "text-[#26221C]"}`}>
+                <p
+                  className={`text-sm font-medium ${g.status === "done" ? "text-[#26221C]/45 line-through" : "text-[#26221C]"}`}
+                >
                   {g.title}
                 </p>
-                {g.description && (
-                  <p className="text-xs text-[#26221C]/50">{g.description}</p>
-                )}
+                {g.description && <p className="text-xs text-[#26221C]/50">{g.description}</p>}
                 {g.target_date && (
                   <p className="text-[11px] text-[#26221C]/40">Target: {g.target_date}</p>
                 )}
@@ -441,7 +571,11 @@ function TasksTab({ notify }: { notify: ReturnType<typeof useToast>["notify"] })
       </div>
       <div className="mb-5 grid gap-2 md:grid-cols-[2fr_1fr_auto]">
         <Field label="Task">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Confirm 2pm airport pickup with Maria" />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Confirm 2pm airport pickup with Maria"
+          />
         </Field>
         <Field label="Due (optional)">
           <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
@@ -459,14 +593,19 @@ function TasksTab({ notify }: { notify: ReturnType<typeof useToast>["notify"] })
       ) : (
         <div className="space-y-3">
           {tasks.map((t) => (
-            <div key={t.id} className="flex items-start gap-3 rounded-lg border border-[#26221C]/10 p-3">
+            <div
+              key={t.id}
+              className="flex items-start gap-3 rounded-lg border border-[#26221C]/10 p-3"
+            >
               {t.status === "done" ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
               ) : (
                 <Circle className="mt-0.5 h-4 w-4 text-[#C6A15B]" />
               )}
               <div>
-                <p className={`text-sm font-medium ${t.status === "done" ? "text-[#26221C]/45 line-through" : "text-[#26221C]"}`}>
+                <p
+                  className={`text-sm font-medium ${t.status === "done" ? "text-[#26221C]/45 line-through" : "text-[#26221C]"}`}
+                >
                   {t.title}
                 </p>
                 <p className="text-[11px] text-[#26221C]/40">
@@ -542,7 +681,11 @@ function WinsTab({
         </div>
         <div className="mb-4 grid gap-2 md:grid-cols-[1fr_auto]">
           <Field label="What TALA accomplished">
-            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Captured 4 qualified leads; flagged 2 unpaid departures" />
+            <Input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="e.g. Captured 4 qualified leads; flagged 2 unpaid departures"
+            />
           </Field>
           <div className="flex items-end">
             <Button onClick={add} disabled={!text.trim()}>
@@ -551,7 +694,11 @@ function WinsTab({
           </div>
         </div>
         <Button variant="outline" onClick={summarize} disabled={tala.thinking}>
-          {tala.thinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {tala.thinking ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
           Summarise with TALA
         </Button>
         {digest && (
@@ -587,7 +734,9 @@ function WinsTab({
 // ---------------------------------------------------------------------------
 function LeadsTab({ cms }: { cms: import("@/types/cms").CmsData }) {
   const [leads, setLeads] = useState<TalaLead[] | null>(null);
-  useEffect(() => { fetchTalaLeads().then(setLeads); }, []);
+  useEffect(() => {
+    fetchTalaLeads().then(setLeads);
+  }, []);
   const refresh = () => fetchTalaLeads().then(setLeads);
 
   const followUp = (lead: TalaLead) => {
@@ -600,20 +749,31 @@ function LeadsTab({ cms }: { cms: import("@/types/cms").CmsData }) {
       <PageHeader
         title="Leads"
         description="People TALA captured from guest chats and outreach. Follow up with one tap — WhatsApp opens pre-filled."
-        actions={<Button variant="outline" onClick={refresh}>Refresh</Button>}
+        actions={
+          <Button variant="outline" onClick={refresh}>
+            Refresh
+          </Button>
+        }
       />
       {leads === null ? (
         <p className="text-sm text-[#26221C]/45">Loading…</p>
       ) : leads.length === 0 ? (
-        <p className="text-sm text-[#26221C]/45">No leads yet. They appear here when TALA captures a guest's name/contact or from outreach.</p>
+        <p className="text-sm text-[#26221C]/45">
+          No leads yet. They appear here when TALA captures a guest's name/contact or from outreach.
+        </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {leads.map((l) => (
-            <div key={l.id} className="rounded-xl border border-[#26221C]/10 bg-white p-4 shadow-sm">
+            <div
+              key={l.id}
+              className="rounded-xl border border-[#26221C]/10 bg-white p-4 shadow-sm"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-serif text-base text-[#26221C]">{l.name || "Unnamed lead"}</p>
-                  <p className="text-xs text-[#26221C]/45">{l.contact || "no contact"} · {l.source}</p>
+                  <p className="text-xs text-[#26221C]/45">
+                    {l.contact || "no contact"} · {l.source}
+                  </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#C6A15B]/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#8A6443]">
                   {new Date(l.created_at).toLocaleDateString()}

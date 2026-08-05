@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Plus, Trash2, Pencil, Ship, Users, Search, CircleDollarSign } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal, Switch } from "@/components/ui";
 import { PageHeader, EmptyState, TabBar } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
+import { useOperations } from "../ops/useOperations";
+import { upsertTour, deleteTour, upsertTourBooking, deleteTourBooking, upsertPayment } from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, generateReference, textSearch, uid } from "../ops/opsUtils";
 import type { Tour, TourBooking } from "@/types/cms";
 
@@ -19,15 +20,15 @@ const emptyTourBooking = (tourId = "", tourName = ""): TourBooking => ({
 });
 
 export default function ToursManager() {
-  const { data, update } = useCms();
+  const { data: ops, refresh } = useOperations();
   const { notify } = useToast();
   const [tab, setTab] = useState<"tours" | "bookings">("bookings");
   const [editTour, setEditTour] = useState<Tour | null>(null);
   const [editBooking, setEditBooking] = useState<TourBooking | null>(null);
   const [search, setSearch] = useState("");
 
-  const tours = [...data.operations.tours].sort((a, b) => a.order - b.order);
-  const bookings = data.operations.tourBookings;
+  const tours = [...ops.tours].sort((a, b) => a.order - b.order);
+  const bookings = ops.tourBookings;
   const activeTours = tours.filter((t) => t.active);
 
   // KPIs
@@ -39,53 +40,55 @@ export default function ToursManager() {
     .filter((b) => new Date(b.date) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, b) => s + b.paidAmount, 0);
 
-  const saveTour = (t: Tour) => {
+  const saveTour = async (t: Tour) => {
     const exists = tours.some((x) => x.id === t.id);
-    const next = exists ? tours.map((x) => (x.id === t.id ? t : x)) : [...tours, t];
-    update((d) => ({ ...d, operations: { ...d.operations, tours: next } }));
+    const ok = await upsertTour(t);
+    if (!ok) return notify("Could not save tour", "info");
+    await refresh();
     notify(exists ? "Tour updated" : "Tour created");
     setEditTour(null);
   };
 
-  const removeTour = (t: Tour) => {
+  const removeTour = async (t: Tour) => {
     if (!window.confirm(`Delete "${t.name}"?`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, tours: d.operations.tours.filter((x) => x.id !== t.id) } }));
+    const ok = await deleteTour(t.id);
+    if (!ok) return notify("Could not delete tour", "info");
+    await refresh();
     notify("Tour deleted");
   };
 
-  const saveBooking = (b: TourBooking) => {
+  const saveBooking = async (b: TourBooking) => {
     const exists = bookings.some((x) => x.id === b.id);
-    const next = exists ? bookings.map((x) => (x.id === b.id ? b : x)) : [...bookings, b];
-    update((d) => ({ ...d, operations: { ...d.operations, tourBookings: next } }));
+    const ok = await upsertTourBooking(b);
+    if (!ok) return notify("Could not save booking", "info");
+    await refresh();
     notify(exists ? "Tour booking updated" : "Tour booking created");
     setEditBooking(null);
   };
 
-  const removeBooking = (b: TourBooking) => {
+  const removeBooking = async (b: TourBooking) => {
     if (!window.confirm(`Delete tour booking ${b.reference}?`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, tourBookings: d.operations.tourBookings.filter((x) => x.id !== b.id) } }));
+    const ok = await deleteTourBooking(b.id);
+    if (!ok) return notify("Could not delete booking", "info");
+    await refresh();
     notify("Booking deleted");
   };
 
-  const recordPayment = (b: TourBooking) => {
+  const recordPayment = async (b: TourBooking) => {
     const owed = b.amount - b.paidAmount;
     const raw = window.prompt(`Payment for ${b.reference}\nOutstanding: ${formatPHP(owed)}\nAmount:`, String(owed));
     if (!raw) return;
     const amt = parseFloat(raw);
     if (isNaN(amt) || amt <= 0) return;
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        tourBookings: d.operations.tourBookings.map((x) => (x.id === b.id ? { ...x, paidAmount: x.paidAmount + amt } : x)),
-        payments: [...d.operations.payments, {
-          id: uid("pay"), reference: generateReference("PAY"),
-          date: todayISO(), category: "tour", direction: "in",
-          amount: amt, method: "cash", relatedId: b.id,
-          description: `Tour payment: ${b.tourName} — ${b.guestName}`, notes: "",
-        }],
-      },
-    }));
+    const bookingOk = await upsertTourBooking({ ...b, paidAmount: b.paidAmount + amt });
+    const paymentOk = await upsertPayment({
+      id: uid("pay"), reference: generateReference("PAY"),
+      date: todayISO(), category: "tour", direction: "in",
+      amount: amt, method: "cash", relatedId: b.id,
+      description: `Tour payment: ${b.tourName} — ${b.guestName}`, notes: "",
+    });
+    if (!bookingOk || !paymentOk) return notify("Could not record payment", "info");
+    await refresh();
     notify(`${formatPHP(amt)} recorded`);
   };
 

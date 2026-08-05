@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Pencil, Bike, CircleDollarSign, RotateCcw, Search } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal, Switch } from "@/components/ui";
 import { PageHeader, EmptyState, TabBar } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
+import { useOperations } from "../ops/useOperations";
+import { upsertMotorbike, deleteMotorbike, upsertMotorbikeRental, deleteMotorbikeRental, upsertPayment } from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, nightsBetween, generateReference, textSearch, uid } from "../ops/opsUtils";
 import type { Motorbike, MotorbikeRental } from "@/types/cms";
 
@@ -22,15 +23,15 @@ const emptyRental = (bike?: Motorbike): MotorbikeRental => ({
 });
 
 export default function RentalsManager() {
-  const { data, update } = useCms();
+  const { data: ops, refresh } = useOperations();
   const { notify } = useToast();
   const [tab, setTab] = useState<"rentals" | "fleet">("rentals");
   const [editBike, setEditBike] = useState<Motorbike | null>(null);
   const [editRental, setEditRental] = useState<MotorbikeRental | null>(null);
   const [search, setSearch] = useState("");
 
-  const bikes = data.operations.motorbikes;
-  const rentals = data.operations.motorbikeRentals;
+  const bikes = ops.motorbikes;
+  const rentals = ops.motorbikeRentals;
   const availableBikes = bikes.filter((b) => b.active && b.status === "available");
 
   // KPIs
@@ -40,72 +41,72 @@ export default function RentalsManager() {
     .reduce((s, r) => s + r.paidAmount, 0);
   const utilization = bikes.length > 0 ? Math.round((bikes.filter((b) => b.status === "rented").length / bikes.length) * 100) : 0;
 
-  const saveBike = (b: Motorbike) => {
+  const saveBike = async (b: Motorbike) => {
     const exists = bikes.some((x) => x.id === b.id);
-    const next = exists ? bikes.map((x) => (x.id === b.id ? b : x)) : [...bikes, b];
-    update((d) => ({ ...d, operations: { ...d.operations, motorbikes: next } }));
+    const ok = await upsertMotorbike(b);
+    if (!ok) return notify("Could not save bike", "info");
+    await refresh();
     notify(exists ? "Bike updated" : "Bike added to fleet");
     setEditBike(null);
   };
 
-  const removeBike = (b: Motorbike) => {
+  const removeBike = async (b: Motorbike) => {
     if (!window.confirm(`Remove ${b.name} from fleet?`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, motorbikes: d.operations.motorbikes.filter((x) => x.id !== b.id) } }));
+    const ok = await deleteMotorbike(b.id);
+    if (!ok) return notify("Could not remove bike", "info");
+    await refresh();
     notify("Bike removed");
   };
 
-  const saveRental = (r: MotorbikeRental) => {
+  const saveRental = async (r: MotorbikeRental) => {
     const exists = rentals.some((x) => x.id === r.id);
     r.days = nightsBetween(r.startDate, r.endDate) || 1;
-    const next = exists ? rentals.map((x) => (x.id === r.id ? r : x)) : [...rentals, r];
+    const rentalOk = await upsertMotorbikeRental(r);
     // If new active rental, mark bike as rented
-    let bikesUpdate = data.operations.motorbikes;
+    let bikeOk = true;
     if (!exists && r.status === "active") {
-      bikesUpdate = data.operations.motorbikes.map((b) => (b.id === r.bikeId ? { ...b, status: "rented" as const } : b));
+      const bike = bikes.find((b) => b.id === r.bikeId);
+      if (bike) bikeOk = await upsertMotorbike({ ...bike, status: "rented" });
     }
-    update((d) => ({ ...d, operations: { ...d.operations, motorbikeRentals: next, motorbikes: bikesUpdate } }));
+    if (!rentalOk || !bikeOk) return notify("Could not save rental", "info");
+    await refresh();
     notify(exists ? "Rental updated" : `Rental ${r.reference} created`);
     setEditRental(null);
   };
 
-  const returnBike = (r: MotorbikeRental) => {
+  const returnBike = async (r: MotorbikeRental) => {
     if (!window.confirm(`Mark rental ${r.reference} as returned?`)) return;
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        motorbikeRentals: d.operations.motorbikeRentals.map((x) => (x.id === r.id ? { ...x, status: "returned" as const } : x)),
-        motorbikes: d.operations.motorbikes.map((b) => (b.id === r.bikeId ? { ...b, status: "available" as const } : b)),
-      },
-    }));
+    const bike = bikes.find((b) => b.id === r.bikeId);
+    const rentalOk = await upsertMotorbikeRental({ ...r, status: "returned" });
+    const bikeOk = bike ? await upsertMotorbike({ ...bike, status: "available" }) : true;
+    if (!rentalOk || !bikeOk) return notify("Could not return bike", "info");
+    await refresh();
     notify("Bike returned & available");
   };
 
-  const removeRental = (r: MotorbikeRental) => {
+  const removeRental = async (r: MotorbikeRental) => {
     if (!window.confirm(`Delete rental ${r.reference}?`)) return;
-    update((d) => ({ ...d, operations: { ...d.operations, motorbikeRentals: d.operations.motorbikeRentals.filter((x) => x.id !== r.id) } }));
+    const ok = await deleteMotorbikeRental(r.id);
+    if (!ok) return notify("Could not delete rental", "info");
+    await refresh();
     notify("Rental deleted");
   };
 
-  const recordPayment = (r: MotorbikeRental) => {
+  const recordPayment = async (r: MotorbikeRental) => {
     const owed = r.amount - r.paidAmount;
     const raw = window.prompt(`Payment for ${r.reference}\nOutstanding: ${formatPHP(owed)}\nAmount:`, String(owed));
     if (!raw) return;
     const amt = parseFloat(raw);
     if (isNaN(amt) || amt <= 0) return;
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        motorbikeRentals: d.operations.motorbikeRentals.map((x) => (x.id === r.id ? { ...x, paidAmount: x.paidAmount + amt } : x)),
-        payments: [...d.operations.payments, {
-          id: uid("pay"), reference: generateReference("PAY"),
-          date: todayISO(), category: "rental", direction: "in",
-          amount: amt, method: "cash", relatedId: r.id,
-          description: `Rental: ${r.bikeName} — ${r.guestName}`, notes: "",
-        }],
-      },
-    }));
+    const rentalOk = await upsertMotorbikeRental({ ...r, paidAmount: r.paidAmount + amt });
+    const paymentOk = await upsertPayment({
+      id: uid("pay"), reference: generateReference("PAY"),
+      date: todayISO(), category: "rental", direction: "in",
+      amount: amt, method: "cash", relatedId: r.id,
+      description: `Rental: ${r.bikeName} — ${r.guestName}`, notes: "",
+    });
+    if (!rentalOk || !paymentOk) return notify("Could not record payment", "info");
+    await refresh();
     notify(`${formatPHP(amt)} recorded`);
   };
 

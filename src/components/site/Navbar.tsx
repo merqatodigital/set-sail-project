@@ -12,7 +12,7 @@ const LINKS = [
   { label: "Kitchen", href: "#kitchen" },
   { label: "Stay", href: "#accommodation" },
   { label: "Pricing", href: "#pricing" },
-  { label: "Blog", href: "/blog" },
+  { label: "Field Notes", href: "/blog" },
 ];
 
 export function Navbar() {

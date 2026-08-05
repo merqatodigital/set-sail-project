@@ -131,12 +131,172 @@ both the edge function and the direct-key path retry that same model without
 tools before moving to the next one in the fallback chain — so an
 unsupported model degrades to plain chat instead of failing outright.
 
-## `tala_leads` — a note on who can read it
+## Admin access — real Supabase Auth (as of the `admin_auth_and_rls_lockdown` migration)
 
-Like `cms_data`, this table's SELECT policy is open to `anon` — the admin
-panel authenticates with a local passkey, not Supabase Auth, so there's no
-real session-based way to restrict it to "admin only" yet. INSERT is open too
-(TALA needs to write from a visitor's browser) but UPDATE/DELETE are not
-granted to `anon`, so a visitor can only ever add a lead, never alter or wipe
-one. Worth tightening with real Supabase Auth before this handles anything
-more sensitive than "someone's name and a WhatsApp number."
+The admin panel used to gate `/admin` with a passkey compared in the browser
+(default `5309`, committed in plain text to this repo). Postgres never saw
+that check, so every admin write reached Supabase as the same `anon` role as
+any site visitor — and `cms_data` (site content **and** all operations data:
+bookings, payroll, revenue) was `anon`-writable with no restriction at all.
+
+This is now real Supabase email/password auth (`src/context/AuthContext.tsx`),
+checked against a `user_roles` table via `has_role(auth.uid(), 'admin')` in
+RLS policies. `cms_data` writes, and reads of `tala_leads` / `tala_audit_log`
+/ `tala_goals` / `tala_tasks` / `tala_briefings` / `tala_wins`, now require an
+authenticated admin session. Guests can still submit a lead
+(`tala_leads` INSERT) and TALA can still log a turn (`tala_audit_log`
+INSERT) anonymously from the public chat widget — those stay open by design.
+
+**To create the first admin user**, after the migration is applied and the
+app is deployed with this AuthContext:
+
+1. Supabase Dashboard → Authentication → Users → Add user (email + password).
+2. Copy that user's UID.
+3. SQL Editor:
+   ```sql
+   insert into public.user_roles (user_id, role)
+   values ('<uid>', 'admin');
+   ```
+4. Reload `/admin` and sign in with that email/password.
+
+**Follow-up closed (`operations_tables` migration):** bookings, staff,
+payroll, payments, motorbike rentals, guests, and the tour catalog now live
+in their own tables (`bookings`, `staff_members`, `pay_records`, `payments`,
+`motorbike_rentals`, `guests`, `tour_bookings`, `tours_catalog`, `shifts`),
+each locked to `has_role(auth.uid(), 'admin')` for both read and write via
+RLS — not just writes. `cms_data` keeps site content only. Two narrow
+guest-facing exceptions remain by design: a `room_availability_conflicts`
+SECURITY DEFINER function (no PII, just room type + dates) backs TALA's
+`check_room_availability` tool, and guests can INSERT (never read/alter) a
+`status = 'pending'` booking when they confirm a draft. `tours_catalog` also
+has an anon-SELECT policy scoped to `active = true`, since the tour catalog
+is public marketing content, not operational data. See
+`src/lib/opsRepo.ts` for the typed repository layer every admin page and
+TALA's operator tools go through now.
+
+## The morning briefing, made "alive"
+
+Two layers, both reading the same tables:
+
+- **Scheduled** — a pg_cron job (`supabase/migrations/20260723093000_tala_daily_briefing_cron.sql`,
+  logic updated in `20260727090000`, `20260727100000`, and `20260727120000`
+  to read the new operations + inventory tables instead of the old
+  `cms_data.operations` JSON) runs `generate_tala_briefing()` every day at
+  07:00 Asia/Manila and inserts a row into `tala_briefings` — no click
+  needed. Verify it's actually scheduled with
+  `select * from cron.job where jobname = 'tala_daily_briefing';` in the
+  SQL Editor; re-run the `cron.schedule(...)` line at the bottom of that
+  migration if the row is missing (can happen after a project pause/restore).
+- **Live** — Admin → TALA → Morning Brief also shows a "Right now" panel
+  (`computeBriefing()` in `src/components/tala/buildTalaBriefing.ts`) that's
+  always current, not just generated once a day: live San Vicente weather
+  (Open-Meteo, no key, fetched client-side — `src/lib/weather.ts`), which
+  room types have nobody booked in tonight, bike availability/maintenance,
+  bookings still awaiting confirmation, low-stock inventory, and yesterday's
+  logged wins.
+
+## Inventory (linens, towels, bathroom, food, gas, fuel…)
+
+`inventory_items` (migration `20260727110000_inventory.sql`) is a basic
+stock tracker, admin-only like the other operations tables. Manage it at
+Admin → Operations → Inventory (`src/admin/pages/InventoryManager.tsx`):
+
+- Add items one at a time, or bulk-import via CSV — **Template** downloads a
+  correctly-shaped starter file (`src/lib/inventoryCsv.ts`), **Bulk Upload**
+  reads one back. Re-uploading an edited export updates existing items by
+  name instead of duplicating them.
+- Each item has a `reorderThreshold`; anything at or below it shows up as
+  "low stock" — in this page, in the admin Dashboard tile, in TALA's "Right
+  now" panel, and in the scheduled morning brief.
+- TALA (operator mode only, via `src/components/tala/talaTools.ts`) can
+  `check_inventory` (look up stock or list everything running low) and
+  `adjust_inventory` (log stock used or restocked, by name — she never
+  creates new items, only adjusts existing ones added in the admin UI first).
+
+## WhatsApp — real sending (Meta Cloud API)
+
+Until now "Send to WhatsApp" just opened a `wa.me` link for a human to press
+send. This adds actual server-side delivery via the **WhatsApp Business
+Cloud API** (Meta direct — cheaper than going through Twilio), so TALA and
+the admin console can deliver messages without a human touching a phone.
+
+**Why this exists:** every message that reaches for `wa.me` still works
+exactly as before — this is additive, not a replacement, and it's off until
+you turn it on in Admin → WhatsApp.
+
+**Cost, in short:** replying to a guest who messaged you within the last
+24h (the "service window") is free. Messages *you* start cold — a booking
+reminder, the daily brief, a low-stock alert — need a pre-approved Meta
+message *template* and cost a few cents each (varies by country). There's
+a free test phone number with a handful of test-recipient numbers you can
+use to try all of this today, before your business number is verified.
+
+**Security:** the access token and phone number ID are secrets — they are
+**never** stored in `cms_data` (that whole payload is public-readable,
+same as the rest of the site's content). They live only as Supabase Edge
+Function secrets, same pattern as `OPENROUTER_API_KEY`. Only non-secret
+config — on/off, and which approved template name to use for each
+automated message — lives in `settings.whatsapp.cloudApi`.
+
+**One-time setup, in order (do this before merging/deploying this
+feature — the app will error on real sends without it):**
+
+1. Run this migration in the Supabase SQL Editor (adds the guest phone
+   field bookings need for reminders):
+
+   ```sql
+   ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS guest_phone TEXT NOT NULL DEFAULT '';
+   ```
+
+2. Create a Meta for Developers app at developers.facebook.com → add the
+   "WhatsApp" product. Meta gives you a **free test number** and lets you
+   add a handful of test-recipient numbers (verify by SMS code) — you can
+   send real messages to those numbers immediately, no business
+   verification needed, which is perfect for trying this out this low
+   season before switching to your real business number.
+3. In the WhatsApp product setup, note the **Phone Number ID** shown for
+   your (test or verified) number.
+4. Create a **System User** (Business Settings → Users → System Users)
+   with a **permanent access token**, scoped to `whatsapp_business_messaging`
+   and `whatsapp_business_management`.
+5. Set the two secrets (from your terminal, with the Supabase CLI):
+
+   ```
+   supabase secrets set WHATSAPP_ACCESS_TOKEN=your_permanent_token
+   supabase secrets set WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+   ```
+
+6. Create and get approval for your message templates in Meta Business
+   Manager (Business → Account tools → Message Templates) — e.g. a
+   `daily_brief` template with one body variable, a `booking_reminder`
+   template, a `low_stock_alert` template. Approval is usually minutes to
+   a couple of hours. Enter the exact approved template names + language
+   code in Admin → WhatsApp → "WhatsApp Cloud API — Real Sending".
+
+**What's wired up:**
+
+- `supabase/functions/whatsapp-send/` — the Edge Function that actually
+  calls Meta's Graph API. Requires either an authenticated admin (checked
+  via `has_role`) or the service-role key — unlike `tala-chat`, this one
+  costs real money per send, so it's never reachable by guest/anonymous
+  traffic.
+- `src/lib/whatsappSend.ts` — client wrapper (`sendWhatsAppText`,
+  `sendWhatsAppTemplate`) used by the admin UI and by TALA's tools.
+- Admin → WhatsApp → new "WhatsApp Cloud API — Real Sending" card: enable
+  toggle, template name/language fields, and a test-send box so you can
+  confirm delivery to one of your test numbers before relying on it.
+- Admin → Bookings → each pending/confirmed booking with a phone number
+  gets a WhatsApp reminder button.
+- Admin → TALA → Morning Brief → "Send to WhatsApp" now tries a real
+  template send first (using the `dailyBrief` template) when Cloud API is
+  enabled and configured, and falls back to the old `wa.me` link if it
+  isn't configured or the send fails.
+- TALA (operator mode) gained a `send_whatsapp_message` tool — only usable
+  for guests who messaged within the last 24h service window; she'll tell
+  you to use a template from the admin UI otherwise.
+
+**Not yet built:** the daily brief still needs a person to click "Send to
+WhatsApp" — it isn't sent automatically by the 7am cron job yet. Wiring
+that up would mean calling this Edge Function from SQL (via `pg_net`) or
+another trigger; that's a bigger architectural step and worth deciding on
+separately rather than bundling into this pass.

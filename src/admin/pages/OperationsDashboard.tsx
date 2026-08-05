@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
 import { LogIn, LogOut, Ship, Bike, Users, CircleDollarSign, ArrowUpRight, Clock } from "lucide-react";
-import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
 import { formatPHP, formatDate, todayISO } from "../ops/opsUtils";
+import { useOperations } from "../ops/useOperations";
 
 export default function OperationsDashboard() {
-  const { data } = useCms();
-  const ops = data.operations;
+  const { data: ops, loading } = useOperations();
   const today = todayISO();
+
+  if (loading) return null;
 
   // ---- Today's activity -----------------------------------------------------
   const arrivals = ops.bookings.filter((b) => b.checkIn === today && b.status !== "cancelled");

@@ -306,6 +306,27 @@ export interface WhatsAppSettings {
     webhookUrl: string;
     autoReplyMessage: string;
   };
+  /**
+   * Real outbound sending via the WhatsApp Business Cloud API (Meta), sent
+   * server-side through the `whatsapp-send` Edge Function. The access token
+   * and phone number ID are NEVER stored here — this whole CmsData payload
+   * is public-readable — they live as Supabase Edge Function secrets
+   * (WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID), same pattern as
+   * OPENROUTER_API_KEY. Only non-secret config lives here: whether it's on,
+   * and the approved template names/language you set up in Meta Business
+   * Manager (message content for template messages is defined in Meta, not
+   * here — this just tells the app which approved template name to use for
+   * each automated message type).
+   */
+  cloudApi: {
+    enabled: boolean;
+    templateLanguage: string; // not used by Twilio, kept for future
+    templates: {
+      bookingReminder: string; // Twilio Content SID, e.g. "HXfda3c3d7e4dab5c1d9e2f3a4b5c6d7e8"
+      dailyBrief: string; // Twilio Content SID, e.g. "HX..." — {1} becomes the summary
+      lowStockAlert: string; // Twilio Content SID, e.g. "HX..." — {1} becomes item list
+    };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +470,7 @@ export interface Booking {
   reference: string; // human-readable, e.g. MT-2026-001
   guestId: string;
   guestName: string; // denormalized for fast display
+  guestPhone: string; // WhatsApp/mobile number, e.g. "+63 917 123 4567" — for reminders
   roomType: string; // "Day Pass" | "Weekly Sprint" | "Deep Work Month" | custom
   checkIn: string; // ISO date
   checkOut: string; // ISO date

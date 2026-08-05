@@ -37,6 +37,7 @@ import {
   Brain,
   BarChart3,
   Network,
+  Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCms } from "@/context/CmsContext";
@@ -69,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/staff", label: "Staff & Payroll", icon: Users },
       { to: "/admin/payments", label: "Payments", icon: CircleDollarSign },
       { to: "/admin/financial", label: "Financial", icon: BarChart3 },
+      { to: "/admin/inventory", label: "Inventory", icon: Package },
     ],
   },
   {

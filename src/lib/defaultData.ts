@@ -38,6 +38,12 @@ export const PLACEHOLDER_MEDIA = [
   { id: "img_og", label: "Open Graph Cover", folder: "SEO" },
 ];
 
+export const FIELD_NOTES_CATEGORIES: CmsData["blogCategories"] = [];
+
+export function buildFieldNotes(): CmsData["blogPosts"] {
+  return [];
+}
+
 export function buildDefaultMedia(): CmsData["media"] {
   return PLACEHOLDER_MEDIA.map((m) => ({
     id: m.id,
@@ -671,6 +677,15 @@ export function buildDefaultData(): CmsData {
           apiKey: "",
           webhookUrl: "",
           autoReplyMessage: "Salamat! A member of our team will get back to you shortly.",
+        },
+        cloudApi: {
+          enabled: false,
+          templateLanguage: "en_US",
+          templates: {
+            bookingReminder: "",
+            dailyBrief: "",
+            lowStockAlert: "",
+          },
         },
       },
       tala: {
