@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +29,12 @@ ENV_PATH = HOME / ".env"
 CONFIG_PATH = HOME / "config.yaml"
 LOCK = threading.RLock()
 GATEWAY: subprocess.Popen[str] | None = None
+LAST_VERIFICATION: dict[str, Any] = {
+    "state": "not_run",
+    "ready": False,
+    "checks": {},
+    "checkedAt": None,
+}
 
 ALLOWED_SETTINGS = {
     "OPENROUTER_API_KEY",
@@ -120,6 +127,137 @@ mcp_servers:
 
 def _gateway_alive() -> bool:
     return GATEWAY is not None and GATEWAY.poll() is None
+
+
+def _json_request(url: str, *, headers: dict[str, str] | None = None, timeout: int = 20) -> tuple[int, Any]:
+    request = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode()
+            return response.status, json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode())
+        except Exception:
+            detail = {"error": f"HTTP {exc.code}"}
+        return exc.code, detail
+
+
+def _openrouter_models() -> list[dict[str, Any]]:
+    values = _read_env()
+    headers = {"accept": "application/json"}
+    if values.get("OPENROUTER_API_KEY"):
+        headers["authorization"] = f"Bearer {values['OPENROUTER_API_KEY']}"
+    status, payload = _json_request("https://openrouter.ai/api/v1/models", headers=headers, timeout=25)
+    if status != 200 or not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        raise RuntimeError("OpenRouter model catalog is unavailable.")
+    models: list[dict[str, Any]] = []
+    for item in payload["data"]:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        pricing = item.get("pricing") if isinstance(item.get("pricing"), dict) else {}
+        prompt_price = str(pricing.get("prompt") or "0")
+        completion_price = str(pricing.get("completion") or "0")
+        try:
+            is_free = float(prompt_price) == 0 and float(completion_price) == 0
+        except ValueError:
+            is_free = str(item["id"]).endswith(":free")
+        parameters = item.get("supported_parameters") if isinstance(item.get("supported_parameters"), list) else []
+        models.append({
+            "id": str(item["id"]),
+            "name": str(item.get("name") or item["id"]),
+            "free": is_free,
+            "contextLength": int(item.get("context_length") or 0),
+            "promptPrice": prompt_price,
+            "completionPrice": completion_price,
+            "toolCalling": "tools" in parameters,
+        })
+    return sorted(models, key=lambda model: (not model["free"], not model["toolCalling"], model["name"].lower()))
+
+
+def _check_supabase(values: dict[str, str]) -> tuple[bool, str]:
+    url = values.get("SUPABASE_URL", "").rstrip("/")
+    key = values.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    if not url or not key:
+        return False, "Supabase URL or service-role key is missing."
+    cms_key = urllib.parse.quote(values.get("RESORT_CMS_KEY", "marina_terrace_payload"), safe="")
+    status, payload = _json_request(
+        f"{url}/rest/v1/cms_data?key=eq.{cms_key}&select=key&limit=1",
+        headers={"apikey": key, "authorization": f"Bearer {key}", "accept": "application/json"},
+        timeout=20,
+    )
+    if status != 200:
+        detail = payload.get("message") if isinstance(payload, dict) else None
+        return False, str(detail or f"Supabase returned HTTP {status}.")
+    return True, "Marina resort data is reachable."
+
+
+def _check_optional_connection(url: str, key: str, headers: dict[str, str]) -> tuple[bool, str]:
+    if not key:
+        return False, "Not configured."
+    status, payload = _json_request(url, headers=headers, timeout=20)
+    if 200 <= status < 300:
+        return True, "Connected."
+    detail = payload.get("message") if isinstance(payload, dict) else None
+    return False, str(detail or f"Connection returned HTTP {status}.")
+
+
+def _verify_runtime() -> dict[str, Any]:
+    global LAST_VERIFICATION
+    values = _read_env()
+    checks: dict[str, dict[str, Any]] = {}
+
+    supabase_ok, supabase_detail = _check_supabase(values)
+    checks["supabase"] = {"ok": supabase_ok, "detail": supabase_detail}
+
+    github_repo = values.get("TALA_GITHUB_REPOSITORY", "merqatodigital/set-sail-project")
+    github_url = f"https://api.github.com/repos/{urllib.parse.quote(github_repo, safe='/')}"
+    github_ok, github_detail = _check_optional_connection(
+        github_url,
+        values.get("GITHUB_TOKEN", ""),
+        {
+            "accept": "application/vnd.github+json",
+            "authorization": f"Bearer {values.get('GITHUB_TOKEN', '')}",
+            "user-agent": "TALA-Hermes",
+        },
+    )
+    checks["github"] = {"ok": github_ok, "detail": github_detail}
+
+    email_ok, email_detail = _check_optional_connection(
+        "https://api.resend.com/domains?limit=1",
+        values.get("RESEND_API_KEY", ""),
+        {"authorization": f"Bearer {values.get('RESEND_API_KEY', '')}", "accept": "application/json"},
+    )
+    checks["email"] = {"ok": email_ok, "detail": email_detail}
+
+    if not _gateway_alive():
+        checks["hermes"] = {"ok": False, "detail": "Hermes gateway is not running."}
+        checks["openrouter"] = {"ok": False, "detail": "The selected model has not answered a live test."}
+    else:
+        status, response = _proxy_chat({
+            "messages": [{"role": "user", "content": "System readiness test. Reply with only READY."}],
+            "session": "system:readiness",
+        }, "supervisor" if ROLE == "workforce" else None)
+        answer = ""
+        if isinstance(response, dict):
+            choices = response.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                message = choices[0].get("message")
+                if isinstance(message, dict):
+                    answer = str(message.get("content") or "").strip()
+        model_ok = status == 200 and bool(answer)
+        detail = f"Live response received from {values.get('HERMES_MODEL', 'selected model')}." if model_ok else str(response.get("error") if isinstance(response, dict) else "No model response.")
+        checks["hermes"] = {"ok": model_ok, "detail": "Hermes completed a live agent request." if model_ok else detail}
+        checks["openrouter"] = {"ok": model_ok, "detail": detail}
+
+    ready = all(checks[name]["ok"] for name in ("hermes", "openrouter", "supabase"))
+    LAST_VERIFICATION = {
+        "state": "ready" if ready else "failed",
+        "ready": ready,
+        "checks": checks,
+        "checkedAt": int(time.time()),
+    }
+    return LAST_VERIFICATION
 
 
 def _stop_gateway() -> None:
@@ -241,19 +379,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(401, {"error": "Invalid Hermes server access key."})
                 return
             values = _read_env()
+            verified = LAST_VERIFICATION.get("checks", {})
             self._send(200, {
                 "configured": _configured(values),
                 "gateway": _gateway_alive(),
                 "connections": {
-                    "hermes": _gateway_alive(),
-                    "openrouter": bool(values.get("OPENROUTER_API_KEY")),
-                    "supabase": bool(values.get("SUPABASE_URL") and values.get("SUPABASE_SERVICE_ROLE_KEY")),
-                    "email": bool(values.get("RESEND_API_KEY")),
-                    "github": bool(values.get("GITHUB_TOKEN")),
+                    "hermes": bool(verified.get("hermes", {}).get("ok")),
+                    "openrouter": bool(verified.get("openrouter", {}).get("ok")),
+                    "supabase": bool(verified.get("supabase", {}).get("ok")),
+                    "email": bool(verified.get("email", {}).get("ok")),
+                    "github": bool(verified.get("github", {}).get("ok")),
                 },
+                "verification": LAST_VERIFICATION,
                 "settings": {key: ("" if key in SECRET_SETTINGS else values.get(key, "")) for key in ALLOWED_SETTINGS},
                 "secretsSet": {key: bool(values.get(key)) for key in SECRET_SETTINGS},
             })
+            return
+        if self.path == "/models":
+            if not self._authorized():
+                self._send(401, {"error": "Invalid Hermes server access key."})
+                return
+            try:
+                self._send(200, {"models": _openrouter_models()})
+            except Exception as exc:
+                self._send(502, {"error": str(exc)})
             return
         self._send(404, {"error": "Not found."})
 
@@ -267,6 +416,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": "Invalid JSON."})
             return
         if self.path == "/configure":
+            global LAST_VERIFICATION
             current = _read_env()
             incoming = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
             for key in ALLOWED_SETTINGS:
@@ -278,8 +428,12 @@ class Handler(BaseHTTPRequestHandler):
                 elif key not in SECRET_SETTINGS:
                     current.pop(key, None)
             _write_env(current)
+            LAST_VERIFICATION = {"state": "not_run", "ready": False, "checks": {}, "checkedAt": None}
             started = _restart_gateway()
             self._send(200, {"ok": True, "configured": _configured(current), "gatewayStarting": started})
+            return
+        if self.path == "/verify":
+            self._send(200, _verify_runtime())
             return
         if self.path == "/workforce":
             status, result = _proxy_chat(payload, str(payload.get("agent") or ""))
