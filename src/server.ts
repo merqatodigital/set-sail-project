@@ -59,6 +59,142 @@ function hasWorkforceAccess(request: Request, env: unknown): boolean {
   return Boolean(expected && supplied && safeEqual(expected, supplied));
 }
 
+const HERMES_RESORT_ID = "marina_terrace";
+
+type HermesBrowserSettings = {
+  AI_PROVIDER?: unknown;
+  OPENROUTER_API_KEY?: unknown;
+  HERMES_MODEL?: unknown;
+  OLLAMA_BASE_URL?: unknown;
+  OLLAMA_MODEL?: unknown;
+  SUPABASE_URL?: unknown;
+  SUPABASE_SERVICE_ROLE_KEY?: unknown;
+  RESORT_CMS_KEY?: unknown;
+  TALA_GITHUB_REPOSITORY?: unknown;
+  GITHUB_TOKEN?: unknown;
+  RESEND_API_KEY?: unknown;
+  RESEND_FROM_EMAIL?: unknown;
+};
+
+function settingText(value: unknown, limit = 4096): string {
+  return typeof value === "string" ? value.trim().slice(0, limit) : "";
+}
+
+async function requireHermesOwner(request: Request) {
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!token) return { error: json({ error: "Sign in as the resort owner to manage Hermes." }, 401) } as const;
+
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: userResult, error: userError } = await db.auth.getUser(token);
+    const userId = userResult?.user?.id as string | undefined;
+    if (userError || !userId) return { error: json({ error: "Your owner session has expired. Sign in again." }, 401) } as const;
+
+    const { data: membership, error: membershipError } = await db
+      .from("resort_members")
+      .select("role")
+      .eq("resort_id", HERMES_RESORT_ID)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (membershipError || !membership || !["owner", "admin"].includes(membership.role)) {
+      return { error: json({ error: "This account is not an owner of this resort." }, 403) } as const;
+    }
+    return { db, userId } as const;
+  } catch (error) {
+    console.error("Hermes owner authentication failed", error);
+    return { error: json({ error: "Hermes settings database is not connected yet." }, 503) } as const;
+  }
+}
+
+function publicSettings(row: Record<string, unknown> | null) {
+  return {
+    AI_PROVIDER: String(row?.ai_provider || "openrouter"),
+    HERMES_MODEL: String(row?.openrouter_model || "openai/gpt-oss-20b"),
+    OLLAMA_BASE_URL: String(row?.ollama_base_url || "http://host.docker.internal:11434/v1"),
+    OLLAMA_MODEL: String(row?.ollama_model || ""),
+    SUPABASE_URL: String(row?.supabase_url || ""),
+    RESORT_CMS_KEY: String(row?.resort_cms_key || "marina_terrace_payload"),
+    TALA_GITHUB_REPOSITORY: String(row?.github_repository || "merqatodigital/set-sail-project"),
+    RESEND_FROM_EMAIL: String(row?.from_email || ""),
+  };
+}
+
+async function hermesSettings(request: Request): Promise<Response> {
+  const owner = await requireHermesOwner(request);
+  if ("error" in owner) return owner.error;
+  const { db } = owner;
+
+  if (request.method === "GET") {
+    const [{ data: settings, error: settingsError }, { data: secrets, error: secretsError }] = await Promise.all([
+      db.from("hermes_settings").select("*").eq("resort_id", HERMES_RESORT_ID).maybeSingle(),
+      db.schema("private").from("hermes_secrets").select("*").eq("resort_id", HERMES_RESORT_ID).maybeSingle(),
+    ]);
+    if (settingsError || secretsError) {
+      console.error("Unable to read Hermes settings", settingsError || secretsError);
+      return json({ error: "Unable to load Hermes settings." }, 500);
+    }
+    const secretRow = (secrets || {}) as Record<string, unknown>;
+    return json({
+      settings: publicSettings(settings as Record<string, unknown> | null),
+      secretsSet: {
+        OPENROUTER_API_KEY: Boolean(secretRow.openrouter_api_key),
+        SUPABASE_SERVICE_ROLE_KEY: Boolean(secretRow.supabase_service_role_key),
+        GITHUB_TOKEN: Boolean(secretRow.github_token),
+        RESEND_API_KEY: Boolean(secretRow.resend_api_key),
+      },
+    });
+  }
+
+  if (request.method !== "PUT") return json({ error: "method not allowed" }, 405);
+  let body: HermesBrowserSettings;
+  try {
+    const payload = (await request.json()) as HermesBrowserSettings & { settings?: HermesBrowserSettings };
+    body = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
+  } catch {
+    return json({ error: "invalid JSON body" }, 400);
+  }
+
+  const aiProvider = settingText(body.AI_PROVIDER, 20);
+  if (aiProvider !== "openrouter" && aiProvider !== "ollama") return json({ error: "Choose OpenRouter or Ollama." }, 400);
+  const settingsRow = {
+    resort_id: HERMES_RESORT_ID,
+    ai_provider: aiProvider,
+    openrouter_model: settingText(body.HERMES_MODEL, 240),
+    ollama_base_url: settingText(body.OLLAMA_BASE_URL, 1024),
+    ollama_model: settingText(body.OLLAMA_MODEL, 240),
+    supabase_url: settingText(body.SUPABASE_URL, 1024),
+    resort_cms_key: settingText(body.RESORT_CMS_KEY, 240),
+    github_repository: settingText(body.TALA_GITHUB_REPOSITORY, 240),
+    from_email: settingText(body.RESEND_FROM_EMAIL, 320),
+  };
+  const secretValues = {
+    openrouter_api_key: settingText(body.OPENROUTER_API_KEY, 4096),
+    supabase_service_role_key: settingText(body.SUPABASE_SERVICE_ROLE_KEY, 8192),
+    github_token: settingText(body.GITHUB_TOKEN, 4096),
+    resend_api_key: settingText(body.RESEND_API_KEY, 4096),
+  };
+
+  const { error: settingsError } = await db.from("hermes_settings").upsert(settingsRow, { onConflict: "resort_id" });
+  if (settingsError) {
+    console.error("Unable to save Hermes settings", settingsError);
+    return json({ error: "Unable to save Hermes settings." }, 500);
+  }
+  const changedSecrets = Object.fromEntries(Object.entries(secretValues).filter(([, value]) => value));
+  if (Object.keys(changedSecrets).length) {
+    const { error: secretsError } = await db.schema("private").from("hermes_secrets").upsert(
+      { resort_id: HERMES_RESORT_ID, ...changedSecrets },
+      { onConflict: "resort_id" },
+    );
+    if (secretsError) {
+      console.error("Unable to save Hermes secrets", secretsError);
+      return json({ error: "Settings saved, but the private keys could not be saved." }, 500);
+    }
+  }
+  return json({ ok: true });
+}
+
 function normalizeMessages(value: unknown, limit = 32): TalaWireMessage[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -269,6 +405,9 @@ export default {
       }
       if (new URL(request.url).pathname === "/api/openrouter/models") {
         return await openRouterModels(request);
+      }
+      if (new URL(request.url).pathname === "/api/hermes/settings") {
+        return await hermesSettings(request);
       }
       if (new URL(request.url).pathname === "/api/hermes/status") {
         return await hermesStatus(request, env);

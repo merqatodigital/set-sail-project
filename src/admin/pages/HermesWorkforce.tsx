@@ -25,6 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button, Card, Field, Input } from "@/components/ui";
+import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "../shared/PageHeader";
 
 type AgentId = "supervisor" | "finance" | "leads" | "email" | "developer" | "operations";
@@ -191,6 +192,11 @@ export default function HermesWorkforce() {
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [error, setError] = useState("");
+  const [ownerToken, setOwnerToken] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerAuthMessage, setOwnerAuthMessage] = useState("");
+  const [ownerAuthBusy, setOwnerAuthBusy] = useState(false);
+  const [secretsSet, setSecretsSet] = useState<Partial<Record<keyof HermesSettings, boolean>>>({});
   const sessionRef = useRef(`admin:${crypto.randomUUID()}`);
 
   const selected = useMemo(() => AGENTS.find((agent) => agent.id === agentId)!, [agentId]);
@@ -208,6 +214,43 @@ export default function HermesWorkforce() {
     () => models.find((model) => model.id === settings.HERMES_MODEL),
     [models, settings.HERMES_MODEL],
   );
+
+  const ownerHeaders = () => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${ownerToken}`,
+  });
+
+  const loadSavedConfiguration = async (token = ownerToken) => {
+    if (!token) return;
+    try {
+      const response = await fetch("/api/hermes/settings", { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Unable to load saved Hermes settings.");
+      setSettings((current) => ({ ...current, ...data.settings }));
+      setSecretsSet(data.secretsSet || {});
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load saved Hermes settings.");
+    }
+  };
+
+  const sendOwnerSignIn = async () => {
+    const email = ownerEmail.trim();
+    if (!email || ownerAuthBusy) return;
+    setOwnerAuthBusy(true);
+    setOwnerAuthMessage("");
+    try {
+      const { error: signInError } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.href },
+      });
+      if (signInError) throw signInError;
+      setOwnerAuthMessage("Check your email and open the secure sign-in link. This page will then unlock your Hermes settings.");
+    } catch (reason) {
+      setOwnerAuthMessage(reason instanceof Error ? reason.message : "Unable to send the sign-in link.");
+    } finally {
+      setOwnerAuthBusy(false);
+    }
+  };
 
   const refreshStatus = async (key = accessKey, url = runtimeUrl) => {
     if (!key || !url) return;
@@ -335,10 +378,25 @@ export default function HermesWorkforce() {
   };
 
   useEffect(() => {
-    if (accessKey && runtimeUrl) {
-      void refreshStatus(accessKey, runtimeUrl);
-      void loadModels(accessKey, runtimeUrl);
-    }
+    const applySession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      setOwnerToken(session?.access_token || "");
+      setOwnerEmail(session?.user.email || "");
+      if (session?.access_token) void loadSavedConfiguration(session.access_token);
+    };
+    void applySession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setOwnerToken(session?.access_token || "");
+      setOwnerEmail(session?.user.email || "");
+      if (session?.access_token) void loadSavedConfiguration(session.access_token);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    void loadModels(accessKey, runtimeUrl);
+    if (accessKey && runtimeUrl) void refreshStatus(accessKey, runtimeUrl);
   }, [accessKey, runtimeUrl]);
 
   const unlock = () => {
@@ -360,17 +418,25 @@ export default function HermesWorkforce() {
   };
 
   const saveConfiguration = async () => {
-    if (!runtimeUrl || !accessKey || savingSettings) return;
+    if (!ownerToken || savingSettings) return;
     setSavingSettings(true);
     setError("");
     try {
-      const response = await fetch(`${runtimeUrl}/configure`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
+      const settingsResponse = await fetch("/api/hermes/settings", {
+        method: "PUT",
+        headers: ownerHeaders(),
         body: JSON.stringify({ settings }),
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Unable to save Hermes settings.");
+      const settingsData = await settingsResponse.json().catch(() => null);
+      if (!settingsResponse.ok) throw new Error(settingsData?.error || "Unable to save Hermes settings.");
+      setSecretsSet((current) => ({
+        ...current,
+        OPENROUTER_API_KEY: Boolean(settings.OPENROUTER_API_KEY) || current.OPENROUTER_API_KEY,
+        SUPABASE_SERVICE_ROLE_KEY: Boolean(settings.SUPABASE_SERVICE_ROLE_KEY) || current.SUPABASE_SERVICE_ROLE_KEY,
+        GITHUB_TOKEN: Boolean(settings.GITHUB_TOKEN) || current.GITHUB_TOKEN,
+        RESEND_API_KEY: Boolean(settings.RESEND_API_KEY) || current.RESEND_API_KEY,
+      }));
+      const runtimeSettings = settings;
       setSettings((current) => ({
         ...current,
         OPENROUTER_API_KEY: "",
@@ -378,6 +444,17 @@ export default function HermesWorkforce() {
         GITHUB_TOKEN: "",
         RESEND_API_KEY: "",
       }));
+      if (!runtimeUrl || !accessKey) {
+        setError("Settings are saved securely. Connect the Hermes runtime when its server is online, then run the green-light test.");
+        return;
+      }
+      const response = await fetch(`${runtimeUrl}/configure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessKey}` },
+        body: JSON.stringify({ settings: runtimeSettings }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Settings were saved, but Hermes could not be updated.");
       await new Promise((resolve) => setTimeout(resolve, 2500));
       const ready = await verifyRuntime();
       await refreshStatus();
@@ -425,46 +502,6 @@ export default function HermesWorkforce() {
     }
   };
 
-  if (!accessKey || !runtimeUrl) {
-    return (
-      <div>
-        <PageHeader
-          title="Hermes Workforce"
-          description="The private back-office AI workforce for resort management."
-        />
-        <div className="mx-auto max-w-lg rounded-2xl border border-[#26221C]/10 bg-white p-8 shadow-sm">
-          <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-[#C6A15B]/15">
-            <KeyRound className="h-5 w-5 text-[#8A6B32]" />
-          </div>
-          <h2 className="font-serif text-2xl text-[#26221C]">Connect your Hermes server</h2>
-          <p className="mt-2 text-sm leading-relaxed text-[#26221C]/55">
-            Enter the address and private access key for this resort’s Hermes runtime. The key is kept only for this browser session.
-          </p>
-          <div className="mt-6 space-y-4">
-            <Field label="Hermes Server URL">
-              <Input
-                value={runtimeUrlInput}
-                onChange={(event) => setRuntimeUrlInput(event.target.value)}
-                placeholder="https://hermes.yourresort.com"
-              />
-            </Field>
-            <Field label="Server Access Key">
-            <Input
-              type="password"
-              value={keyInput}
-              onChange={(event) => setKeyInput(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && unlock()}
-              placeholder="Private Hermes access key"
-            />
-            </Field>
-            {error && <p className="text-sm text-red-700">{error}</p>}
-            <Button className="w-full" onClick={unlock}><Server className="h-4 w-4" /> Connect server</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
@@ -472,16 +509,42 @@ export default function HermesWorkforce() {
         description="One supervisor and specialized agents using the resort’s existing data, tools and knowledge."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)}>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings((value) => !value)} disabled={!ownerToken}>
               <Settings2 className="h-4 w-4" /> Settings
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void verifyRuntime()} disabled={verifying}>
+            <Button variant="outline" size="sm" onClick={() => void verifyRuntime()} disabled={verifying || !accessKey}>
               <RefreshCw className={`h-4 w-4 ${verifying ? "animate-spin" : ""}`} />
               {verifying ? "Running live test" : "Check connections"}
             </Button>
           </div>
         }
       />
+
+      {!ownerToken && (
+        <Card className="mb-6 max-w-xl space-y-4 border-[#C6A15B]/35 p-6">
+          <div className="flex items-center gap-2 font-medium text-[#26221C]"><ShieldCheck className="h-4 w-4 text-[#C6A15B]" /> Secure owner sign-in</div>
+          <p className="text-sm leading-relaxed text-[#26221C]/60">Sign in with the owner email already approved in Supabase. This is what allows Hermes settings and API keys to be stored securely.</p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Input type="email" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} placeholder="Owner email" />
+            <Button onClick={() => void sendOwnerSignIn()} disabled={ownerAuthBusy || !ownerEmail.trim()}>
+              {ownerAuthBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Send sign-in link
+            </Button>
+          </div>
+          {ownerAuthMessage && <p className="text-sm text-[#8A6B32]">{ownerAuthMessage}</p>}
+        </Card>
+      )}
+
+      {ownerToken && !accessKey && (
+        <Card className="mb-6 max-w-xl space-y-4 border-[#C6A15B]/35 p-6">
+          <div className="flex items-center gap-2 font-medium text-[#26221C]"><Server className="h-4 w-4 text-[#C6A15B]" /> Hermes runtime connection</div>
+          <p className="text-sm leading-relaxed text-[#26221C]/60">Your settings are saved in Supabase. Add the server address and access key only when the Hermes runtime is online; the key stays in this browser session.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Hermes Server URL"><Input value={runtimeUrlInput} onChange={(event) => setRuntimeUrlInput(event.target.value)} placeholder="https://hermes.yourresort.com" /></Field>
+            <Field label="Server Access Key"><Input type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && unlock()} placeholder="Private access key" /></Field>
+          </div>
+          <div className="flex gap-3"><Button onClick={unlock}><Server className="h-4 w-4" /> Connect server</Button><Button variant="outline" onClick={() => setShowSettings(true)}><Settings2 className="h-4 w-4" /> Configure settings</Button></div>
+        </Card>
+      )}
 
       <div className={`mb-6 flex items-start gap-3 rounded-2xl border px-5 py-4 ${
         operational
@@ -507,12 +570,12 @@ export default function HermesWorkforce() {
         </div>
       </div>
 
-      {showSettings && (
+      {showSettings && ownerToken && (
         <Card className="mb-6 space-y-6 border-[#C6A15B]/35 p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="font-serif text-2xl text-[#26221C]">Hermes Setup</h2>
-              <p className="mt-1 text-sm text-[#26221C]/55">The owner configures every connection here. Secret values are stored only in the private Hermes data volume.</p>
+              <p className="mt-1 text-sm text-[#26221C]/55">The owner configures every connection here. API keys are stored in private Supabase storage and are never returned to this page.</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setShowSecrets((value) => !value)}>
               {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -545,6 +608,7 @@ export default function HermesWorkforce() {
                   <Field label="OpenRouter API Key">
                     <Input type={showSecrets ? "text" : "password"} value={settings.OPENROUTER_API_KEY} onChange={(e) => patchSetting("OPENROUTER_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
                   </Field>
+                  {secretsSet.OPENROUTER_API_KEY && <p className="-mt-3 text-xs text-emerald-700">OpenRouter key saved privately</p>}
                   <Field label="OpenRouter Model">
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -641,6 +705,7 @@ export default function HermesWorkforce() {
               <Field label="Supabase Service Role Key">
                 <Input type={showSecrets ? "text" : "password"} value={settings.SUPABASE_SERVICE_ROLE_KEY} onChange={(e) => patchSetting("SUPABASE_SERVICE_ROLE_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
               </Field>
+              {secretsSet.SUPABASE_SERVICE_ROLE_KEY && <p className="-mt-3 text-xs text-emerald-700">Service key saved privately</p>}
               <Field label="Resort Data Key">
                 <Input value={settings.RESORT_CMS_KEY} onChange={(e) => patchSetting("RESORT_CMS_KEY", e.target.value)} />
               </Field>
@@ -654,6 +719,7 @@ export default function HermesWorkforce() {
               <Field label="GitHub Fine-Grained Token">
                 <Input type={showSecrets ? "text" : "password"} value={settings.GITHUB_TOKEN} onChange={(e) => patchSetting("GITHUB_TOKEN", e.target.value)} placeholder="Leave blank to keep the saved token" />
               </Field>
+              {secretsSet.GITHUB_TOKEN && <p className="-mt-3 text-xs text-emerald-700">GitHub token saved privately</p>}
             </div>
 
             <div className="space-y-4 rounded-xl border border-[#26221C]/10 p-5">
@@ -661,6 +727,7 @@ export default function HermesWorkforce() {
               <Field label="Resend API Key">
                 <Input type={showSecrets ? "text" : "password"} value={settings.RESEND_API_KEY} onChange={(e) => patchSetting("RESEND_API_KEY", e.target.value)} placeholder="Leave blank to keep the saved key" />
               </Field>
+              {secretsSet.RESEND_API_KEY && <p className="-mt-3 text-xs text-emerald-700">Resend key saved privately</p>}
               <Field label="From Email Address">
                 <Input type="email" value={settings.RESEND_FROM_EMAIL} onChange={(e) => patchSetting("RESEND_FROM_EMAIL", e.target.value)} placeholder="reservations@yourresort.com" />
               </Field>
