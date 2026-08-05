@@ -34,12 +34,6 @@ async function callHermes(options: {
   sessionKey: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
 }): Promise<Response> {
-  url: string;
-  key: string;
-  model: string;
-  sessionKey: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-}): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000);
   try {
