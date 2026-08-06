@@ -298,10 +298,23 @@ export function useTalaChat(): UseTalaChat {
         // needed) → device-local dev key (building on this browser only) →
         // Supabase edge function (production path, key stays server-side).
         const key = options?.adminApiKey || getDevApiKey();
-        const requestReply = (msgs: WireMessage[]) =>
-          key
-            ? askOpenRouterDirect(msgs, key, preferredModel)
-            : askEdgeFunction(msgs, preferredModel);
+        // A direct browser->OpenRouter call can fail for reasons that have
+        // nothing to do with the visitor (key revoked, out of credits, 401
+        // "User not found"). That used to surface as "TALA hit a snag" for
+        // everyone, so always fall back to the server-side edge function,
+        // which holds its own key.
+        let directDead = false;
+        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> => {
+          if (key && !directDead) {
+            try {
+              return await askOpenRouterDirect(msgs, key, preferredModel);
+            } catch (e) {
+              console.warn("[TALA] Direct OpenRouter call failed, using server proxy.", e);
+              directDead = true;
+            }
+          }
+          return askEdgeFunction(msgs, preferredModel);
+        };
 
         // Graph node 2 — agent: the tool-calling loop.
         const toolsUsed: string[] = [];

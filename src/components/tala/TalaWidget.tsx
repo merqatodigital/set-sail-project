@@ -78,7 +78,6 @@ export function TalaWidget() {
     voice.stop();
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
-      adminApiKey: data.settings.tala.apiKey || undefined,
       cms: data,
     });
     if (reply) voice.speak(reply);
