@@ -50,7 +50,8 @@ export function TalaWidget() {
   const voice = useTalaVoice({
     defaultVoiceId: data.settings.tala.voiceId || undefined,
     provider: data.settings.tala.voiceProvider,
-    apiKey: data.settings.tala.apiKey || undefined,
+    // No API key in the public bundle — hosted TTS is admin-preview only;
+    // visitors get the free in-browser voice (or the built-in one on mobile).
     ttsModelId: data.settings.tala.ttsModelId || undefined,
     ttsVoiceId: data.settings.tala.ttsVoiceId || undefined,
     ignoreLocalVoice: true,
@@ -78,7 +79,6 @@ export function TalaWidget() {
     voice.stop();
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
-      adminApiKey: data.settings.tala.apiKey || undefined,
       cms: data,
     });
     if (reply) voice.speak(reply);
