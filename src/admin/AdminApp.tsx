@@ -24,7 +24,6 @@ import SeoManager from "./pages/SeoManager";
 import AppearanceManager from "./pages/AppearanceManager";
 import SettingsManager from "./pages/SettingsManager";
 import MediaLibrary from "./pages/MediaLibrary";
-import OperationsDashboard from "./pages/OperationsDashboard";
 import BookingsManager from "./pages/BookingsManager";
 import ToursManager from "./pages/ToursManager";
 import StaffManager from "./pages/StaffManager";
@@ -68,7 +67,6 @@ export default function AdminApp() {
         <Route path="media" element={<MediaLibrary />} />
 
         {/* ---- Operations back-office ---- */}
-        <Route path="operations" element={<OperationsDashboard />} />
         <Route path="bookings" element={<BookingsManager />} />
         <Route path="tours" element={<ToursManager />} />
         <Route path="staff" element={<StaffManager />} />

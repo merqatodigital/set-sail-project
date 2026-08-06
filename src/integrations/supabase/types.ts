@@ -984,6 +984,13 @@ export type Database = {
           room_type: string
         }[]
       }
+      tala_health: {
+        Args: never
+        Returns: {
+          status: string
+          updated_at: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin"
