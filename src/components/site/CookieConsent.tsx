@@ -45,41 +45,47 @@ export function CookieConsent() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#26221C]/10 bg-white px-5 py-4 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] sm:px-6">
+    <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[45vh] overflow-y-auto border-t border-[#26221C]/10 bg-white px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] sm:max-h-none sm:px-6 sm:py-4">
       <div className="mx-auto max-w-4xl">
         {!showSettings ? (
           /* Main banner */
-          <div className="flex items-start gap-4">
-            <p className="flex-1 text-[12px] leading-relaxed text-[#26221C]/60 sm:text-[13px]">
-              We use essential cookies to make our website work. We'd also like your consent to use cookies to improve
-              your experience and analyze site traffic. You can accept all, reject non-essential, or customize your
-              preferences. See our{" "}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+            <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-[#26221C]/60 sm:text-[13px]">
+              <span className="hidden sm:inline">
+                We use essential cookies to make our website work. We'd also like your consent to use cookies to improve
+                your experience and analyze site traffic. You can accept all, reject non-essential, or customize your
+                preferences. See our{" "}
+              </span>
+              <span className="sm:hidden">
+                We use cookies to run this site and improve your experience. See our{" "}
+              </span>
               <a href="/privacy" className="underline transition-colors hover:text-[#26221C]">Privacy Policy</a> for details.
             </p>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 onClick={acceptAll}
-                className="rounded-full bg-[#1F3D2B] px-4 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-[#2A5240] sm:text-[13px]"
+                className="flex-1 rounded-full bg-[#1F3D2B] px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-[#2A5240] sm:flex-none sm:px-4 sm:text-[13px]"
               >
                 Accept All
               </button>
               <button
                 onClick={rejectAll}
-                className="rounded-full border border-[#26221C]/20 px-4 py-1.5 text-[12px] font-medium text-[#26221C]/70 transition-colors hover:bg-[#26221C]/5 sm:text-[13px]"
+                className="flex-1 whitespace-nowrap rounded-full border border-[#26221C]/20 px-3 py-1.5 text-[12px] font-medium text-[#26221C]/70 transition-colors hover:bg-[#26221C]/5 sm:flex-none sm:px-4 sm:text-[13px]"
               >
-                Reject Non-Essential
+                <span className="sm:hidden">Reject</span>
+                <span className="hidden sm:inline">Reject Non-Essential</span>
               </button>
               <button
                 onClick={() => setShowSettings(true)}
                 aria-label="Cookie settings"
-                className="rounded-full p-1.5 text-[#26221C]/40 transition-colors hover:text-[#26221C]/70"
+                className="shrink-0 rounded-full p-1.5 text-[#26221C]/40 transition-colors hover:text-[#26221C]/70"
               >
                 <Settings className="h-4 w-4" />
               </button>
               <button
                 onClick={() => save("rejected")}
                 aria-label="Dismiss cookie banner"
-                className="rounded-full p-1.5 text-[#26221C]/40 transition-colors hover:text-[#26221C]/70"
+                className="shrink-0 rounded-full p-1.5 text-[#26221C]/40 transition-colors hover:text-[#26221C]/70"
               >
                 <X className="h-4 w-4" />
               </button>
