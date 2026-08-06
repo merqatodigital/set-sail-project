@@ -61,7 +61,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Operations",
     items: [
-      { to: "/admin/operations", label: "Overview", icon: ClipboardList },
       { to: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
       { to: "/admin/tours", label: "Tours", icon: Ship },
       { to: "/admin/rentals", label: "Motorbike Rentals", icon: Bike },
