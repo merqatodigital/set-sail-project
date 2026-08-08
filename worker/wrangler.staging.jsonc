@@ -1,0 +1,43 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "talla-agent-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "talla-staging-db",
+      "database_id": "9e47f804-c263-4898-8d2c-c0f11fb2baf0"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TALLA_AGENT",
+        "class_name": "TallaAgent"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "name": "daily-briefing",
+      "binding": "DAILY_BRIEFING",
+      "class_name": "DailyResortBriefingWorkflow",
+      "schedules": ["0 0 * * *"]
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TallaAgent"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "TALLA_COMPUTER_ENABLED": "false",
+    "ENVIRONMENT": "staging"
+  }
+}
