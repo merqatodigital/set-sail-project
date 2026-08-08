@@ -15,11 +15,15 @@ import { createFoodOrderTool } from "./orderTools.js";
 import { getInventoryTool } from "./inventoryTools.js";
 import { getTodayOperationsTool } from "./operationsTools.js";
 
+// Computer tools (Phase 6)
+import { computerTools } from "../../computer/tools.js";
+
 /**
  * Get all available tools for the current context.
  * Owner/admin gets more tools than guest.
+ * Computer tools are only available when enabled and for owner/admin.
  */
-export function getTools(role: string | null): TallaTool[] {
+export function getTools(role: string | null, computerEnabled = false): TallaTool[] {
   const isOwner = role === "owner" || role === "admin";
 
   const tools: TallaTool[] = [
@@ -39,6 +43,11 @@ export function getTools(role: string | null): TallaTool[] {
   // Owner-only tools
   if (isOwner) {
     tools.push(getTodayOperationsTool);
+  }
+
+  // Computer workspace tools — owner/admin only, when enabled
+  if (isOwner && computerEnabled) {
+    tools.push(...computerTools);
   }
 
   return tools;

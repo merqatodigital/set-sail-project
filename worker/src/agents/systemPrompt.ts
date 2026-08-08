@@ -10,6 +10,7 @@ export interface SystemPromptContext {
   propertyInfo: Record<string, string>;
   tours: Array<{ name: string; description: string; price: number; duration: string }>;
   menuItems: Array<{ name: string; category: string; price: number; inventoryCount: number }>;
+  computerEnabled?: boolean;
 }
 
 /**
@@ -109,6 +110,27 @@ You know the resort, the area, and how to help guests have a great time.`);
   // ---- Owner Context ----
   if (isOwner) {
     sections.push(`OWNER/ADMIN MODE: You are speaking with an owner or admin. You can access operational information, today's operations summary, and perform management actions. Do not expose sensitive internal details to non-owner users.`);
+  }
+
+  // ---- Computer Workspace ----
+  if (ctx.computerEnabled && isOwner) {
+    sections.push(`COMPUTER WORKSPACE: You have access to a persistent Computer workspace for this resort. You can use this to:
+- Create and read reports, documents, and working notes
+- Generate daily operations reports from D1 data
+- Store analysis and generated content
+- Search across your workspace files
+
+Available workspace tools: workspaceList, workspaceRead, workspaceWrite, workspaceSearch.
+
+RULES FOR COMPUTER WORKSPACE:
+1. D1 is authoritative for all resort transactions (orders, requests, maintenance, etc.)
+2. The Computer workspace is for Talla's working files and generated artifacts only
+3. Never treat a workspace file as authoritative for a resort transaction in D1
+4. Always verify file creation after writing (read it back)
+5. Do not write outside /talla/<tenantId>/ paths
+6. Reports should be generated from actual D1 data, not fabricated
+
+Example: To create a daily operations report, use getTodayOperations to get real D1 data, then use workspaceWrite to save it to /reports/daily/YYYY-MM-DD.md, then use workspaceRead to verify it exists.`);
   }
 
   // ---- Action Confirmation Policy ----

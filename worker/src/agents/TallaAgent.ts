@@ -4,16 +4,20 @@
 //   Browser/DO ← WebSocket ← TallaAgent
 //   TallaAgent → OpenRouter LLM → tool calls
 //   TallaAgent → Phase 4 repos → D1
+//   TallaAgent → Computer Workspace → files/artifacts
 //   TallaAgent → response → Browser/DO
 //
 // This is the main agent module. It handles:
 // - Conversation state (bounded history in DO SQLite)
 // - LLM reasoning via OpenRouter
 // - Tool execution via shared Phase 4 repos
+// - Computer workspace operations (Phase 6)
 // - Authorization (guest vs owner)
 // - Tool audit logging
 
 import { Agent, callable } from "agents";
+import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
+import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import type { Env } from "../env.js";
 import {
   chatCompletion,
@@ -28,6 +32,10 @@ import type {
   ToolContext,
 } from "./types.js";
 
+// Computer adapter
+import { resolveWorkspacePath, describePath } from "../computer/paths.js";
+import { evaluatePolicy } from "../computer/policy.js";
+
 // Import repos for system prompt context
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
 import { listActiveTours } from "../db/repos/toursRepo.js";
@@ -36,7 +44,19 @@ import { listMenuItems } from "../db/repos/menuRepo.js";
 const MAX_HISTORY = 20; // bounded conversation history
 const MAX_TOOL_HOPS = 5; // max tool-calling iterations
 
+// Computer tool names — intercepted and executed via workspace
+const COMPUTER_TOOL_NAMES = new Set([
+  "workspaceList",
+  "workspaceRead",
+  "workspaceWrite",
+  "workspaceSearch",
+]);
+
 export class TallaAgent extends Agent<Env, TallaAgentState> {
+  // Computer workspace — one per DO instance (tenant-isolated)
+  private workspace: Workspace | null = null;
+  private computerEnabled = false;
+
   initialState: TallaAgentState = {
     resortId: "marina_terrace",
     tenantId: "",
@@ -59,6 +79,26 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         sessionId: crypto.randomUUID(),
         lastInteractionAt: new Date().toISOString(),
       });
+    }
+
+    // Initialize Computer workspace if enabled
+    this.computerEnabled = this.env.TALLA_COMPUTER_ENABLED === "true";
+    if (this.computerEnabled && !this.workspace) {
+      try {
+        const backend = new WorkerJavaScriptBackend({
+          loader: this.env.LOADER,
+        });
+        this.workspace = new Workspace({
+          storage: this.ctx.storage as unknown as DurableObjectStorageLike,
+          backends: [backend],
+        });
+        await this.workspace.ready();
+        console.log(`[TallaAgent] Computer workspace initialized for tenant: ${this.state.tenantId}`);
+      } catch (err) {
+        console.error("[TallaAgent] Failed to initialize Computer workspace:", err);
+        this.workspace = null;
+        this.computerEnabled = false;
+      }
     }
   }
 
@@ -136,11 +176,15 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return Response.json({
         status: "ok",
         agent: "TallaAgent",
-        version: "phase5",
+        version: "phase6",
         resortId: this.state.resortId,
         tenantId: this.state.tenantId,
         initialized: this.state.initialized,
         conversationCount: this.state.conversationCount,
+        computer: {
+          enabled: this.computerEnabled,
+          connected: this.workspace !== null,
+        },
       });
     }
 
@@ -210,7 +254,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     const messages = [...this.state.messages, userMsg];
 
     // Get tools for current role
-    const tools = getTools(this.state.role);
+    const tools = getTools(this.state.role, this.computerEnabled);
     const orTools = toOpenRouterTools(tools);
 
     // Tool-calling loop
@@ -262,7 +306,16 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           // Invalid JSON arguments
         }
 
-        const toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+        let toolResult;
+        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled && this.workspace) {
+          // Computer tool — execute via workspace
+          toolResult = await audit(tc.name, () =>
+            this.executeComputerTool(tc.name, args, toolCtx),
+          );
+        } else {
+          // D1 resort tool — execute via tool registry
+          toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+        }
 
         // Add tool result to history
         const toolMsg: ConversationMessage = {
@@ -335,6 +388,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           price: m.price,
           inventoryCount: m.inventoryCount,
         })),
+        computerEnabled: this.computerEnabled,
       };
 
       return buildSystemPrompt(promptCtx);
@@ -348,6 +402,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         propertyInfo: {},
         tours: [],
         menuItems: [],
+        computerEnabled: this.computerEnabled,
       });
     }
   }
@@ -359,7 +414,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     return {
       status: "healthy",
       resortId: this.state.resortId,
-      version: "phase5",
+      version: "phase6",
     };
   }
 
@@ -377,5 +432,209 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       guestName: null,
       guestRoom: null,
     });
+  }
+
+  // ---- Computer workspace tool execution ----
+
+  /**
+   * Execute a Computer tool via the workspace.
+   * This method handles the actual filesystem operations.
+   */
+  private async executeComputerTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    if (!this.workspace) {
+      return { success: false, error: "Computer workspace is not available" };
+    }
+
+    // Enforce role authorization
+    if (ctx.role !== "owner" && ctx.role !== "admin") {
+      return { success: false, error: "Computer workspace is restricted to owner/admin roles." };
+    }
+
+    try {
+      switch (toolName) {
+        case "workspaceList":
+          return await this.handleWorkspaceList(args, ctx);
+        case "workspaceRead":
+          return await this.handleWorkspaceRead(args, ctx);
+        case "workspaceWrite":
+          return await this.handleWorkspaceWrite(args, ctx);
+        case "workspaceSearch":
+          return await this.handleWorkspaceSearch(args, ctx);
+        default:
+          return { success: false, error: `Unknown Computer tool: ${toolName}` };
+      }
+    } catch (err) {
+      console.error(`[TallaAgent] Computer tool error (${toolName}):`, err);
+      return {
+        success: false,
+        error: `Workspace operation failed: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  private async handleWorkspaceList(
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const relativePath = (args.path as string) || "/";
+    const absolutePath = resolveWorkspacePath(ctx.tenantId, relativePath);
+
+    // Policy check
+    const policy = evaluatePolicy({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      role: ctx.role,
+      action: "list",
+      path: absolutePath,
+    });
+    if (policy.decision === "BLOCKED") {
+      return { success: false, error: `Access denied: ${policy.reason}` };
+    }
+    if (policy.decision === "REQUIRES_APPROVAL") {
+      return { success: false, error: `Requires approval: ${policy.reason}` };
+    }
+
+    // Execute via workspace
+    const entries = await this.workspace!.fs.readdir(absolutePath);
+    const files = entries.map((entry) => ({
+      name: entry.name,
+      isDirectory: entry.isDirectory,
+    }));
+
+    return {
+      success: true,
+      data: {
+        path: describePath(absolutePath),
+        contents: files,
+      },
+    };
+  }
+
+  private async handleWorkspaceRead(
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const relativePath = args.path as string;
+    if (!relativePath) {
+      return { success: false, error: "Path is required" };
+    }
+
+    const absolutePath = resolveWorkspacePath(ctx.tenantId, relativePath);
+
+    // Policy check
+    const policy = evaluatePolicy({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      role: ctx.role,
+      action: "read",
+      path: absolutePath,
+    });
+    if (policy.decision === "BLOCKED") {
+      return { success: false, error: `Access denied: ${policy.reason}` };
+    }
+
+    // Execute via workspace
+    const content = await this.workspace!.fs.readFile(absolutePath, "utf8");
+
+    return {
+      success: true,
+      data: {
+        path: describePath(absolutePath),
+        content,
+        size: content.length,
+      },
+    };
+  }
+
+  private async handleWorkspaceWrite(
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const relativePath = args.path as string;
+    const content = args.content as string;
+
+    if (!relativePath || !content) {
+      return { success: false, error: "Path and content are required" };
+    }
+
+    const absolutePath = resolveWorkspacePath(ctx.tenantId, relativePath);
+
+    // Policy check
+    const policy = evaluatePolicy({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      role: ctx.role,
+      action: "write",
+      path: absolutePath,
+    });
+    if (policy.decision === "BLOCKED") {
+      return { success: false, error: `Access denied: ${policy.reason}` };
+    }
+    if (policy.decision === "REQUIRES_APPROVAL") {
+      return { success: false, error: `Requires approval: ${policy.reason}` };
+    }
+
+    // Execute via workspace
+    await this.workspace!.fs.writeFile(absolutePath, content);
+
+    // Verify the file was written
+    const stat = await this.workspace!.fs.stat(absolutePath);
+
+    return {
+      success: true,
+      data: {
+        path: describePath(absolutePath),
+        bytesWritten: content.length,
+        verified: stat.size === content.length,
+      },
+    };
+  }
+
+  private async handleWorkspaceSearch(
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const pattern = args.pattern as string;
+    const relativePath = (args.path as string) || "/";
+
+    if (!pattern) {
+      return { success: false, error: "Search pattern is required" };
+    }
+
+    const absolutePath = resolveWorkspacePath(ctx.tenantId, relativePath);
+
+    // Policy check
+    const policy = evaluatePolicy({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      role: ctx.role,
+      action: "search",
+      path: absolutePath,
+    });
+    if (policy.decision === "BLOCKED") {
+      return { success: false, error: `Access denied: ${policy.reason}` };
+    }
+
+    // Execute via workspace
+    const hits = await this.workspace!.fs.grep(pattern, absolutePath, {
+      ignoreCase: true,
+    });
+
+    return {
+      success: true,
+      data: {
+        pattern,
+        path: describePath(absolutePath),
+        matches: hits.map((hit) => ({
+          path: hit.path,
+          line: hit.line,
+          text: hit.text,
+        })),
+      },
+    };
   }
 }
