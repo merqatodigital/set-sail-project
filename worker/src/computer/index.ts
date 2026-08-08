@@ -1,23 +1,36 @@
-// Computer adapter — abstraction layer over Cloudflare Computer.
+// Computer module — workspace operations for TallaAgent.
 //
-// This is the interface TallaAgent depends on.
-// If Cloudflare Computer API changes, replace CloudflareComputerWorkspace
-// without touching TallaAgent or the tool definitions.
+// Real execution lives in TallaAgent.executeComputerTool() which uses
+// workspace.fs from @cloudflare/computer directly.
+//
+// This module provides:
+//   - Path security (paths.ts)
+//   - Policy engine (policy.ts)
+//   - Tool definitions (tools.ts) — registered alongside D1 tools
+//   - Shared types (types.ts)
 
 export type {
-  ComputerAdapter,
+  PolicyDecision,
+  PolicyContext,
+  PolicyResult,
   WorkspaceFileInfo,
   WorkspaceReadResult,
   WorkspaceWriteResult,
   WorkspaceSearchResult,
-  WorkspaceExecResult,
   WorkspaceArtifact,
   ComputerStatus,
-  PolicyContext,
-  PolicyResult,
-  PolicyDecision,
 } from "./types.js";
 
-export { CloudflareComputerWorkspace } from "./CloudflareComputerWorkspace.js";
-export { validatePath, tenantRoot, resolveWorkspacePath, belongsToTenant, isCrossTenantAccess, describePath, DEFAULT_WORKSPACE_STRUCTURE } from "./paths.js";
+export {
+  validatePath,
+  tenantRoot,
+  resolveWorkspacePath,
+  belongsToTenant,
+  isCrossTenantAccess,
+  describePath,
+  DEFAULT_WORKSPACE_STRUCTURE,
+} from "./paths.js";
+
 export { evaluatePolicy, isAllowed, isBlocked } from "./policy.js";
+
+export { computerTools } from "./tools.js";

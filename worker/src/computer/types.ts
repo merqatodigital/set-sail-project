@@ -1,10 +1,10 @@
-// Computer workspace types — shared types for the Computer adapter layer.
+// Computer workspace types — shared types for the Computer layer.
 //
 // Architecture:
-//   TallaAgent → ComputerAdapter → Policy Engine → Cloudflare Computer Workspace
+//   TallaAgent → workspace.fs (real @cloudflare/computer) → D1 SQLite
 //
-// The adapter provides a stable interface even though Cloudflare Computer
-// is preview software with unstable APIs.
+// The real execution lives in TallaAgent.executeComputerTool().
+// This file defines shared types used across the computer module.
 
 export type PolicyDecision = "AUTO_APPROVED" | "REQUIRES_APPROVAL" | "BLOCKED";
 
@@ -25,8 +25,6 @@ export interface WorkspaceFileInfo {
   name: string;
   path: string;
   isDirectory: boolean;
-  size?: number;
-  lastModified?: string;
 }
 
 export interface WorkspaceReadResult {
@@ -39,18 +37,13 @@ export interface WorkspaceWriteResult {
   success: boolean;
   path: string;
   bytesWritten: number;
+  verified: boolean;
 }
 
 export interface WorkspaceSearchResult {
   path: string;
   line: number;
-  content: string;
-}
-
-export interface WorkspaceExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
+  text: string;
 }
 
 export interface WorkspaceArtifact {
@@ -63,35 +56,10 @@ export interface WorkspaceArtifact {
 
 export interface ComputerStatus {
   enabled: boolean;
-  connected: boolean;
-  workspaceReady: boolean;
+  workspaceInitialized: boolean;
+  backend: string;
   tenantId: string;
-  lastAction: string | null;
-  lastActionAt: string | null;
-}
-
-// Adapter interface — swap implementations without changing TallaAgent
-export interface ComputerAdapter {
-  readonly enabled: boolean;
-
-  /** Initialize workspace directory structure for a tenant */
-  initWorkspace(tenantId: string): Promise<void>;
-
-  /** List files in a directory */
-  list(tenantId: string, path: string): Promise<WorkspaceFileInfo[]>;
-
-  /** Read a file's contents */
-  read(tenantId: string, path: string): Promise<WorkspaceReadResult>;
-
-  /** Write content to a file */
-  write(tenantId: string, path: string, content: string): Promise<WorkspaceWriteResult>;
-
-  /** Search files for a pattern */
-  search(tenantId: string, pattern: string, root?: string): Promise<WorkspaceSearchResult[]>;
-
-  /** Check if a file exists */
-  stat(tenantId: string, path: string): Promise<{ exists: boolean; isDirectory: boolean; size?: number }>;
-
-  /** Get workspace status */
-  getStatus(tenantId: string): Promise<ComputerStatus>;
+  lastSuccessfulOperation: string | null;
+  lastError: string | null;
+  lastOperationAt: string | null;
 }

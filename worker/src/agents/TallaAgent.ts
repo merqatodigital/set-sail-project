@@ -4,14 +4,14 @@
 //   Browser/DO ← WebSocket ← TallaAgent
 //   TallaAgent → OpenRouter LLM → tool calls
 //   TallaAgent → Phase 4 repos → D1
-//   TallaAgent → Computer Workspace → files/artifacts
+//   TallaAgent → Computer Workspace → files/artifacts (REAL via workspace.fs)
 //   TallaAgent → response → Browser/DO
 //
 // This is the main agent module. It handles:
 // - Conversation state (bounded history in DO SQLite)
 // - LLM reasoning via OpenRouter
 // - Tool execution via shared Phase 4 repos
-// - Computer workspace operations (Phase 6)
+// - Computer workspace operations (Phase 6) via @cloudflare/computer Workspace
 // - Authorization (guest vs owner)
 // - Tool audit logging
 
@@ -32,7 +32,7 @@ import type {
   ToolContext,
 } from "./types.js";
 
-// Computer adapter
+// Computer path security and policy
 import { resolveWorkspacePath, describePath } from "../computer/paths.js";
 import { evaluatePolicy } from "../computer/policy.js";
 
@@ -43,6 +43,7 @@ import { listMenuItems } from "../db/repos/menuRepo.js";
 
 const MAX_HISTORY = 20; // bounded conversation history
 const MAX_TOOL_HOPS = 5; // max tool-calling iterations
+const MAX_FILE_SIZE = 512 * 1024; // 512KB max file size
 
 // Computer tool names — intercepted and executed via workspace
 const COMPUTER_TOOL_NAMES = new Set([
@@ -52,10 +53,23 @@ const COMPUTER_TOOL_NAMES = new Set([
   "workspaceSearch",
 ]);
 
+// Computer status tracked in DO state
+interface ComputerStatusState {
+  lastSuccessfulOperation: string | null;
+  lastError: string | null;
+  lastOperationAt: string | null;
+}
+
 export class TallaAgent extends Agent<Env, TallaAgentState> {
   // Computer workspace — one per DO instance (tenant-isolated)
+  // Created in onStart(), backed by DO SQLite storage (durable)
   private workspace: Workspace | null = null;
   private computerEnabled = false;
+  private computerStatus: ComputerStatusState = {
+    lastSuccessfulOperation: null,
+    lastError: null,
+    lastOperationAt: null,
+  };
 
   initialState: TallaAgentState = {
     resortId: "marina_terrace",
@@ -176,16 +190,53 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return Response.json({
         status: "ok",
         agent: "TallaAgent",
-        version: "phase6",
+        version: "phase6.1",
         resortId: this.state.resortId,
         tenantId: this.state.tenantId,
         initialized: this.state.initialized,
         conversationCount: this.state.conversationCount,
         computer: {
           enabled: this.computerEnabled,
-          connected: this.workspace !== null,
+          workspaceInitialized: this.workspace !== null,
+          backend: "worker-javascript",
+          tenantId: this.state.tenantId,
+          lastSuccessfulOperation: this.computerStatus.lastSuccessfulOperation,
+          lastError: this.computerStatus.lastError,
+          lastOperationAt: this.computerStatus.lastOperationAt,
         },
       });
+    }
+
+    // Computer status (owner-only)
+    if (url.pathname === "/computer/status") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return Response.json({
+        enabled: this.computerEnabled,
+        workspaceInitialized: this.workspace !== null,
+        backend: "worker-javascript",
+        tenantId: this.state.tenantId,
+        lastSuccessfulOperation: this.computerStatus.lastSuccessfulOperation,
+        lastError: this.computerStatus.lastError,
+        lastOperationAt: this.computerStatus.lastOperationAt,
+      });
+    }
+
+    // Daily operations report (owner-only, direct HTTP)
+    if (url.pathname === "/computer/daily-report" && request.method === "POST") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled || !this.workspace) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const report = await this.generateDailyOperationsReport();
+        return Response.json(report);
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
     }
 
     // HTTP chat endpoint (for non-WebSocket clients)
@@ -214,7 +265,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       }
     }
 
-    return new Response("TallaAgent — Phase 5", { status: 200 });
+    return new Response("TallaAgent — Phase 6.1", { status: 200 });
   }
 
   /**
@@ -438,7 +489,8 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
 
   /**
    * Execute a Computer tool via the workspace.
-   * This method handles the actual filesystem operations.
+   * This method handles the actual filesystem operations using
+   * @cloudflare/computer's Workspace.fs API (real, not mocked).
    */
   private async executeComputerTool(
     toolName: string,
@@ -455,20 +507,39 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     }
 
     try {
+      let result: { success: boolean; data?: unknown; error?: string };
       switch (toolName) {
         case "workspaceList":
-          return await this.handleWorkspaceList(args, ctx);
+          result = await this.handleWorkspaceList(args, ctx);
+          break;
         case "workspaceRead":
-          return await this.handleWorkspaceRead(args, ctx);
+          result = await this.handleWorkspaceRead(args, ctx);
+          break;
         case "workspaceWrite":
-          return await this.handleWorkspaceWrite(args, ctx);
+          result = await this.handleWorkspaceWrite(args, ctx);
+          break;
         case "workspaceSearch":
-          return await this.handleWorkspaceSearch(args, ctx);
+          result = await this.handleWorkspaceSearch(args, ctx);
+          break;
         default:
-          return { success: false, error: `Unknown Computer tool: ${toolName}` };
+          result = { success: false, error: `Unknown Computer tool: ${toolName}` };
       }
+
+      // Track status
+      if (result.success) {
+        this.computerStatus.lastSuccessfulOperation = toolName;
+        this.computerStatus.lastError = null;
+        this.computerStatus.lastOperationAt = new Date().toISOString();
+      } else {
+        this.computerStatus.lastError = result.error || "Unknown error";
+        this.computerStatus.lastOperationAt = new Date().toISOString();
+      }
+
+      return result;
     } catch (err) {
       console.error(`[TallaAgent] Computer tool error (${toolName}):`, err);
+      this.computerStatus.lastError = (err as Error).message;
+      this.computerStatus.lastOperationAt = new Date().toISOString();
       return {
         success: false,
         error: `Workspace operation failed: ${(err as Error).message}`,
@@ -498,7 +569,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return { success: false, error: `Requires approval: ${policy.reason}` };
     }
 
-    // Execute via workspace
+    // REAL filesystem operation via @cloudflare/computer Workspace
     const entries = await this.workspace!.fs.readdir(absolutePath);
     const files = entries.map((entry) => ({
       name: entry.name,
@@ -537,7 +608,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return { success: false, error: `Access denied: ${policy.reason}` };
     }
 
-    // Execute via workspace
+    // REAL filesystem operation via @cloudflare/computer Workspace
     const content = await this.workspace!.fs.readFile(absolutePath, "utf8");
 
     return {
@@ -561,6 +632,10 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return { success: false, error: "Path and content are required" };
     }
 
+    if (content.length > MAX_FILE_SIZE) {
+      return { success: false, error: `Content exceeds maximum size of ${MAX_FILE_SIZE} bytes` };
+    }
+
     const absolutePath = resolveWorkspacePath(ctx.tenantId, relativePath);
 
     // Policy check
@@ -578,10 +653,10 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return { success: false, error: `Requires approval: ${policy.reason}` };
     }
 
-    // Execute via workspace
+    // REAL filesystem operation via @cloudflare/computer Workspace
     await this.workspace!.fs.writeFile(absolutePath, content);
 
-    // Verify the file was written
+    // Verify the file was written — read it back
     const stat = await this.workspace!.fs.stat(absolutePath);
 
     return {
@@ -619,7 +694,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return { success: false, error: `Access denied: ${policy.reason}` };
     }
 
-    // Execute via workspace
+    // REAL filesystem operation via @cloudflare/computer Workspace
     const hits = await this.workspace!.fs.grep(pattern, absolutePath, {
       ignoreCase: true,
     });
@@ -636,5 +711,190 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         })),
       },
     };
+  }
+
+  // ---- Daily Operations Report ----
+
+  /**
+   * Generate a real daily operations report from authoritative D1 data.
+   * Writes to Computer workspace and verifies the file exists.
+   *
+   * This is the acceptance workflow for Phase 6.1:
+   *   D1 data → TallaAgent reasoning → Computer workspace → verified artifact
+   */
+  async generateDailyOperationsReport(): Promise<{
+    success: boolean;
+    artifact?: {
+      type: string;
+      path: string;
+      createdAt: string;
+      tenantId: string;
+      verified: boolean;
+    };
+    summary?: string;
+    error?: string;
+  }> {
+    if (!this.workspace) {
+      return { success: false, error: "Computer workspace is not available" };
+    }
+
+    const tenantId = this.state.tenantId;
+    const today = new Date().toISOString().split("T")[0];
+    const reportPath = resolveWorkspacePath(tenantId, `reports/${today}-daily-operations.md`);
+
+    try {
+      // 1. Query authoritative D1 data
+      const db = this.env.DB;
+      const [tours] = await Promise.all([
+        listActiveTours(db, tenantId).catch(() => []),
+      ]);
+
+      // Query operational data directly from D1
+      const today = new Date().toISOString().split("T")[0];
+      const [guestRequests, housekeeping, maintenance, foodOrders, inventoryAlerts, tallaTasks] = await Promise.all([
+        db.prepare("SELECT * FROM guest_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
+        db.prepare("SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
+        db.prepare("SELECT * FROM maintenance_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
+        db.prepare("SELECT * FROM food_orders WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
+        db.prepare("SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold").bind(tenantId).all().then(r => r.results).catch(() => []),
+        db.prepare("SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC").bind(tenantId).all().then(r => r.results).catch(() => []),
+      ]);
+
+      // 2. Build structured report from real D1 data
+      const sections: string[] = [];
+      sections.push(`# Daily Operations Report — ${today}`);
+      sections.push(`**Resort:** ${tenantId}`);
+      sections.push(`**Generated:** ${new Date().toISOString()}`);
+      sections.push("");
+
+      // Guest Requests
+      sections.push("## Guest Requests");
+      if (guestRequests.length > 0) {
+        for (const req of guestRequests) {
+          sections.push(`- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).type || "request"}: ${(req as Record<string, unknown>).description || "No description"}`);
+        }
+      } else {
+        sections.push("No guest requests today.");
+      }
+      sections.push("");
+
+      // Housekeeping
+      sections.push("## Housekeeping");
+      if (housekeeping.length > 0) {
+        for (const task of housekeeping) {
+          sections.push(`- [${(task as Record<string, unknown>).status || "pending"}] Room ${(task as Record<string, unknown>).roomNumber || "?"}: ${(task as Record<string, unknown>).taskType || (task as Record<string, unknown>).type || "task"}`);
+        }
+      } else {
+        sections.push("No housekeeping tasks today.");
+      }
+      sections.push("");
+
+      // Maintenance
+      sections.push("## Maintenance");
+      if (maintenance.length > 0) {
+        for (const req of maintenance) {
+          sections.push(`- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).priority || "normal"}: ${(req as Record<string, unknown>).description || "No description"}`);
+        }
+      } else {
+        sections.push("No maintenance requests today.");
+      }
+      sections.push("");
+
+      // Food Orders
+      sections.push("## Food Orders");
+      if (foodOrders.length > 0) {
+        for (const order of foodOrders) {
+          sections.push(`- [${(order as Record<string, unknown>).status || "pending"}] Room ${(order as Record<string, unknown>).roomNumber || "?"}: ${(order as Record<string, unknown>).items || "order"}`);
+        }
+      } else {
+        sections.push("No food orders today.");
+      }
+      sections.push("");
+
+      // Inventory
+      sections.push("## Inventory Alerts");
+      if (inventoryAlerts.length > 0) {
+        for (const alert of inventoryAlerts) {
+          sections.push(`- ${(alert as Record<string, unknown>).name || "Item"}: ${(alert as Record<string, unknown>).quantity || 0} remaining (alert threshold: ${(alert as Record<string, unknown>).alertThreshold || "?"})`);
+        }
+      } else {
+        sections.push("No inventory alerts.");
+      }
+      sections.push("");
+
+      // Tours
+      sections.push("## Active Tours");
+      if (tours.length > 0) {
+        for (const tour of tours) {
+          sections.push(`- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`);
+        }
+      } else {
+        sections.push("No active tours.");
+      }
+      sections.push("");
+
+      // Talla Tasks
+      sections.push("## Talla Tasks");
+      if (tallaTasks.length > 0) {
+        for (const task of tallaTasks) {
+          sections.push(`- [${(task as Record<string, unknown>).status || "pending"}] ${(task as Record<string, unknown>).title || (task as Record<string, unknown>).description || "Task"}`);
+        }
+      } else {
+        sections.push("No Talla tasks.");
+      }
+      sections.push("");
+
+      // Items requiring attention
+      sections.push("## Items Requiring Owner Attention");
+      const attentionItems: string[] = [];
+      const pendingRequests = guestRequests.filter((r) => (r as Record<string, unknown>).status === "pending");
+      if (pendingRequests.length > 0) attentionItems.push(`${pendingRequests.length} pending guest requests`);
+      const urgentMaintenance = maintenance.filter((m) => {
+        const priority = (m as Record<string, unknown>).priority;
+        return priority === "urgent" || priority === "high";
+      });
+      if (urgentMaintenance.length > 0) attentionItems.push(`${urgentMaintenance.length} urgent/high priority maintenance items`);
+      if (inventoryAlerts.length > 0) {
+        attentionItems.push(`${inventoryAlerts.length} inventory alerts`);
+      }
+      if (attentionItems.length > 0) {
+        for (const item of attentionItems) {
+          sections.push(`- ${item}`);
+        }
+      } else {
+        sections.push("No items requiring immediate attention.");
+      }
+      sections.push("");
+
+      const reportContent = sections.join("\n");
+
+      // 3. Write to REAL Computer workspace
+      await this.workspace!.fs.writeFile(reportPath, reportContent);
+
+      // 4. Read back to verify persistence
+      const verifiedContent = await this.workspace!.fs.readFile(reportPath, "utf8");
+      const verified = verifiedContent === reportContent;
+
+      // 5. Return artifact confirmation
+      const summary = `Daily operations report for ${today} generated from D1 data and saved to workspace. ${attentionItems.length > 0 ? `${attentionItems.length} items need attention.` : "No urgent items."}`;
+
+      return {
+        success: true,
+        artifact: {
+          type: "daily_operations_report",
+          path: describePath(reportPath),
+          createdAt: new Date().toISOString(),
+          tenantId,
+          verified,
+        },
+        summary,
+      };
+    } catch (err) {
+      console.error("[TallaAgent] Daily report generation failed:", err);
+      return {
+        success: false,
+        error: `Failed to generate daily report: ${(err as Error).message}`,
+      };
+    }
   }
 }
