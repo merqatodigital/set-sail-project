@@ -50,7 +50,7 @@ import {
   type TalaTask,
   type TalaWin,
 } from "@/components/tala/talaOps";
-import { fetchLatestBriefing, triggerBriefing } from "@/lib/tallaCloud";
+import { askTalla, fetchLatestBriefing, triggerBriefing } from "@/lib/tallaCloud";
 
 type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins" | "leads";
 
@@ -237,6 +237,28 @@ function BriefingTab({
 
   const live = computeBriefing(ops, cms.homepage.rooms);
 
+  const loadCloudBriefing = useCallback(async () => {
+    setCloudLoading(true);
+    setCloudError(null);
+    try {
+      const { artifacts } = await fetchLatestBriefing();
+      const latest = artifacts[0];
+      if (latest) {
+        setCloudBriefing({
+          date: latest.date,
+          summary: latest.content ?? latest.contentPreview,
+          createdAt: latest.createdAt,
+        });
+      } else {
+        setCloudBriefing(null);
+      }
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : "Couldn't load the latest briefing.");
+    } finally {
+      setCloudLoading(false);
+    }
+  }, []);
+
   const load = useCallback(() => {
     fetchTalaBriefings().then(setBriefings);
   }, []);
@@ -258,28 +280,6 @@ function BriefingTab({
     fetchTalaWins().then((wins) =>
       setYesterdayWins(wins.filter((w) => w.brief_date === yesterday)),
     );
-  }, []);
-
-  const loadCloudBriefing = useCallback(async () => {
-    setCloudLoading(true);
-    setCloudError(null);
-    try {
-      const { artifacts } = await fetchLatestBriefing();
-      const latest = artifacts[0];
-      if (latest) {
-        setCloudBriefing({
-          date: latest.date,
-          summary: latest.content ?? latest.contentPreview,
-          createdAt: latest.createdAt,
-        });
-      } else {
-        setCloudBriefing(null);
-      }
-    } catch (e) {
-      setCloudError(e instanceof Error ? e.message : "Couldn't load the latest briefing.");
-    } finally {
-      setCloudLoading(false);
-    }
   }, []);
 
   // Refresh briefing = trigger the EXISTING DailyResortBriefingWorkflow on the

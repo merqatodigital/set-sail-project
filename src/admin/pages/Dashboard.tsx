@@ -300,10 +300,19 @@ function TalaStat({ value, label, alert }: { value: string; label: string; alert
   );
 }
 
-type PillState = "online" | "ready" | "running" | "connected" | "off" | "unknown" | "loading";
+type PillState =
+  | "online"
+  | "offline"
+  | "ready"
+  | "running"
+  | "connected"
+  | "off"
+  | "unknown"
+  | "loading";
 
 const PILL_META: Record<PillState, { text: string; tone: string; Icon: typeof CircleCheck }> = {
   online: { text: "Online", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
+  offline: { text: "Offline", tone: "bg-red-100 text-red-700", Icon: CircleSlash },
   ready: { text: "Ready", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
   running: { text: "Running", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
   connected: { text: "Connected", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
