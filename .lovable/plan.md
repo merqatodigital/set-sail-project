@@ -1,56 +1,52 @@
-# Hermes: owner-only back-office workforce on the existing backend
+# TALA Staging Sync, Verification and Database Health
 
-## What is actually broken
+## What I verified before writing this plan
 
-The Hermes admin page calls `/api/hermes/settings`, `/status`, `/verify`, `/workforce`. Those handlers call two database helpers, `hermes_runtime_config` and `hermes_secret_status`, and both read a table `private.hermes_secrets`.
+- **Code version**: the project is at `0e3f384` ("Work in progress"), whose parent is `9f7edd8`. Nothing is behind GitHub main, so no sync-from-GitHub is needed and no older version will be pushed over main.
+- **Cloudflare TALA staging Worker** is reachable and healthy right now: `status: running`, `agent: true`, `d1: true`, `computer: enabled`, `workflows: true`. The Admin dashboard reads these live via `useTallaStatus` → `/api/health`, not hard-coded values.
+- **Hermes owner UI is gone**: no Hermes Workforce or AI Command Center page or route exists. Only legacy non-UI references remain (`src/server.ts`, two TALA persona/tool files). Those stay untouched.
+- **TALA Operations** already points at the Cloudflare backend (`fetchLatestBriefing`, `triggerBriefing`, `askTalla`).
+- **`public.tala_knowledge` exists** with the expected fields.
 
-That table does not exist. The `private` schema is empty. So every Hermes call fails and the page shows "Hermes settings database is not connected yet."
+## Two real blockers found
 
-Confirmed as present and healthy: the owner row in `resort_members` (`marina_terrace` / owner), the `hermes_settings` row (provider `openrouter`, model `inclusionai/ling-3.0-flash:free`), CMS data, `tala_leads` (12 rows), `tala_tasks`, briefings, and the deployed `tala-chat` function.
+1. **Ask TALA in TALA Operations will crash at runtime.** `askTalla(...)` is called in the chat tab but is never imported in `src/admin/pages/TalaOps.tsx`; the Morning Brief functions are imported and it was left out. This throws as soon as an owner submits a question — a different crash from the fixed `modelId` one (`modelId` is now correctly read from `cms.settings.tala.modelId` in scope).
+2. **`tala_knowledge` has no Data API permissions.** The table has row-security rules for read and add, but the API roles were never granted table privileges, so every Knowledge Base request fails at the permission layer. This is the real cause of the previous failing `/rest/v1/tala_knowledge` call. The Knowledge Base UI also edits and deletes entries, which currently have no matching access rule at all.
 
-## Approach
+## Plan
 
-Move the Hermes runtime to a single backend function next to `tala-chat`, because the `OPENROUTER_API_KEY` secret lives in the backend function environment (the site's own server cannot read it). No Docker, no external Hermes URL, no access key, no key-entry fields in the browser.
+### 1. Database protection first
+Reported honestly: Lovable Cloud gives me **no snapshot or point-in-time backup I can trigger**. What I can do is export every existing table to CSV under `/mnt/documents/` as a plain-data safety copy, which I will do before anything else. No table will be dropped, truncated, reset or replaced — the only database change proposed below is additive (permissions and access rules).
 
-Secrets stay entirely in the backend function environment: `OPENROUTER_API_KEY` and the service-role key. `hermes_settings` keeps only non-secret choices (provider, selected model). The stored-secret plumbing (`private.hermes_secrets`, `save_hermes_secrets`, `hermes_runtime_config`, `hermes_secret_status`) is retired instead of repaired, so no key ever passes through the browser or CMS data.
+### 2. Smallest safe database change
+One additive migration:
+- Grant Data API access on `public.tala_knowledge` to the signed-in role and the service role (read, add, edit, remove), plus read for anonymous visitors, since the public TALA concierge reads the knowledge base.
+- Add the missing edit and remove access rules so the existing Knowledge Base buttons work.
 
-## Endpoints (one function, `hermes`)
+No other table, function or policy is touched. No redesign, no global loosening.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /hermes/settings` | Return provider, selected model, and which backend secrets are present (booleans only) |
-| `PUT /hermes/settings` | Save selected OpenRouter model (free or paid) |
-| `GET /hermes/models` | Live OpenRouter catalog, split free vs paid |
-| `POST /hermes/verify` | Real live model test + real Supabase data read test; green checks only on success |
-| `POST /hermes/run` | Run one agent (supervisor, finance, leads, email, developer, operations) against real resort data |
-| `GET /hermes/handoffs` | List open TALA handoff rows from `tala_tasks` |
-| `POST /hermes/handoff/:id` | Run the assigned agent on a handoff and write the result back |
+### 3. One code fix
+`src/admin/pages/TalaOps.tsx` — add `askTalla` to the existing `@/lib/tallaCloud` import. One line, preserves the Cloudflare architecture, no logic or design change. This is the only application file I intend to change, and it flows back through the connected GitHub workflow.
 
-Every endpoint requires an owner bearer token: verify the user, then require an `owner`/`admin` row in `resort_members`. No passkey, no access key.
+### 4. Runtime verification in the hosted app (not just a build)
+Drive the real running Admin and read the browser console at each step:
+- Dashboard renders; TALA / Computer / Automation / OpenRouter badges show live Worker values.
+- Existing resort operational data still loads.
+- TALA Operations renders with no error boundary and no `modelId` error.
+- Morning Brief loads the real Workflow briefing artifact.
+- Ask TALA submits, the request hits `/api/talla/chat`, and the Cloudflare TallaAgent reply is displayed.
+- Knowledge Base loads with no permission/404 failure; adding an entry works.
+- Owner navigation contains no Hermes Workforce and no AI Command Center.
 
-## Agent data access
+### 5. Security note for later (report only)
+`tala_knowledge` currently allows anonymous add. Acceptable while developing, must be tightened to owner-only before commercial multi-resort deployment. I will list this and similar items in the final report without changing authentication or rewriting access control in this task.
 
-Read-only helpers inside the function, all through the existing tables: CMS payload (rooms, tours, motorbikes, bookings, payments, payroll, food, guest messages), `tala_leads`, `tala_tasks`, `tala_briefings`. Finance analyses, Leads qualifies and can write a lead, Operations can create a pending task, Email drafts only, Developer inspects only. No money movement, no sending, no pushes.
+### 6. Final report
+The exact PASS/FAIL report in the requested format, then stop. No dashboard redesign, no resort skills, no next phase.
 
-## TALA handoff
+## Technical details
 
-Guest TALA is unchanged. It already writes internal tasks; Hermes picks up `tala_tasks` rows in a `hermes` category, runs the right agent, and stores the answer as the task result for the owner to review. TALA never reads Hermes credentials.
-
-## Admin UI cleanup (`src/admin/pages/HermesWorkforce.tsx`)
-
-Remove: runtime URL field, access-key field, Ollama/Docker section, and the OpenRouter/Supabase/GitHub/Resend key inputs. Keep: provider + model picker (free/paid tabs), connection cards that only turn green after `POST /hermes/verify` passes live, the six agent consoles, and a handoff inbox.
-
-Also delete the dead `/api/hermes/*` handlers and the external-Hermes proxy code from `src/server.ts`.
-
-## Technical notes
-
-- New function `supabase/functions/hermes/index.ts`; `verify_jwt = false` in `supabase/config.toml` (auth is enforced in-handler against `resort_members`).
-- Migration: drop `hermes_runtime_config`, `hermes_secret_status`, `save_hermes_secrets`; keep `hermes_settings` and drop its secret-adjacent columns (`runtime_url`, `supabase_url`, `ollama_*`); add a `hermes_runs` table (agent, prompt, result, task_id, created_by) with RLS + GRANTs so only owners read it.
-- Tests after implementing: each endpoint called live with a real owner token (401 without, 403 as non-owner), one real OpenRouter completion, one real CMS/leads/tasks read, one end-to-end handoff.
-- Changes are committed to the linked GitHub main branch.
-
-## What you may need to add once
-
-- `OPENROUTER_API_KEY` is already saved in the backend secrets, so nothing is needed there.
-- `GITHUB_TOKEN` and `RESEND_API_KEY` are optional; Developer write access and Email sending stay disabled until you add them. I will ask via the secure form only if you want those enabled.
-- The SQL migration above is applied through the normal approval prompt; no manual SQL for you to paste.
+- Migration: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.tala_knowledge TO authenticated`; `GRANT ALL ... TO service_role`; `GRANT SELECT ... TO anon`; add `UPDATE` and `DELETE` policies mirroring the existing permissive ones.
+- Backup: `psql COPY (...) TO STDOUT WITH CSV HEADER` per table into `/mnt/documents/backup-<date>/`.
+- Runtime test: headless browser against the running app with the existing owner session, capturing console errors and the `/api/talla/chat` network call.
+- Files changed: `src/admin/pages/TalaOps.tsx` only.
