@@ -18,10 +18,14 @@ import { handleMenu } from "./routes/menu.js";
 import { handleInventory } from "./routes/inventory.js";
 import { handleTallaOps } from "./routes/tallaOps.js";
 import { handleTallaChat } from "./routes/chat.js";
+import { handleWorkflows } from "./routes/workflows.js";
 import type { Env } from "./env.js";
 
 // Re-export TallaAgent for wrangler discovery
 export { TallaAgent } from "./agents/TallaAgent.js";
+
+// Re-export Workflow for wrangler discovery
+export { DailyResortBriefingWorkflow } from "./workflows/DailyResortBriefingWorkflow.js";
 
 // ---- Worker fetch handler ----
 
@@ -83,6 +87,8 @@ export default {
       response = await handleMenu(request, env, auth, path);
     } else if (path.startsWith("/api/inventory")) {
       response = await handleInventory(request, env, auth, path);
+    } else if (path.startsWith("/api/workflows")) {
+      response = await handleWorkflows(request, env, auth, path);
     } else if (path.startsWith("/api/talla")) {
       // Chat endpoint goes to DO, other talla ops to routes
       if (path === "/api/talla/chat" && request.method === "POST") {

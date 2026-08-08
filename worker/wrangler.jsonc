@@ -24,6 +24,14 @@
       }
     ]
   },
+  "workflows": [
+    {
+      "name": "daily-briefing",
+      "binding": "DAILY_BRIEFING",
+      "class_name": "DailyResortBriefingWorkflow",
+      "schedules": ["0 0 * * *"]
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",

@@ -1,5 +1,5 @@
 // Environment bindings for the Cloudflare Worker.
-// Includes D1 database, Durable Object namespace, and secrets.
+// Includes D1 database, Durable Object namespace, Workflows, and secrets.
 
 export interface Env {
   // D1 database binding
@@ -7,8 +7,6 @@ export interface Env {
   // Durable Object namespace for TallaAgent
   TALLA_AGENT: DurableObjectNamespace;
   // Worker Loader binding for @cloudflare/computer backends
-  // This is a Cloudflare runtime binding — the type matches WorkspaceRuntimeLoader
-  // from @cloudflare/computer. Using a compatible structural type.
   LOADER: {
     load(code: {
       compatibilityDate: string;
@@ -20,6 +18,19 @@ export interface Env {
     }): {
       getEntrypoint(name?: string, options?: { limits?: { cpuMs?: number } }): unknown;
     };
+  };
+  // Daily Briefing Workflow binding
+  DAILY_BRIEFING?: {
+    create: (options: { params: unknown; id?: string }) => Promise<{ id: string }>;
+    get: (id: string) => Promise<{
+      id: string;
+      status: () => Promise<{
+        status: string;
+        output?: unknown;
+        error?: string;
+      }>;
+    }>;
+    batchCreate?: (options: { params: unknown[] }) => Promise<{ instances: Array<{ id: string }> }>;
   };
   // Secrets (set via `wrangler secret put`)
   OPENROUTER_API_KEY?: string;
