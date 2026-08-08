@@ -114,6 +114,57 @@ export default {
       response = await handleInventory(request, env, auth, path);
     } else if (path.startsWith("/api/workflows")) {
       response = await handleWorkflows(request, env, auth, path);
+    } else if (path === "/api/debug/computer-test") {
+      // Temporary staging-only Computer test endpoint
+      try {
+        let body: Record<string, unknown> = {};
+        try { body = (await request.json()) as Record<string, unknown>; } catch { /* no body */ }
+        const tenantId = (body.tenantId as string) || "marina_terrace";
+        const action = (body.action as string) || "health";
+        const doId = env.TALLA_AGENT.idFromName(tenantId);
+        const stub = env.TALLA_AGENT.get(doId);
+        const actionPaths: Record<string, string> = {
+          health: "/health",
+          status: "/computer/status",
+          write: "/computer/write",
+          read: "/computer/read",
+          list: "/computer/list",
+          stat: "/computer/stat",
+          search: "/computer/search",
+          proof: "/computer/proof",
+        };
+        const doPath = actionPaths[action] || `/computer/${action}`;
+        const doBody: Record<string, unknown> = {};
+        if (body.path) doBody.path = body.path;
+        if (body.content) doBody.content = body.content;
+        // GET = no-body reads (health/proof/status/read/stat/list/search).
+        // POST = writes only (write).
+        const isGet = action !== "write";
+        // Forward path/pattern query params for GET reads.
+        const qs = new URLSearchParams();
+        if (body.path && isGet) qs.set("path", String(body.path));
+        if (body.pattern && isGet) qs.set("pattern", String(body.pattern));
+        const doUrl = `https://talla-agent${doPath}${qs.toString() ? `?${qs.toString()}` : ""}`;
+        const doResponse = await stub.fetch(
+          new Request(doUrl, {
+            method: isGet ? "GET" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Tenant-Id": tenantId,
+              "X-User-Role": "owner",
+              "X-User-Id": "staging-test",
+            },
+            body: isGet ? undefined : JSON.stringify(doBody),
+          }),
+        );
+        const respText = await doResponse.text();
+        return new Response(respText, {
+          status: doResponse.status,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message, stack: (err as Error).stack?.substring(0, 500) }, { status: 500 });
+      }
     } else if (path.startsWith("/api/computer")) {
       console.log(`[index] Routing to computer: ${path}, method: ${request.method}`);
       console.log(`[index] Auth: tenantId=${auth.tenantId}, role=${auth.role}`);

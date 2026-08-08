@@ -358,6 +358,29 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       }
     }
 
+    // Direct stat endpoint — for file/dir metadata
+    if (url.pathname === "/computer/stat" && request.method === "GET") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const urlObj = new URL(request.url);
+        const relativePath = urlObj.searchParams.get("path") || "/";
+        const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
+        const stat = await this.computer.stat(absolutePath);
+        return Response.json({
+          success: true,
+          path: describePath(absolutePath),
+          stat: { size: stat.size, mtime: stat.mtime, type: stat.type },
+        });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
     // Direct search endpoint — for grep/search
     if (url.pathname === "/computer/search" && request.method === "GET") {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
@@ -1207,7 +1230,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       duration: number;
     }> = [];
 
-    if (!this.computer.ready) {
+    if (!this.computerEnabled) {
       return {
         success: false,
         tenantId: this.state.tenantId,
@@ -1215,7 +1238,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         verificationToken: "",
         operations: [],
         persistenceProof: false,
-        error: "Workspace not initialized",
+        error: "Computer workspace is not available",
       };
     }
 

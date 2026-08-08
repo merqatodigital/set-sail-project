@@ -4,6 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -37,7 +42,7 @@
     "enabled": true
   },
   "vars": {
-    "TALLA_COMPUTER_ENABLED": "false",
+    "TALLA_COMPUTER_ENABLED": "true",
     "ENVIRONMENT": "staging"
   }
 }
