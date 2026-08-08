@@ -16,23 +16,18 @@
 // - Tool audit logging
 
 import { Agent, callable } from "agents";
-import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
-import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import type { Env } from "../env.js";
-import {
-  chatCompletion,
-  type ChatResponse,
-} from "./provider.js";
+import { chatCompletion, type ChatResponse } from "./provider.js";
 import { buildSystemPrompt, type SystemPromptContext } from "./systemPrompt.js";
 import { getTools, toOpenRouterTools, executeTool } from "./tools/index.js";
 import { createAuditWrapper } from "./toolAudit.js";
-import type {
-  TallaAgentState,
-  ConversationMessage,
-  ToolContext,
-} from "./types.js";
+import type { TallaAgentState, ConversationMessage, ToolContext } from "./types.js";
 
-// Computer path security and policy
+// Computer service — the ONLY Cloudflare Computer import in TallaAgent
+import type { ComputerService } from "../computer/ComputerService.js";
+import { NullComputerService } from "../computer/ComputerService.js";
+import { LazyComputerService } from "../computer/LazyComputerService.js";
+import type { DurableObjectStorageLike } from "../computer/CloudflareComputerAdapter.js";
 import { resolveWorkspacePath, describePath } from "../computer/paths.js";
 import { evaluatePolicy } from "../computer/policy.js";
 
@@ -61,9 +56,9 @@ interface ComputerStatusState {
 }
 
 export class TallaAgent extends Agent<Env, TallaAgentState> {
-  // Computer workspace — one per DO instance (tenant-isolated)
-  // Created in onStart(), backed by DO SQLite storage (durable)
-  private workspace: Workspace | null = null;
+  // Computer service — abstracted behind ComputerService interface
+  // Initialized in onStart(), backed by DO SQLite storage (durable)
+  private computer: ComputerService = new NullComputerService();
   private computerEnabled = false;
   private computerStatus: ComputerStatusState = {
     lastSuccessfulOperation: null,
@@ -86,7 +81,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
   };
 
   async onStart(): Promise<void> {
-    console.log(`[TallaAgent] onStart — env.TALLA_COMPUTER_ENABLED=${this.env.TALLA_COMPUTER_ENABLED}, state.tenantId=${this.state.tenantId}`);
+    console.log(
+      `[TallaAgent] onStart — env.TALLA_COMPUTER_ENABLED=${this.env.TALLA_COMPUTER_ENABLED}, state.tenantId=${this.state.tenantId}`,
+    );
     if (!this.state.initialized) {
       this.setState({
         ...this.state,
@@ -96,23 +93,27 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       });
     }
 
-    // Initialize Computer workspace if enabled
+    // Initialize Computer workspace if enabled (lazy — defers to first use)
     this.computerEnabled = this.env.TALLA_COMPUTER_ENABLED === "true";
-    if (this.computerEnabled && !this.workspace) {
+    if (this.computerEnabled && !this.computer.ready) {
       try {
-        const backend = new WorkerJavaScriptBackend({
-          loader: this.env.LOADER,
-        });
-        this.workspace = new Workspace({
+        const lazy = new LazyComputerService({
           storage: this.ctx.storage as unknown as DurableObjectStorageLike,
-          backends: [backend],
+          loader: this.env.LOADER,
           waitUntil: this.ctx.waitUntil.bind(this.ctx),
+          tenantId: this.state.tenantId,
         });
-        await this.workspace.ready();
-        console.log(`[TallaAgent] Computer workspace initialized for tenant: ${this.state.tenantId}`);
+        // Don't initialize yet — deferred until first Computer operation
+        this.computer = lazy;
+        this.computerEnabled = true;
+        console.log(
+          `[TallaAgent] Computer workspace (lazy) configured for tenant: ${this.state.tenantId}`,
+        );
       } catch (err) {
-        console.log(`[TallaAgent] Failed to initialize Computer workspace: ${(err as Error).message}`);
-        this.workspace = null;
+        console.log(
+          `[TallaAgent] Failed to configure Computer workspace: ${(err as Error).message}`,
+        );
+        this.computer = new NullComputerService();
         this.computerEnabled = false;
       }
     }
@@ -214,7 +215,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         conversationCount: this.state.conversationCount,
         computer: {
           enabled: this.computerEnabled,
-          workspaceInitialized: this.workspace !== null,
+          workspaceInitialized: this.computer.ready,
           backend: "worker-javascript",
           tenantId: this.state.tenantId,
           lastSuccessfulOperation: this.computerStatus.lastSuccessfulOperation,
@@ -231,7 +232,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       }
       return Response.json({
         enabled: this.computerEnabled,
-        workspaceInitialized: this.workspace !== null,
+        workspaceInitialized: this.computer.ready,
         backend: "worker-javascript",
         tenantId: this.state.tenantId,
         lastSuccessfulOperation: this.computerStatus.lastSuccessfulOperation,
@@ -245,7 +246,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
@@ -261,7 +262,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
@@ -277,7 +278,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
@@ -286,8 +287,11 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           return Response.json({ error: "path and content required" }, { status: 400 });
         }
         const absolutePath = resolveWorkspacePath(this.state.tenantId, body.path);
-        await this.workspace!.fs.writeFile(absolutePath, body.content);
-        const stat = await this.workspace!.fs.stat(absolutePath);
+        // Ensure parent directory exists
+        const parentDir = absolutePath.substring(0, absolutePath.lastIndexOf("/"));
+        await this.computer.mkdir(parentDir, { recursive: true });
+        await this.computer.writeFile(absolutePath, body.content);
+        const stat = await this.computer.stat(absolutePath);
         return Response.json({
           success: true,
           path: describePath(absolutePath),
@@ -304,7 +308,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
@@ -314,8 +318,8 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           return Response.json({ error: "path query parameter required" }, { status: 400 });
         }
         const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
-        const content = await this.workspace!.fs.readFile(absolutePath, "utf8");
-        const stat = await this.workspace!.fs.stat(absolutePath);
+        const content = await this.computer.readFile(absolutePath);
+        const stat = await this.computer.stat(absolutePath);
         return Response.json({
           success: true,
           path: describePath(absolutePath),
@@ -332,18 +336,22 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
         const urlObj = new URL(request.url);
         const relativePath = urlObj.searchParams.get("path") || "/";
         const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
-        const entries = await this.workspace!.fs.readdir(absolutePath);
+        const entries = await this.computer.readdir(absolutePath);
         return Response.json({
           success: true,
           path: describePath(absolutePath),
-          entries: entries.map((e) => ({ name: e.name, isFile: e.isFile, isDirectory: e.isDirectory })),
+          entries: entries.map((e) => ({
+            name: e.name,
+            isFile: e.isFile,
+            isDirectory: e.isDirectory,
+          })),
         });
       } catch (err) {
         return Response.json({ error: (err as Error).message }, { status: 500 });
@@ -355,7 +363,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       if (this.state.role !== "owner" && this.state.role !== "admin") {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (!this.computerEnabled || !this.workspace) {
+      if (!this.computerEnabled) {
         return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
       }
       try {
@@ -366,13 +374,87 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           return Response.json({ error: "pattern query parameter required" }, { status: 400 });
         }
         const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
-        const hits = await this.workspace!.fs.grep(pattern, absolutePath, { ignoreCase: true });
+        const hits = await this.computer.grep(pattern, absolutePath, { ignoreCase: true });
         return Response.json({
           success: true,
           pattern,
           path: describePath(absolutePath),
           matches: hits.map((h) => ({ path: h.path, line: h.line, text: h.text })),
         });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
+    // Persistence diagnostic endpoint — for debugging workspace persistence
+    if (url.pathname === "/computer/persistence-diag" && request.method === "POST") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const body = (await request.json()) as { action: string; token?: string; path?: string };
+        const tenantId = this.state.tenantId;
+        const diagPath = body.path
+          ? resolveWorkspacePath(tenantId, body.path)
+          : resolveWorkspacePath(tenantId, "diag/persistence.md");
+
+        const results: Record<string, unknown> = {
+          tenantId,
+          diagPath: describePath(diagPath),
+          computerReady: this.computer.ready,
+          computerEnabled: this.computerEnabled,
+        };
+
+        if (body.action === "write") {
+          const token = body.token || `diag-${crypto.randomUUID().slice(0, 8)}`;
+          const content = `# Persistence Diagnostic\nToken: ${token}\nTime: ${new Date().toISOString()}\nTenantId: ${tenantId}\n`;
+          // Ensure parent directory exists
+          const parentDir = diagPath.substring(0, diagPath.lastIndexOf("/"));
+          await this.computer.mkdir(parentDir, { recursive: true });
+          await this.computer.writeFile(diagPath, content);
+          results.token = token;
+          results.written = true;
+          results.contentLength = content.length;
+        } else if (body.action === "read") {
+          const content = await this.computer.readFile(diagPath);
+          results.content = content;
+          results.exists = true;
+        } else if (body.action === "stat") {
+          const stat = await this.computer.stat(diagPath);
+          results.stat = { size: stat.size, mtime: stat.mtime, type: stat.type };
+          results.exists = true;
+        } else if (body.action === "list") {
+          const entries = await this.computer.readdir(resolveWorkspacePath(tenantId, "diag"));
+          results.entries = entries.map((e) => ({
+            name: e.name,
+            isFile: e.isFile,
+            isDirectory: e.isDirectory,
+          }));
+        } else if (body.action === "search") {
+          const token = body.token || "";
+          const entries = await this.computer.readdir(resolveWorkspacePath(tenantId, "diag"));
+          results.entries = entries.map((e) => ({
+            name: e.name,
+            isFile: e.isFile,
+            isDirectory: e.isDirectory,
+          }));
+          if (token) {
+            const hits = await this.computer.grep(token, resolveWorkspacePath(tenantId, "diag"), {
+              ignoreCase: true,
+            });
+            results.matches = hits.map((h) => ({ path: h.path, line: h.line, text: h.text }));
+          }
+        } else {
+          return Response.json(
+            { error: "Invalid action. Use: write, read, stat, list, search" },
+            { status: 400 },
+          );
+        }
+
+        return Response.json({ success: true, ...results });
       } catch (err) {
         return Response.json({ error: (err as Error).message }, { status: 500 });
       }
@@ -497,11 +579,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         }
 
         let toolResult;
-        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled && this.workspace) {
+        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled && this.computer.ready) {
           // Computer tool — execute via workspace
-          toolResult = await audit(tc.name, () =>
-            this.executeComputerTool(tc.name, args, toolCtx),
-          );
+          toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
         } else {
           // D1 resort tool — execute via tool registry
           toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
@@ -636,7 +716,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     args: Record<string, unknown>,
     ctx: ToolContext,
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    if (!this.workspace) {
+    if (!this.computer.ready) {
       return { success: false, error: "Computer workspace is not available" };
     }
 
@@ -709,7 +789,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     }
 
     // REAL filesystem operation via @cloudflare/computer Workspace
-    const entries = await this.workspace!.fs.readdir(absolutePath);
+    const entries = await this.computer.readdir(absolutePath);
     const files = entries.map((entry) => ({
       name: entry.name,
       isDirectory: entry.isDirectory,
@@ -748,7 +828,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     }
 
     // REAL filesystem operation via @cloudflare/computer Workspace
-    const content = await this.workspace!.fs.readFile(absolutePath, "utf8");
+    const content = await this.computer.readFile(absolutePath);
 
     return {
       success: true,
@@ -793,10 +873,13 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     }
 
     // REAL filesystem operation via @cloudflare/computer Workspace
-    await this.workspace!.fs.writeFile(absolutePath, content);
+    // Ensure parent directory exists
+    const parentDir = absolutePath.substring(0, absolutePath.lastIndexOf("/"));
+    await this.computer.mkdir(parentDir, { recursive: true });
+    await this.computer.writeFile(absolutePath, content);
 
     // Verify the file was written — read it back
-    const stat = await this.workspace!.fs.stat(absolutePath);
+    const stat = await this.computer.stat(absolutePath);
 
     return {
       success: true,
@@ -834,7 +917,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     }
 
     // REAL filesystem operation via @cloudflare/computer Workspace
-    const hits = await this.workspace!.fs.grep(pattern, absolutePath, {
+    const hits = await this.computer.grep(pattern, absolutePath, {
       ignoreCase: true,
     });
 
@@ -873,7 +956,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     summary?: string;
     error?: string;
   }> {
-    if (!this.workspace) {
+    if (!this.computer.ready) {
       return { success: false, error: "Computer workspace is not available" };
     }
 
@@ -884,20 +967,59 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     try {
       // 1. Query authoritative D1 data
       const db = this.env.DB;
-      const [tours] = await Promise.all([
-        listActiveTours(db, tenantId).catch(() => []),
-      ]);
+      const [tours] = await Promise.all([listActiveTours(db, tenantId).catch(() => [])]);
 
       // Query operational data directly from D1
       const today = new Date().toISOString().split("T")[0];
-      const [guestRequests, housekeeping, maintenance, foodOrders, inventoryAlerts, tallaTasks] = await Promise.all([
-        db.prepare("SELECT * FROM guest_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
-        db.prepare("SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
-        db.prepare("SELECT * FROM maintenance_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
-        db.prepare("SELECT * FROM food_orders WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC").bind(tenantId, today).all().then(r => r.results).catch(() => []),
-        db.prepare("SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold").bind(tenantId).all().then(r => r.results).catch(() => []),
-        db.prepare("SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC").bind(tenantId).all().then(r => r.results).catch(() => []),
-      ]);
+      const [guestRequests, housekeeping, maintenance, foodOrders, inventoryAlerts, tallaTasks] =
+        await Promise.all([
+          db
+            .prepare(
+              "SELECT * FROM guest_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC",
+            )
+            .bind(tenantId, today)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+          db
+            .prepare(
+              "SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC",
+            )
+            .bind(tenantId, today)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+          db
+            .prepare(
+              "SELECT * FROM maintenance_requests WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC",
+            )
+            .bind(tenantId, today)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+          db
+            .prepare(
+              "SELECT * FROM food_orders WHERE tenant_id = ? AND date(created_at) = ? ORDER BY created_at DESC",
+            )
+            .bind(tenantId, today)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+          db
+            .prepare("SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold")
+            .bind(tenantId)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+          db
+            .prepare(
+              "SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC",
+            )
+            .bind(tenantId)
+            .all()
+            .then((r) => r.results)
+            .catch(() => []),
+        ]);
 
       // 2. Build structured report from real D1 data
       const sections: string[] = [];
@@ -910,7 +1032,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Guest Requests");
       if (guestRequests.length > 0) {
         for (const req of guestRequests) {
-          sections.push(`- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).type || "request"}: ${(req as Record<string, unknown>).description || "No description"}`);
+          sections.push(
+            `- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).type || "request"}: ${(req as Record<string, unknown>).description || "No description"}`,
+          );
         }
       } else {
         sections.push("No guest requests today.");
@@ -921,7 +1045,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Housekeeping");
       if (housekeeping.length > 0) {
         for (const task of housekeeping) {
-          sections.push(`- [${(task as Record<string, unknown>).status || "pending"}] Room ${(task as Record<string, unknown>).roomNumber || "?"}: ${(task as Record<string, unknown>).taskType || (task as Record<string, unknown>).type || "task"}`);
+          sections.push(
+            `- [${(task as Record<string, unknown>).status || "pending"}] Room ${(task as Record<string, unknown>).roomNumber || "?"}: ${(task as Record<string, unknown>).taskType || (task as Record<string, unknown>).type || "task"}`,
+          );
         }
       } else {
         sections.push("No housekeeping tasks today.");
@@ -932,7 +1058,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Maintenance");
       if (maintenance.length > 0) {
         for (const req of maintenance) {
-          sections.push(`- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).priority || "normal"}: ${(req as Record<string, unknown>).description || "No description"}`);
+          sections.push(
+            `- [${(req as Record<string, unknown>).status || "pending"}] ${(req as Record<string, unknown>).priority || "normal"}: ${(req as Record<string, unknown>).description || "No description"}`,
+          );
         }
       } else {
         sections.push("No maintenance requests today.");
@@ -943,7 +1071,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Food Orders");
       if (foodOrders.length > 0) {
         for (const order of foodOrders) {
-          sections.push(`- [${(order as Record<string, unknown>).status || "pending"}] Room ${(order as Record<string, unknown>).roomNumber || "?"}: ${(order as Record<string, unknown>).items || "order"}`);
+          sections.push(
+            `- [${(order as Record<string, unknown>).status || "pending"}] Room ${(order as Record<string, unknown>).roomNumber || "?"}: ${(order as Record<string, unknown>).items || "order"}`,
+          );
         }
       } else {
         sections.push("No food orders today.");
@@ -954,7 +1084,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Inventory Alerts");
       if (inventoryAlerts.length > 0) {
         for (const alert of inventoryAlerts) {
-          sections.push(`- ${(alert as Record<string, unknown>).name || "Item"}: ${(alert as Record<string, unknown>).quantity || 0} remaining (alert threshold: ${(alert as Record<string, unknown>).alertThreshold || "?"})`);
+          sections.push(
+            `- ${(alert as Record<string, unknown>).name || "Item"}: ${(alert as Record<string, unknown>).quantity || 0} remaining (alert threshold: ${(alert as Record<string, unknown>).alertThreshold || "?"})`,
+          );
         }
       } else {
         sections.push("No inventory alerts.");
@@ -965,7 +1097,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Active Tours");
       if (tours.length > 0) {
         for (const tour of tours) {
-          sections.push(`- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`);
+          sections.push(
+            `- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`,
+          );
         }
       } else {
         sections.push("No active tours.");
@@ -976,7 +1110,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       sections.push("## Talla Tasks");
       if (tallaTasks.length > 0) {
         for (const task of tallaTasks) {
-          sections.push(`- [${(task as Record<string, unknown>).status || "pending"}] ${(task as Record<string, unknown>).title || (task as Record<string, unknown>).description || "Task"}`);
+          sections.push(
+            `- [${(task as Record<string, unknown>).status || "pending"}] ${(task as Record<string, unknown>).title || (task as Record<string, unknown>).description || "Task"}`,
+          );
         }
       } else {
         sections.push("No Talla tasks.");
@@ -986,13 +1122,17 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Items requiring attention
       sections.push("## Items Requiring Owner Attention");
       const attentionItems: string[] = [];
-      const pendingRequests = guestRequests.filter((r) => (r as Record<string, unknown>).status === "pending");
-      if (pendingRequests.length > 0) attentionItems.push(`${pendingRequests.length} pending guest requests`);
+      const pendingRequests = guestRequests.filter(
+        (r) => (r as Record<string, unknown>).status === "pending",
+      );
+      if (pendingRequests.length > 0)
+        attentionItems.push(`${pendingRequests.length} pending guest requests`);
       const urgentMaintenance = maintenance.filter((m) => {
         const priority = (m as Record<string, unknown>).priority;
         return priority === "urgent" || priority === "high";
       });
-      if (urgentMaintenance.length > 0) attentionItems.push(`${urgentMaintenance.length} urgent/high priority maintenance items`);
+      if (urgentMaintenance.length > 0)
+        attentionItems.push(`${urgentMaintenance.length} urgent/high priority maintenance items`);
       if (inventoryAlerts.length > 0) {
         attentionItems.push(`${inventoryAlerts.length} inventory alerts`);
       }
@@ -1008,10 +1148,12 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       const reportContent = sections.join("\n");
 
       // 3. Write to REAL Computer workspace
-      await this.workspace!.fs.writeFile(reportPath, reportContent);
+      const parentDir = reportPath.substring(0, reportPath.lastIndexOf("/"));
+      await this.computer.mkdir(parentDir, { recursive: true });
+      await this.computer.writeFile(reportPath, reportContent);
 
       // 4. Read back to verify persistence
-      const verifiedContent = await this.workspace!.fs.readFile(reportPath, "utf8");
+      const verifiedContent = await this.computer.readFile(reportPath);
       const verified = verifiedContent === reportContent;
 
       // 5. Return artifact confirmation
@@ -1065,7 +1207,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       duration: number;
     }> = [];
 
-    if (!this.workspace) {
+    if (!this.computer.ready) {
       return {
         success: false,
         tenantId: this.state.tenantId,
@@ -1097,7 +1239,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 1: mkdir
       const mkdirStart = Date.now();
       try {
-        await this.workspace.fs.mkdir(testDir, { recursive: true });
+        await this.computer.mkdir(testDir, { recursive: true });
         operations.push({
           operation: "mkdir",
           success: true,
@@ -1116,7 +1258,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 2: writeFile
       const writeStart = Date.now();
       try {
-        await this.workspace.fs.writeFile(testFile, testContent);
+        await this.computer.writeFile(testFile, testContent);
         operations.push({
           operation: "writeFile",
           success: true,
@@ -1135,7 +1277,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 3: stat
       const statStart = Date.now();
       try {
-        const stat = await this.workspace.fs.stat(testFile);
+        const stat = await this.computer.stat(testFile);
         operations.push({
           operation: "stat",
           success: true,
@@ -1154,7 +1296,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 4: readFile
       const readStart = Date.now();
       try {
-        const content = await this.workspace.fs.readFile(testFile, "utf8");
+        const content = await this.computer.readFile(testFile);
         const readVerified = content === testContent;
         operations.push({
           operation: "readFile",
@@ -1174,7 +1316,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 5: readdir
       const readdirStart = Date.now();
       try {
-        const entries = await this.workspace.fs.readdir(testDir);
+        const entries = await this.computer.readdir(testDir);
         const found = entries.some((e) => e.name.includes(verificationToken));
         operations.push({
           operation: "readdir",
@@ -1194,7 +1336,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 6: grep/search
       const searchStart = Date.now();
       try {
-        const hits = await this.workspace.fs.grep(verificationToken, testDir, {
+        const hits = await this.computer.grep(verificationToken, testDir, {
           ignoreCase: true,
         });
         operations.push({
@@ -1215,7 +1357,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       // Operation 7: Persistence proof — read again without JS variable
       const persistStart = Date.now();
       try {
-        const persistContent = await this.workspace.fs.readFile(testFile, "utf8");
+        const persistContent = await this.computer.readFile(testFile);
         const tokenPresent = persistContent.includes(verificationToken);
         operations.push({
           operation: "persistence",
@@ -1236,7 +1378,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
 
       // Clean up test file
       try {
-        await this.workspace.fs.rm(testFile);
+        await this.computer.rm(testFile);
       } catch {
         // Cleanup failure is non-fatal
       }

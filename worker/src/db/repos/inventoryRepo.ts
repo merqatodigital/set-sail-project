@@ -60,7 +60,10 @@ export async function listInventory(
 
   query += " ORDER BY category, name";
 
-  const result = await db.prepare(query).bind(...params).all<InventoryItemRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<InventoryItemRow>();
   return (result.results ?? []).map(rowToItem);
 }
 

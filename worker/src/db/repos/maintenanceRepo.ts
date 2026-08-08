@@ -119,7 +119,10 @@ export async function listMaintenanceRequests(
     params.push(filters.limit);
   }
 
-  const result = await db.prepare(query).bind(...params).all<MaintenanceRequestRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<MaintenanceRequestRow>();
   return (result.results ?? []).map(rowToRequest);
 }
 

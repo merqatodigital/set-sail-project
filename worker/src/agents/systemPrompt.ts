@@ -109,7 +109,9 @@ You know the resort, the area, and how to help guests have a great time.`);
 
   // ---- Owner Context ----
   if (isOwner) {
-    sections.push(`OWNER/ADMIN MODE: You are speaking with an owner or admin. You can access operational information, today's operations summary, and perform management actions. Do not expose sensitive internal details to non-owner users.`);
+    sections.push(
+      `OWNER/ADMIN MODE: You are speaking with an owner or admin. You can access operational information, today's operations summary, and perform management actions. Do not expose sensitive internal details to non-owner users.`,
+    );
   }
 
   // ---- Computer Workspace ----
@@ -144,7 +146,9 @@ Example: To create a daily operations report, use getTodayOperations to get real
 
   // ---- Opening ----
   if (isGuest) {
-    sections.push(`When greeting a guest, be warm and natural. Mention the time of day. Ask how you can help. Keep it short.`);
+    sections.push(
+      `When greeting a guest, be warm and natural. Mention the time of day. Ask how you can help. Keep it short.`,
+    );
   }
 
   return sections.join("\n\n");

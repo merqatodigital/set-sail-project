@@ -24,9 +24,15 @@ export async function handleInventory(
 
   try {
     const authErr = requireAuth(auth);
-    if (authErr) { logRequest(ctx, 401); return authErr; }
+    if (authErr) {
+      logRequest(ctx, 401);
+      return authErr;
+    }
     const tenantErr = requireTenant(auth);
-    if (tenantErr) { logRequest(ctx, 403); return tenantErr; }
+    if (tenantErr) {
+      logRequest(ctx, 403);
+      return tenantErr;
+    }
 
     // GET /api/inventory — list items
     if (path === "/api/inventory" && request.method === "GET") {
@@ -42,7 +48,10 @@ export async function handleInventory(
     const singleMatch = path.match(/^\/api\/inventory\/([^/]+)$/);
     if (singleMatch && request.method === "GET") {
       const item = await getInventoryItem(env.DB, auth.tenantId!, singleMatch[1]);
-      if (!item) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      if (!item) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ item });
     }
@@ -50,13 +59,19 @@ export async function handleInventory(
     // POST /api/inventory — create/update item (admin)
     if (path === "/api/inventory" && request.method === "POST") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
       const body = await request.json();
       const parsed = UpsertInventoryItemSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const item = await upsertInventoryItem(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -66,9 +81,23 @@ export async function handleInventory(
     // PUT /api/inventory/bulk — bulk upsert (admin)
     if (path === "/api/inventory/bulk" && request.method === "PUT") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
-      const body = await request.json() as { items?: Array<{ id?: string; name: string; category?: string; unit?: string; quantity: number; reorderThreshold?: number; unitCost?: number; notes?: string }> };
+      const body = (await request.json()) as {
+        items?: Array<{
+          id?: string;
+          name: string;
+          category?: string;
+          unit?: string;
+          quantity: number;
+          reorderThreshold?: number;
+          unitCost?: number;
+          notes?: string;
+        }>;
+      };
       const items = body.items;
       if (!Array.isArray(items) || items.length === 0) {
         logRequest(ctx, 400);
@@ -86,10 +115,21 @@ export async function handleInventory(
       const parsed = AdjustInventorySchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
-      const item = await adjustInventoryQuantity(env.DB, auth.tenantId!, adjustMatch[1], parsed.data.adjustment);
-      if (!item) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      const item = await adjustInventoryQuantity(
+        env.DB,
+        auth.tenantId!,
+        adjustMatch[1],
+        parsed.data.adjustment,
+      );
+      if (!item) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ item });
     }
@@ -98,7 +138,10 @@ export async function handleInventory(
     const deleteMatch = path.match(/^\/api\/inventory\/([^/]+)$/);
     if (deleteMatch && request.method === "DELETE") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
       await deleteInventoryItem(env.DB, auth.tenantId!, deleteMatch[1]);
       logRequest(ctx, 200);

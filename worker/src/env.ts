@@ -39,4 +39,16 @@ export interface Env {
   SUPABASE_ANON_KEY?: string;
   // Feature flags
   TALLA_COMPUTER_ENABLED?: string;
+  // Environment mode: "development" or "production"
+  // Set via wrangler.jsonc vars or environment variable
+  ENVIRONMENT?: string;
+}
+
+/**
+ * Check if we're in development mode.
+ * Returns true only when ENVIRONMENT is explicitly set to "development".
+ * This guards the X-Dev-Tenant header bypass to prevent production auth bypass.
+ */
+export function isDevelopmentMode(env: Env): boolean {
+  return env.ENVIRONMENT === "development";
 }

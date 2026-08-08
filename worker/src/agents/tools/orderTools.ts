@@ -64,10 +64,16 @@ export const createFoodOrderTool: TallaTool = {
 
       for (const item of items) {
         if (item.quantity <= 0) {
-          return { success: false, error: `Invalid quantity for item ${item.menuItemId}: ${item.quantity}` };
+          return {
+            success: false,
+            error: `Invalid quantity for item ${item.menuItemId}: ${item.quantity}`,
+          };
         }
         if (item.quantity > 100) {
-          return { success: false, error: `Excessive quantity for item ${item.menuItemId}: ${item.quantity}` };
+          return {
+            success: false,
+            error: `Excessive quantity for item ${item.menuItemId}: ${item.quantity}`,
+          };
         }
       }
 
@@ -92,9 +98,7 @@ export const createFoodOrderTool: TallaTool = {
       );
 
       // Build item summary for confirmation
-      const itemSummary = order.items.map(
-        (i) => `${i.quantity}x ${i.name} (₱${i.price} each)`,
-      );
+      const itemSummary = order.items.map((i) => `${i.quantity}x ${i.name} (₱${i.price} each)`);
 
       return {
         success: true,

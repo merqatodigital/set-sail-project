@@ -3,10 +3,13 @@
 //
 // Development mode:
 //   In local development, use header X-Dev-Tenant: <tenantId> to bypass auth.
-//   This only works when the Authorization header is NOT present.
+//   This ONLY works when:
+//     1. ENVIRONMENT=development is set in wrangler.jsonc
+//     2. The Authorization header is NOT present
 //   Production auth is never weakened.
 
 import type { Env } from "../env.js";
+import { isDevelopmentMode } from "../env.js";
 import type { AuthContext } from "../auth/context.js";
 
 /**
@@ -18,12 +21,16 @@ export async function handleComputer(
   auth: AuthContext,
   path: string,
 ): Promise<Response> {
-  console.log(`[computer] handleComputer called: path=${path}, auth.tenantId=${auth.tenantId}, auth.role=${auth.role}`);
+  console.log(
+    `[computer] handleComputer called: path=${path}, auth.tenantId=${auth.tenantId}, auth.role=${auth.role}`,
+  );
   let tenantId = auth.tenantId;
   let isDevMode = false;
 
-  // Development mode: allow X-Dev-Tenant header when no Authorization header is present
-  if (!tenantId && !request.headers.get("Authorization")) {
+  // Development mode: allow X-Dev-Tenant header ONLY when:
+  //   1. ENVIRONMENT=development (explicit guard)
+  //   2. No Authorization header present (don't override real auth)
+  if (isDevelopmentMode(env) && !tenantId && !request.headers.get("Authorization")) {
     const devTenant = request.headers.get("X-Dev-Tenant");
     if (devTenant) {
       tenantId = devTenant;
@@ -55,8 +62,8 @@ export async function handleComputer(
     const doUrl = `https://talla-agent${doPath}${urlObj.search}`;
     const doHeaders = new Headers(request.headers);
     doHeaders.set("X-Tenant-Id", tenantId);
-    doHeaders.set("X-User-Role", isDevMode ? "owner" : (auth.role || ""));
-    doHeaders.set("X-User-Id", isDevMode ? "dev-user" : (auth.userId || ""));
+    doHeaders.set("X-User-Role", isDevMode ? "owner" : auth.role || "");
+    doHeaders.set("X-User-Id", isDevMode ? "dev-user" : auth.userId || "");
     const doResponse = await stub.fetch(
       new Request(doUrl, {
         method: request.method,
@@ -68,9 +75,6 @@ export async function handleComputer(
     return doResponse;
   } catch (err) {
     console.error(`[computer] Error: ${err}`);
-    return Response.json(
-      { error: (err as Error).message },
-      { status: 500 },
-    );
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 }

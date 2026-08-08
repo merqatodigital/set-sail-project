@@ -23,9 +23,15 @@ export async function handleHousekeeping(
 
   try {
     const authErr = requireAuth(auth);
-    if (authErr) { logRequest(ctx, 401); return authErr; }
+    if (authErr) {
+      logRequest(ctx, 401);
+      return authErr;
+    }
     const tenantErr = requireTenant(auth);
-    if (tenantErr) { logRequest(ctx, 403); return tenantErr; }
+    if (tenantErr) {
+      logRequest(ctx, 403);
+      return tenantErr;
+    }
 
     // POST /api/housekeeping — create task
     if (path === "/api/housekeeping" && request.method === "POST") {
@@ -33,7 +39,10 @@ export async function handleHousekeeping(
       const parsed = CreateHousekeepingTaskSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const task = await createHousekeepingTask(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -59,7 +68,10 @@ export async function handleHousekeeping(
     const singleMatch = path.match(/^\/api\/housekeeping\/([^/]+)$/);
     if (singleMatch && request.method === "GET") {
       const task = await getHousekeepingTask(env.DB, auth.tenantId!, singleMatch[1]);
-      if (!task) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      if (!task) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ task });
     }
@@ -71,11 +83,22 @@ export async function handleHousekeeping(
       const parsed = UpdateHousekeepingStatusSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       try {
-        const task = await updateHousekeepingTaskStatus(env.DB, auth.tenantId!, statusMatch[1], parsed.data.status);
-        if (!task) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+        const task = await updateHousekeepingTaskStatus(
+          env.DB,
+          auth.tenantId!,
+          statusMatch[1],
+          parsed.data.status,
+        );
+        if (!task) {
+          logRequest(ctx, 404);
+          return Response.json({ error: "Not found" }, { status: 404 });
+        }
         logRequest(ctx, 200);
         return Response.json({ task });
       } catch (e) {

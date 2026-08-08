@@ -7,10 +7,7 @@ import type { ToolAuditEntry } from "./types.js";
  * Log a tool execution to D1 audit table.
  * Fire-and-forget — do not block agent response.
  */
-export async function logToolExecution(
-  db: D1Database,
-  entry: ToolAuditEntry,
-): Promise<void> {
+export async function logToolExecution(db: D1Database, entry: ToolAuditEntry): Promise<void> {
   try {
     await db
       .prepare(
@@ -46,10 +43,7 @@ export function createAuditWrapper(
   userId: string | null,
   sessionId: string,
 ) {
-  return async function auditToolExecution<T>(
-    toolName: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
+  return async function auditToolExecution<T>(toolName: string, fn: () => Promise<T>): Promise<T> {
     const startTime = new Date().toISOString();
     const startMs = Date.now();
 

@@ -62,10 +62,7 @@ export interface ChatResponse {
  * Call OpenRouter for a chat completion.
  * Tries the preferred model first, then falls back through FREE_MODELS.
  */
-export async function chatCompletion(
-  apiKey: string,
-  request: ChatRequest,
-): Promise<ChatResponse> {
+export async function chatCompletion(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
   const config = { ...DEFAULT_MODEL_CONFIG, ...request.modelConfig };
   const models = [config.model, ...FREE_MODELS.filter((m) => m !== config.model)];
 

@@ -65,10 +65,7 @@ export async function handleWorkflows(
     return Response.json({ error: "Not found" }, { status: 404 });
   } catch (err) {
     console.error(`[Workflows] Error: ${err}`);
-    return Response.json(
-      { error: (err as Error).message },
-      { status: 500 },
-    );
+    return Response.json({ error: (err as Error).message }, { status: 500 });
   }
 }
 
@@ -95,8 +92,10 @@ async function triggerDailyBriefing(
   // Get tenant timezone from D1 if not provided
   if (!timezone) {
     const setting = await env.DB.prepare(
-      "SELECT value FROM property_settings WHERE tenant_id = ? AND key = 'timezone'"
-    ).bind(tenantId).first();
+      "SELECT value FROM property_settings WHERE tenant_id = ? AND key = 'timezone'",
+    )
+      .bind(tenantId)
+      .first();
     timezone = (setting?.value as string) || "Asia/Manila";
   }
 
@@ -113,9 +112,11 @@ async function triggerDailyBriefing(
   }
 
   // Create workflow instance via binding
-  const workflowBinding = (env as unknown as Record<string, unknown>).DAILY_BRIEFING as {
-    create: (options: { params: unknown; id?: string }) => Promise<{ id: string }>;
-  } | undefined;
+  const workflowBinding = (env as unknown as Record<string, unknown>).DAILY_BRIEFING as
+    | {
+        create: (options: { params: unknown; id?: string }) => Promise<{ id: string }>;
+      }
+    | undefined;
 
   if (!workflowBinding) {
     return Response.json(
@@ -164,23 +165,22 @@ async function triggerDailyBriefing(
 /**
  * Get the status of the daily briefing workflow.
  */
-async function getBriefingStatus(
-  env: Env,
-  tenantId: string,
-): Promise<Response> {
+async function getBriefingStatus(env: Env, tenantId: string): Promise<Response> {
   const today = new Date().toISOString().split("T")[0];
   const instanceId = `daily-briefing-${tenantId}-${today}`;
 
-  const workflowBinding = (env as unknown as Record<string, unknown>).DAILY_BRIEFING as {
-    get: (id: string) => Promise<{
-      id: string;
-      status: () => Promise<{
-        status: string;
-        output?: unknown;
-        error?: string;
-      }>;
-    }>;
-  } | undefined;
+  const workflowBinding = (env as unknown as Record<string, unknown>).DAILY_BRIEFING as
+    | {
+        get: (id: string) => Promise<{
+          id: string;
+          status: () => Promise<{
+            status: string;
+            output?: unknown;
+            error?: string;
+          }>;
+        }>;
+      }
+    | undefined;
 
   if (!workflowBinding) {
     return Response.json({
@@ -227,18 +227,17 @@ async function getBriefingStatus(
 /**
  * List briefing artifacts from D1.
  */
-async function listBriefingArtifacts(
-  env: Env,
-  tenantId: string,
-): Promise<Response> {
+async function listBriefingArtifacts(env: Env, tenantId: string): Promise<Response> {
   const today = new Date().toISOString().split("T")[0];
   const relativePath = `briefings/${today}-morning-brief.md`;
 
   // Read artifact from D1
   const row = await env.DB.prepare(
     `SELECT content, content_length, created_at FROM workflow_artifacts
-     WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`
-  ).bind(tenantId, relativePath).first<{ content: string; content_length: number; created_at: string }>();
+     WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`,
+  )
+    .bind(tenantId, relativePath)
+    .first<{ content: string; content_length: number; created_at: string }>();
 
   if (!row) {
     return Response.json({

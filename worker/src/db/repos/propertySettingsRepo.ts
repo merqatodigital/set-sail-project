@@ -66,10 +66,7 @@ export async function getSettingsByCategory(
   return (result.results ?? []).map(rowToSetting);
 }
 
-export async function getAllSettings(
-  db: D1Database,
-  tenantId: string,
-): Promise<PropertySetting[]> {
+export async function getAllSettings(db: D1Database, tenantId: string): Promise<PropertySetting[]> {
   const result = await db
     .prepare("SELECT * FROM property_settings WHERE tenant_id = ?1 ORDER BY category, key")
     .bind(tenantId)

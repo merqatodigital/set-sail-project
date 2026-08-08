@@ -10,10 +10,7 @@
 //   workspaceSearch — search files for a pattern
 
 import type { TallaTool, ToolContext, ToolResult } from "../agents/types.js";
-import {
-  resolveWorkspacePath,
-  describePath,
-} from "./paths.js";
+import { resolveWorkspacePath, describePath } from "./paths.js";
 import { evaluatePolicy } from "./policy.js";
 
 // Maximum file size for writes
@@ -23,11 +20,7 @@ const MAX_WRITE_SIZE = 512 * 1024; // 512KB
  * Helper: run a workspace operation through the policy engine.
  * Returns null if allowed, or a ToolResult if blocked/denied.
  */
-function enforcePolicy(
-  ctx: ToolContext,
-  action: string,
-  path: string,
-): ToolResult | null {
+function enforcePolicy(ctx: ToolContext, action: string, path: string): ToolResult | null {
   const policy = evaluatePolicy({
     tenantId: ctx.tenantId,
     userId: ctx.userId,
@@ -102,8 +95,7 @@ export const workspaceReadTool: TallaTool = {
     properties: {
       path: {
         type: "string",
-        description:
-          'Relative path to the file (e.g., "/reports/daily/2026-08-08.md").',
+        description: 'Relative path to the file (e.g., "/reports/daily/2026-08-08.md").',
       },
     },
     required: ["path"],
@@ -142,8 +134,7 @@ export const workspaceWriteTool: TallaTool = {
     properties: {
       path: {
         type: "string",
-        description:
-          'Relative path for the file (e.g., "/reports/daily/2026-08-08.md").',
+        description: 'Relative path for the file (e.g., "/reports/daily/2026-08-08.md").',
       },
       content: {
         type: "string",

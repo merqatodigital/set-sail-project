@@ -7,11 +7,7 @@ export const CreateGuestRequestSchema = z.object({
   type: z.enum(["booking", "tour", "rental", "housekeeping", "maintenance", "general"], {
     message: "Invalid request type",
   }),
-  guestName: z
-    .string()
-    .min(1, "Guest name is required")
-    .max(200, "Guest name too long")
-    .trim(),
+  guestName: z.string().min(1, "Guest name is required").max(200, "Guest name too long").trim(),
   guestPhone: z.string().max(50).optional().default(""),
   guestEmail: z.string().email().max(200).optional().default(""),
   roomType: z.string().max(200).optional().default(""),

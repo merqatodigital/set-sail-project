@@ -45,10 +45,7 @@ function rowToTour(row: TourRow): Tour {
 /**
  * List active tours for a tenant. Public-facing (guest safe).
  */
-export async function listActiveTours(
-  db: D1Database,
-  tenantId: string,
-): Promise<Tour[]> {
+export async function listActiveTours(db: D1Database, tenantId: string): Promise<Tour[]> {
   const { results } = await db
     .prepare(
       `SELECT * FROM tours_catalog
@@ -63,10 +60,7 @@ export async function listActiveTours(
 /**
  * List all tours for a tenant. Admin-only.
  */
-export async function listAllTours(
-  db: D1Database,
-  tenantId: string,
-): Promise<Tour[]> {
+export async function listAllTours(db: D1Database, tenantId: string): Promise<Tour[]> {
   const { results } = await db
     .prepare(
       `SELECT * FROM tours_catalog

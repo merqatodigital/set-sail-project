@@ -66,7 +66,10 @@ export async function listMenuItems(
 
   query += " ORDER BY sort_order, name";
 
-  const result = await db.prepare(query).bind(...params).all<MenuItemRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<MenuItemRow>();
   return (result.results ?? []).map(rowToItem);
 }
 
@@ -140,14 +143,38 @@ export async function updateMenuItem(
   const fields: string[] = [];
   const params: unknown[] = [];
 
-  if (input.name !== undefined) { fields.push("name = ?" + (params.length + 1)); params.push(input.name); }
-  if (input.description !== undefined) { fields.push("description = ?" + (params.length + 1)); params.push(input.description); }
-  if (input.category !== undefined) { fields.push("category = ?" + (params.length + 1)); params.push(input.category); }
-  if (input.price !== undefined) { fields.push("price = ?" + (params.length + 1)); params.push(input.price); }
-  if (input.foodCost !== undefined) { fields.push("food_cost = ?" + (params.length + 1)); params.push(input.foodCost); }
-  if (input.inventoryCount !== undefined) { fields.push("inventory_count = ?" + (params.length + 1)); params.push(input.inventoryCount); }
-  if (input.active !== undefined) { fields.push("active = ?" + (params.length + 1)); params.push(input.active ? 1 : 0); }
-  if (input.sortOrder !== undefined) { fields.push("sort_order = ?" + (params.length + 1)); params.push(input.sortOrder); }
+  if (input.name !== undefined) {
+    fields.push("name = ?" + (params.length + 1));
+    params.push(input.name);
+  }
+  if (input.description !== undefined) {
+    fields.push("description = ?" + (params.length + 1));
+    params.push(input.description);
+  }
+  if (input.category !== undefined) {
+    fields.push("category = ?" + (params.length + 1));
+    params.push(input.category);
+  }
+  if (input.price !== undefined) {
+    fields.push("price = ?" + (params.length + 1));
+    params.push(input.price);
+  }
+  if (input.foodCost !== undefined) {
+    fields.push("food_cost = ?" + (params.length + 1));
+    params.push(input.foodCost);
+  }
+  if (input.inventoryCount !== undefined) {
+    fields.push("inventory_count = ?" + (params.length + 1));
+    params.push(input.inventoryCount);
+  }
+  if (input.active !== undefined) {
+    fields.push("active = ?" + (params.length + 1));
+    params.push(input.active ? 1 : 0);
+  }
+  if (input.sortOrder !== undefined) {
+    fields.push("sort_order = ?" + (params.length + 1));
+    params.push(input.sortOrder);
+  }
 
   if (fields.length === 0) return getMenuItem(db, tenantId, itemId);
 

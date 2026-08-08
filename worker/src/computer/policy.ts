@@ -61,8 +61,7 @@ const POLICY_RULES: PolicyRule[] = [
   {
     name: "block-policy-modification",
     matches: (ctx) =>
-      ctx.action === "exec" &&
-      /policy|permission|auth|credential|secret/i.test(ctx.path),
+      ctx.action === "exec" && /policy|permission|auth|credential|secret/i.test(ctx.path),
     decision: "BLOCKED",
     reason: "Modification of security policy is prohibited.",
   },
@@ -70,36 +69,27 @@ const POLICY_RULES: PolicyRule[] = [
   // ---- REQUIRES APPROVAL: Publishing/external actions ----
   {
     name: "approve-publish",
-    matches: (ctx) =>
-      ctx.action === "publish" ||
-      ctx.action === "deploy" ||
-      ctx.action === "push",
+    matches: (ctx) => ctx.action === "publish" || ctx.action === "deploy" || ctx.action === "push",
     decision: "REQUIRES_APPROVAL",
     reason: "Publishing and deployment actions require owner approval.",
   },
   {
     name: "approve-external-comms",
     matches: (ctx) =>
-      ctx.action === "send_email" ||
-      ctx.action === "send_bulk" ||
-      ctx.action === "marketing",
+      ctx.action === "send_email" || ctx.action === "send_bulk" || ctx.action === "marketing",
     decision: "REQUIRES_APPROVAL",
     reason: "External communications require owner approval.",
   },
   {
     name: "approve-financial",
     matches: (ctx) =>
-      ctx.action === "purchase" ||
-      ctx.action === "refund" ||
-      ctx.action === "financial",
+      ctx.action === "purchase" || ctx.action === "refund" || ctx.action === "financial",
     decision: "REQUIRES_APPROVAL",
     reason: "Financial actions require owner approval.",
   },
   {
     name: "approve-delete",
-    matches: (ctx) =>
-      ctx.action === "delete" &&
-      /report|document|campaign/i.test(ctx.path),
+    matches: (ctx) => ctx.action === "delete" && /report|document|campaign/i.test(ctx.path),
     decision: "REQUIRES_APPROVAL",
     reason: "Deleting significant data requires owner approval.",
   },
@@ -127,9 +117,7 @@ const POLICY_RULES: PolicyRule[] = [
   },
   {
     name: "auto-write-documents",
-    matches: (ctx) =>
-      ctx.action === "write" &&
-      ctx.path.includes("/documents/"),
+    matches: (ctx) => ctx.action === "write" && ctx.path.includes("/documents/"),
     decision: "AUTO_APPROVED",
     reason: "Writing to documents directory is permitted.",
   },

@@ -4,10 +4,7 @@
 import type { Env } from "../env.js";
 import { resolveAuth } from "../auth/middleware.js";
 
-export async function handleTallaChat(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+export async function handleTallaChat(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
@@ -77,9 +74,6 @@ export async function handleTallaChat(
     });
   } catch (err) {
     console.error("[talla-chat] Error:", err);
-    return Response.json(
-      { error: "Failed to process message" },
-      { status: 500 },
-    );
+    return Response.json({ error: "Failed to process message" }, { status: 500 });
   }
 }

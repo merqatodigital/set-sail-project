@@ -186,7 +186,10 @@ export async function listGuestRequests(
     paramIndex++;
   }
 
-  const { results } = await db.prepare(query).bind(...params).all<GuestRequestRow>();
+  const { results } = await db
+    .prepare(query)
+    .bind(...params)
+    .all<GuestRequestRow>();
   return results.map(rowToRequest);
 }
 
@@ -199,9 +202,7 @@ export async function getGuestRequest(
   requestId: string,
 ): Promise<GuestRequest | null> {
   const row = await db
-    .prepare(
-      "SELECT * FROM guest_requests WHERE tenant_id = ?1 AND id = ?2",
-    )
+    .prepare("SELECT * FROM guest_requests WHERE tenant_id = ?1 AND id = ?2")
     .bind(tenantId, requestId)
     .first<GuestRequestRow>();
   return row ? rowToRequest(row) : null;

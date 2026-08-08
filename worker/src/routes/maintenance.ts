@@ -11,7 +11,10 @@ import {
   updateMaintenanceRequestStatus,
   deleteMaintenanceRequest,
 } from "../db/repos/maintenanceRepo.js";
-import { CreateMaintenanceRequestSchema, UpdateMaintenanceStatusSchema } from "../schemas/phase4.js";
+import {
+  CreateMaintenanceRequestSchema,
+  UpdateMaintenanceStatusSchema,
+} from "../schemas/phase4.js";
 
 export async function handleMaintenance(
   request: Request,
@@ -23,9 +26,15 @@ export async function handleMaintenance(
 
   try {
     const authErr = requireAuth(auth);
-    if (authErr) { logRequest(ctx, 401); return authErr; }
+    if (authErr) {
+      logRequest(ctx, 401);
+      return authErr;
+    }
     const tenantErr = requireTenant(auth);
-    if (tenantErr) { logRequest(ctx, 403); return tenantErr; }
+    if (tenantErr) {
+      logRequest(ctx, 403);
+      return tenantErr;
+    }
 
     // POST /api/maintenance — create request
     if (path === "/api/maintenance" && request.method === "POST") {
@@ -33,7 +42,10 @@ export async function handleMaintenance(
       const parsed = CreateMaintenanceRequestSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const request_ = await createMaintenanceRequest(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -59,7 +71,10 @@ export async function handleMaintenance(
     const singleMatch = path.match(/^\/api\/maintenance\/([^/]+)$/);
     if (singleMatch && request.method === "GET") {
       const request_ = await getMaintenanceRequest(env.DB, auth.tenantId!, singleMatch[1]);
-      if (!request_) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      if (!request_) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ request: request_ });
     }
@@ -71,11 +86,22 @@ export async function handleMaintenance(
       const parsed = UpdateMaintenanceStatusSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       try {
-        const request_ = await updateMaintenanceRequestStatus(env.DB, auth.tenantId!, statusMatch[1], parsed.data.status);
-        if (!request_) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+        const request_ = await updateMaintenanceRequestStatus(
+          env.DB,
+          auth.tenantId!,
+          statusMatch[1],
+          parsed.data.status,
+        );
+        if (!request_) {
+          logRequest(ctx, 404);
+          return Response.json({ error: "Not found" }, { status: 404 });
+        }
         logRequest(ctx, 200);
         return Response.json({ request: request_ });
       } catch (e) {

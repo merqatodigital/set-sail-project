@@ -25,9 +25,15 @@ export async function handleTallaOps(
 
   try {
     const authErr = requireAuth(auth);
-    if (authErr) { logRequest(ctx, 401); return authErr; }
+    if (authErr) {
+      logRequest(ctx, 401);
+      return authErr;
+    }
     const tenantErr = requireTenant(auth);
-    if (tenantErr) { logRequest(ctx, 403); return tenantErr; }
+    if (tenantErr) {
+      logRequest(ctx, 403);
+      return tenantErr;
+    }
 
     // ---- Tasks ----
 
@@ -36,7 +42,10 @@ export async function handleTallaOps(
       const parsed = CreateTalaTaskSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const task = await tallaOps.createTask(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -58,10 +67,21 @@ export async function handleTallaOps(
       const parsed = UpdateTalaTaskStatusSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
-      const task = await tallaOps.updateTaskStatus(env.DB, auth.tenantId!, taskStatusMatch[1], parsed.data.status);
-      if (!task) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      const task = await tallaOps.updateTaskStatus(
+        env.DB,
+        auth.tenantId!,
+        taskStatusMatch[1],
+        parsed.data.status,
+      );
+      if (!task) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ task });
     }
@@ -73,7 +93,10 @@ export async function handleTallaOps(
       const parsed = CreateTalaLeadSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const lead = await tallaOps.createLead(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -99,7 +122,10 @@ export async function handleTallaOps(
       const parsed = CreateTalaGoalSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const goal = await tallaOps.createGoal(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -120,10 +146,21 @@ export async function handleTallaOps(
       const parsed = UpdateTalaGoalStatusSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
-      const goal = await tallaOps.updateGoalStatus(env.DB, auth.tenantId!, goalStatusMatch[1], parsed.data.status);
-      if (!goal) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      const goal = await tallaOps.updateGoalStatus(
+        env.DB,
+        auth.tenantId!,
+        goalStatusMatch[1],
+        parsed.data.status,
+      );
+      if (!goal) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ goal });
     }
@@ -135,7 +172,10 @@ export async function handleTallaOps(
       const parsed = CreateTalaBriefingSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const briefing = await tallaOps.createBriefing(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);
@@ -154,8 +194,15 @@ export async function handleTallaOps(
 
     const briefingSentMatch = path.match(/^\/api\/talla\/briefings\/([^/]+)\/sent$/);
     if (briefingSentMatch && request.method === "PATCH") {
-      const briefing = await tallaOps.markBriefingWhatsappSent(env.DB, auth.tenantId!, briefingSentMatch[1]);
-      if (!briefing) { logRequest(ctx, 404); return Response.json({ error: "Not found" }, { status: 404 }); }
+      const briefing = await tallaOps.markBriefingWhatsappSent(
+        env.DB,
+        auth.tenantId!,
+        briefingSentMatch[1],
+      );
+      if (!briefing) {
+        logRequest(ctx, 404);
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
       logRequest(ctx, 200);
       return Response.json({ briefing });
     }
@@ -167,7 +214,10 @@ export async function handleTallaOps(
       const parsed = CreateTalaWinSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
       const win = await tallaOps.createWin(env.DB, auth.tenantId!, parsed.data);
       logRequest(ctx, 201);

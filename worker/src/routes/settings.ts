@@ -23,9 +23,15 @@ export async function handlePropertySettings(
 
   try {
     const authErr = requireAuth(auth);
-    if (authErr) { logRequest(ctx, 401); return authErr; }
+    if (authErr) {
+      logRequest(ctx, 401);
+      return authErr;
+    }
     const tenantErr = requireTenant(auth);
-    if (tenantErr) { logRequest(ctx, 403); return tenantErr; }
+    if (tenantErr) {
+      logRequest(ctx, 403);
+      return tenantErr;
+    }
 
     // GET /api/settings — all settings
     if (path === "/api/settings" && request.method === "GET") {
@@ -46,16 +52,28 @@ export async function handlePropertySettings(
     // PUT /api/settings — upsert single setting
     if (path === "/api/settings" && request.method === "PUT") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
       const body = await request.json();
       const parsed = UpsertSettingSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
 
-      const setting = await upsertSetting(env.DB, auth.tenantId!, parsed.data.category, parsed.data.key, parsed.data.value);
+      const setting = await upsertSetting(
+        env.DB,
+        auth.tenantId!,
+        parsed.data.category,
+        parsed.data.key,
+        parsed.data.value,
+      );
       logRequest(ctx, 200);
       return Response.json({ setting });
     }
@@ -63,13 +81,19 @@ export async function handlePropertySettings(
     // PUT /api/settings/batch — upsert multiple settings
     if (path === "/api/settings/batch" && request.method === "PUT") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
       const body = await request.json();
       const parsed = UpsertSettingsBatchSchema.safeParse(body);
       if (!parsed.success) {
         logRequest(ctx, 400);
-        return Response.json({ error: "Validation failed", details: parsed.error.issues }, { status: 400 });
+        return Response.json(
+          { error: "Validation failed", details: parsed.error.issues },
+          { status: 400 },
+        );
       }
 
       await upsertSettingsBatch(env.DB, auth.tenantId!, parsed.data.settings);
@@ -81,7 +105,10 @@ export async function handlePropertySettings(
     const keyMatch = path.match(/^\/api\/settings\/([^/]+)$/);
     if (keyMatch && request.method === "DELETE") {
       const adminErr = requireAdmin(auth);
-      if (adminErr) { logRequest(ctx, 403); return adminErr; }
+      if (adminErr) {
+        logRequest(ctx, 403);
+        return adminErr;
+      }
 
       const key = keyMatch[1];
       await deleteSetting(env.DB, auth.tenantId!, key);

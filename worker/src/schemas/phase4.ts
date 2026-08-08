@@ -19,12 +19,18 @@ export const UpsertSettingsBatchSchema = z.object({
 export const CreateHousekeepingTaskSchema = z.object({
   room: z.string().min(1, "Room is required").max(200),
   area: z.string().max(200).optional().default(""),
-  taskType: z.enum(["cleaning", "laundry", "maintenance", "inspection", "other"], {
-    message: "Invalid task type",
-  }).optional().default("cleaning"),
-  priority: z.enum(["low", "normal", "high", "urgent"], {
-    message: "Invalid priority",
-  }).optional().default("normal"),
+  taskType: z
+    .enum(["cleaning", "laundry", "maintenance", "inspection", "other"], {
+      message: "Invalid task type",
+    })
+    .optional()
+    .default("cleaning"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"], {
+      message: "Invalid priority",
+    })
+    .optional()
+    .default("normal"),
   assignedTo: z.string().max(200).optional().default(""),
   notes: z.string().max(2000).optional().default(""),
 });
@@ -41,12 +47,18 @@ export const CreateMaintenanceRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().max(2000).optional().default(""),
   location: z.string().max(200).optional().default(""),
-  issueType: z.enum(["plumbing", "electrical", "structural", "furniture", "appliance", "other"], {
-    message: "Invalid issue type",
-  }).optional().default("other"),
-  priority: z.enum(["low", "normal", "high", "urgent"], {
-    message: "Invalid priority",
-  }).optional().default("normal"),
+  issueType: z
+    .enum(["plumbing", "electrical", "structural", "furniture", "appliance", "other"], {
+      message: "Invalid issue type",
+    })
+    .optional()
+    .default("other"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"], {
+      message: "Invalid priority",
+    })
+    .optional()
+    .default("normal"),
   assignedTo: z.string().max(200).optional().default(""),
   notes: z.string().max(2000).optional().default(""),
 });
@@ -62,9 +74,12 @@ export const UpdateMaintenanceStatusSchema = z.object({
 export const CreateMenuItemSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
   description: z.string().max(2000).optional().default(""),
-  category: z.enum(["breakfast", "lunch", "dinner", "drinks", "snacks", "dessert"], {
-    message: "Invalid category",
-  }).optional().default("lunch"),
+  category: z
+    .enum(["breakfast", "lunch", "dinner", "drinks", "snacks", "dessert"], {
+      message: "Invalid category",
+    })
+    .optional()
+    .default("lunch"),
   price: z.number().min(0, "Price must be non-negative").max(10_000_000),
   foodCost: z.number().min(0).max(10_000_000).optional().default(0),
   inventoryCount: z.number().int().min(0).max(100_000).optional().default(0),
@@ -89,11 +104,16 @@ export const CreateFoodOrderSchema = z.object({
   guestName: z.string().min(1, "Guest name is required").max(200),
   guestPhone: z.string().max(50).optional().default(""),
   notes: z.string().max(2000).optional().default(""),
-  items: z.array(z.object({
-    menuItemId: z.string().min(1),
-    quantity: z.number().int().min(1, "Quantity must be at least 1").max(100),
-    specialInstructions: z.string().max(500).optional(),
-  })).min(1, "At least one item required").max(50),
+  items: z
+    .array(
+      z.object({
+        menuItemId: z.string().min(1),
+        quantity: z.number().int().min(1, "Quantity must be at least 1").max(100),
+        specialInstructions: z.string().max(500).optional(),
+      }),
+    )
+    .min(1, "At least one item required")
+    .max(50),
 });
 
 export const UpdateOrderStatusSchema = z.object({
@@ -107,9 +127,12 @@ export const UpdateOrderStatusSchema = z.object({
 export const UpsertInventoryItemSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1, "Name is required").max(200),
-  category: z.enum(["linens", "towels", "bathroom", "food", "gas", "fuel", "cleaning", "other"], {
-    message: "Invalid category",
-  }).optional().default("other"),
+  category: z
+    .enum(["linens", "towels", "bathroom", "food", "gas", "fuel", "cleaning", "other"], {
+      message: "Invalid category",
+    })
+    .optional()
+    .default("other"),
   unit: z.string().max(50).optional().default("pcs"),
   quantity: z.number().min(0).max(100_000),
   reorderThreshold: z.number().min(0).max(100_000).optional().default(0),
@@ -126,9 +149,12 @@ export const AdjustInventorySchema = z.object({
 export const CreateTalaTaskSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   due: z.string().max(100).optional().default(""),
-  category: z.enum(["general", "booking", "tour", "staff", "maintenance"], {
-    message: "Invalid category",
-  }).optional().default("general"),
+  category: z
+    .enum(["general", "booking", "tour", "staff", "maintenance"], {
+      message: "Invalid category",
+    })
+    .optional()
+    .default("general"),
 });
 
 export const UpdateTalaTaskStatusSchema = z.object({

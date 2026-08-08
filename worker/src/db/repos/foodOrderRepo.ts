@@ -170,7 +170,16 @@ export async function createFoodOrder(
       `INSERT INTO food_orders (id, tenant_id, reference, guest_name, guest_phone, total, total_cost, status, notes)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', ?8)`,
     )
-    .bind(orderId, tenantId, reference, input.guestName, input.guestPhone ?? "", total, totalCost, input.notes ?? "")
+    .bind(
+      orderId,
+      tenantId,
+      reference,
+      input.guestName,
+      input.guestPhone ?? "",
+      total,
+      totalCost,
+      input.notes ?? "",
+    )
     .run();
 
   // Create order items
@@ -179,7 +188,16 @@ export async function createFoodOrder(
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   );
   const batches = orderItems.map((item) =>
-    stmt.bind(item.id, tenantId, orderId, item.menuItemId, item.name, item.quantity, item.price, item.foodCost),
+    stmt.bind(
+      item.id,
+      tenantId,
+      orderId,
+      item.menuItemId,
+      item.name,
+      item.quantity,
+      item.price,
+      item.foodCost,
+    ),
   );
   await db.batch(batches);
 
@@ -226,7 +244,10 @@ export async function listOrders(
     params.push(filters.limit);
   }
 
-  const result = await db.prepare(query).bind(...params).all<FoodOrderRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<FoodOrderRow>();
   const orders: FoodOrder[] = [];
 
   for (const row of result.results ?? []) {

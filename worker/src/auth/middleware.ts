@@ -24,10 +24,7 @@ const UNAUTHENTICATED: AuthContext = {
  * Returns UNAUTHENTICATED if token is missing or invalid.
  * Never throws — callers should handle the unauthenticated case.
  */
-export async function resolveAuth(
-  request: Request,
-  env: Env,
-): Promise<AuthContext> {
+export async function resolveAuth(request: Request, env: Env): Promise<AuthContext> {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return UNAUTHENTICATED;
@@ -100,14 +97,9 @@ export async function resolveAuth(
  * Middleware that enforces authentication.
  * Returns Response if request should be rejected, null if ok.
  */
-export function requireAuth(
-  auth: AuthContext,
-): Response | null {
+export function requireAuth(auth: AuthContext): Response | null {
   if (!auth.authenticated) {
-    return Response.json(
-      { error: "Authentication required" },
-      { status: 401 },
-    );
+    return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   return null;
 }
@@ -116,14 +108,9 @@ export function requireAuth(
  * Middleware that enforces tenant membership.
  * Returns Response if request should be rejected, null if ok.
  */
-export function requireTenant(
-  auth: AuthContext,
-): Response | null {
+export function requireTenant(auth: AuthContext): Response | null {
   if (!auth.tenantId) {
-    return Response.json(
-      { error: "No tenant access" },
-      { status: 403 },
-    );
+    return Response.json({ error: "No tenant access" }, { status: 403 });
   }
   return null;
 }
@@ -132,26 +119,15 @@ export function requireTenant(
  * Middleware that enforces admin or owner role.
  * Returns Response if request should be rejected, null if ok.
  */
-export function requireAdmin(
-  auth: AuthContext,
-): Response | null {
+export function requireAdmin(auth: AuthContext): Response | null {
   if (!auth.authenticated) {
-    return Response.json(
-      { error: "Authentication required" },
-      { status: 401 },
-    );
+    return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   if (!auth.tenantId) {
-    return Response.json(
-      { error: "No tenant access" },
-      { status: 403 },
-    );
+    return Response.json({ error: "No tenant access" }, { status: 403 });
   }
   if (auth.role !== "owner" && auth.role !== "admin") {
-    return Response.json(
-      { error: "Admin access required" },
-      { status: 403 },
-    );
+    return Response.json({ error: "Admin access required" }, { status: 403 });
   }
   return null;
 }

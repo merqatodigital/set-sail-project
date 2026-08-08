@@ -42,6 +42,7 @@
     "enabled": true
   },
   "vars": {
-    "TALLA_COMPUTER_ENABLED": "true"
+    "TALLA_COMPUTER_ENABLED": "true",
+    "ENVIRONMENT": "development"
   }
 }

@@ -31,11 +31,7 @@ export { DailyResortBriefingWorkflow } from "./workflows/DailyResortBriefingWork
 // ---- Worker fetch handler ----
 
 export default {
-  async fetch(
-    request: Request,
-    env: Env,
-    _ctx: ExecutionContext,
-  ): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -62,32 +58,38 @@ export default {
 
     // Health check (no auth needed)
     if (path === "/" || path === "/api/health") {
-      return Response.json({
-        service: "talla-worker",
-        status: "running",
-        timestamp: new Date().toISOString(),
-        capabilities: {
-          agent: true,
-          d1: true,
-          computer: env.TALLA_COMPUTER_ENABLED === "true" ? "enabled" : "disabled",
-          workflows: true,
+      return Response.json(
+        {
+          service: "talla-worker",
+          status: "running",
+          timestamp: new Date().toISOString(),
+          capabilities: {
+            agent: true,
+            d1: true,
+            computer: env.TALLA_COMPUTER_ENABLED === "true" ? "enabled" : "disabled",
+            workflows: true,
+          },
+          debug: {
+            tallaComputerEnabled: env.TALLA_COMPUTER_ENABLED,
+            supabaseUrl: env.SUPABASE_URL ? "set" : "not set",
+          },
         },
-        debug: {
-          tallaComputerEnabled: env.TALLA_COMPUTER_ENABLED,
-          supabaseUrl: env.SUPABASE_URL ? "set" : "not set",
-        },
-      }, { headers: corsHeaders });
+        { headers: corsHeaders },
+      );
     }
 
     // Debug: test if requests reach the fetch handler
     if (path === "/api/debug/routes") {
-      return Response.json({
-        path,
-        method: request.method,
-        hasAuth: !!request.headers.get("Authorization"),
-        hasDevTenant: !!request.headers.get("X-Dev-Tenant"),
-        timestamp: new Date().toISOString(),
-      }, { headers: corsHeaders });
+      return Response.json(
+        {
+          path,
+          method: request.method,
+          hasAuth: !!request.headers.get("Authorization"),
+          hasDevTenant: !!request.headers.get("X-Dev-Tenant"),
+          timestamp: new Date().toISOString(),
+        },
+        { headers: corsHeaders },
+      );
     }
 
     // Resolve authentication (applied to all API routes)

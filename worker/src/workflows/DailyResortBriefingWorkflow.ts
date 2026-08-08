@@ -60,8 +60,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       // Step 1: Load tenant context and validate
       await step.do("load-tenant-context", async () => {
         const tenant = await this.env.DB.prepare(
-          "SELECT tenant_id FROM tenant_members WHERE tenant_id = ? LIMIT 1"
-        ).bind(tenantId).first();
+          "SELECT tenant_id FROM tenant_members WHERE tenant_id = ? LIMIT 1",
+        )
+          .bind(tenantId)
+          .first();
 
         if (!tenant) {
           throw new Error(`Tenant ${tenantId} not found in D1`);
@@ -77,8 +79,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       guestRequests = await step.do("query-guest-requests", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM guest_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC"
-          ).bind(tenantId, todayStart, todayEnd).all();
+            "SELECT * FROM guest_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
+          )
+            .bind(tenantId, todayStart, todayEnd)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query guest requests: ${err}`);
@@ -89,8 +93,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       housekeeping = await step.do("query-housekeeping", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC"
-          ).bind(tenantId, todayStart, todayEnd).all();
+            "SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
+          )
+            .bind(tenantId, todayStart, todayEnd)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query housekeeping: ${err}`);
@@ -101,8 +107,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       maintenance = await step.do("query-maintenance", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM maintenance_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC"
-          ).bind(tenantId, todayStart, todayEnd).all();
+            "SELECT * FROM maintenance_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
+          )
+            .bind(tenantId, todayStart, todayEnd)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query maintenance: ${err}`);
@@ -113,8 +121,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       foodOrders = await step.do("query-food-orders", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM food_orders WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC"
-          ).bind(tenantId, todayStart, todayEnd).all();
+            "SELECT * FROM food_orders WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
+          )
+            .bind(tenantId, todayStart, todayEnd)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query food orders: ${err}`);
@@ -125,8 +135,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       inventoryAlerts = await step.do("query-inventory-alerts", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold"
-          ).bind(tenantId).all();
+            "SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold",
+          )
+            .bind(tenantId)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query inventory: ${err}`);
@@ -137,8 +149,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       tours = await step.do("query-tours", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT name, description, price, duration FROM tours WHERE tenant_id = ? AND active = 1"
-          ).bind(tenantId).all();
+            "SELECT name, description, price, duration FROM tours WHERE tenant_id = ? AND active = 1",
+          )
+            .bind(tenantId)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query tours: ${err}`);
@@ -149,8 +163,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       tallaTasks = await step.do("query-talla-tasks", async () => {
         try {
           const results = await this.env.DB.prepare(
-            "SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC"
-          ).bind(tenantId).all();
+            "SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC",
+          )
+            .bind(tenantId)
+            .all();
           return (results.results || []) as unknown as D1Row[];
         } catch (err) {
           console.error(`[Workflow] Failed to query talla tasks: ${err}`);
@@ -161,9 +177,16 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       // Step 3: Generate briefing content (deterministic from D1 data)
       briefingContent = await step.do("generate-briefing", async () => {
         return this.generateBriefingContent(
-          tenantId, date, timezone,
-          guestRequests, housekeeping, maintenance,
-          foodOrders, inventoryAlerts, tours, tallaTasks,
+          tenantId,
+          date,
+          timezone,
+          guestRequests,
+          housekeeping,
+          maintenance,
+          foodOrders,
+          inventoryAlerts,
+          tours,
+          tallaTasks,
         );
       });
 
@@ -175,8 +198,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
           `INSERT INTO workflow_artifacts (tenant_id, workflow_type, artifact_type, artifact_path, content, content_length)
            VALUES (?, 'daily-briefing', 'morning_brief', ?, ?, ?)
            ON CONFLICT(tenant_id, workflow_type, artifact_path)
-           DO UPDATE SET content = excluded.content, content_length = excluded.content_length, created_at = datetime('now')`
-        ).bind(tenantId, relativePath, briefingContent, briefingContent.length).run();
+           DO UPDATE SET content = excluded.content, content_length = excluded.content_length, created_at = datetime('now')`,
+        )
+          .bind(tenantId, relativePath, briefingContent, briefingContent.length)
+          .run();
 
         return {
           relativePath,
@@ -217,8 +242,10 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
       const verification = await step.do("verify-artifact", async () => {
         const row = await this.env.DB.prepare(
           `SELECT content, content_length FROM workflow_artifacts
-           WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`
-        ).bind(tenantId, relativePath).first<{ content: string; content_length: number }>();
+           WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`,
+        )
+          .bind(tenantId, relativePath)
+          .first<{ content: string; content_length: number }>();
 
         if (!row) {
           throw new Error(`Artifact not found in D1: ${relativePath}`);
@@ -308,7 +335,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     const pendingRequests = guestRequests.filter((r) => r.status === "pending");
     if (pendingRequests.length > 0) {
       for (const req of pendingRequests) {
-        sections.push(`- [${req.status}] ${req.type || "request"}: ${req.description || "No description"}`);
+        sections.push(
+          `- [${req.status}] ${req.type || "request"}: ${req.description || "No description"}`,
+        );
       }
     } else {
       sections.push("No pending guest requests.");
@@ -320,7 +349,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     const pendingHousekeeping = housekeeping.filter((t) => t.status !== "completed");
     if (pendingHousekeeping.length > 0) {
       for (const task of pendingHousekeeping) {
-        sections.push(`- [${task.status}] Room ${task.roomNumber || "?"}: ${task.taskType || task.type || "task"}`);
+        sections.push(
+          `- [${task.status}] Room ${task.roomNumber || "?"}: ${task.taskType || task.type || "task"}`,
+        );
       }
     } else {
       sections.push("All housekeeping tasks completed.");
@@ -332,7 +363,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     const pendingMaintenance = maintenance.filter((m) => m.status !== "completed");
     if (pendingMaintenance.length > 0) {
       for (const req of pendingMaintenance) {
-        sections.push(`- [${req.status}] ${req.priority || "normal"}: ${req.description || "No description"}`);
+        sections.push(
+          `- [${req.status}] ${req.priority || "normal"}: ${req.description || "No description"}`,
+        );
       }
     } else {
       sections.push("No pending maintenance requests.");
@@ -341,10 +374,14 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
 
     // Food / Kitchen
     sections.push("## Food / Kitchen");
-    const pendingOrders = foodOrders.filter((o) => o.status !== "delivered" && o.status !== "completed");
+    const pendingOrders = foodOrders.filter(
+      (o) => o.status !== "delivered" && o.status !== "completed",
+    );
     if (pendingOrders.length > 0) {
       for (const order of pendingOrders) {
-        sections.push(`- [${order.status}] Room ${order.roomNumber || "?"}: ${order.items || "order"}`);
+        sections.push(
+          `- [${order.status}] Room ${order.roomNumber || "?"}: ${order.items || "order"}`,
+        );
       }
     } else {
       sections.push("No pending food orders.");
@@ -355,7 +392,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     sections.push("## Inventory Alerts");
     if (inventoryAlerts.length > 0) {
       for (const alert of inventoryAlerts) {
-        sections.push(`- ${alert.name || "Item"}: ${alert.quantity || 0} remaining (threshold: ${alert.alertThreshold || "?"})`);
+        sections.push(
+          `- ${alert.name || "Item"}: ${alert.quantity || 0} remaining (threshold: ${alert.alertThreshold || "?"})`,
+        );
       }
     } else {
       sections.push("No inventory alerts.");
@@ -366,7 +405,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     sections.push("## Tours / Activities");
     if (tours.length > 0) {
       for (const tour of tours) {
-        sections.push(`- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`);
+        sections.push(
+          `- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`,
+        );
       }
     } else {
       sections.push("No active tours configured.");
@@ -387,13 +428,16 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     // Priority Items
     sections.push("## Priority Items");
     const priorityItems: string[] = [];
-    if (pendingRequests.length > 0) priorityItems.push(`${pendingRequests.length} pending guest requests`);
+    if (pendingRequests.length > 0)
+      priorityItems.push(`${pendingRequests.length} pending guest requests`);
     const urgentMaintenance = maintenance.filter((m) => {
       const priority = m.priority;
       return priority === "urgent" || priority === "high";
     });
-    if (urgentMaintenance.length > 0) priorityItems.push(`${urgentMaintenance.length} urgent/high priority maintenance`);
-    if (inventoryAlerts.length > 0) priorityItems.push(`${inventoryAlerts.length} inventory alerts`);
+    if (urgentMaintenance.length > 0)
+      priorityItems.push(`${urgentMaintenance.length} urgent/high priority maintenance`);
+    if (inventoryAlerts.length > 0)
+      priorityItems.push(`${inventoryAlerts.length} inventory alerts`);
     if (priorityItems.length > 0) {
       for (const item of priorityItems) {
         sections.push(`- ${item}`);
@@ -406,9 +450,12 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     // Recommended Owner Actions
     sections.push("## Recommended Owner Actions");
     const actions: string[] = [];
-    if (pendingRequests.length > 0) actions.push(`Review ${pendingRequests.length} pending guest requests`);
-    if (urgentMaintenance.length > 0) actions.push(`Address ${urgentMaintenance.length} urgent maintenance items`);
-    if (inventoryAlerts.length > 0) actions.push(`Reorder ${inventoryAlerts.length} low inventory items`);
+    if (pendingRequests.length > 0)
+      actions.push(`Review ${pendingRequests.length} pending guest requests`);
+    if (urgentMaintenance.length > 0)
+      actions.push(`Address ${urgentMaintenance.length} urgent maintenance items`);
+    if (inventoryAlerts.length > 0)
+      actions.push(`Reorder ${inventoryAlerts.length} low inventory items`);
     if (actions.length > 0) {
       for (const action of actions) {
         sections.push(`- ${action}`);

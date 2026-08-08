@@ -114,7 +114,10 @@ export async function listHousekeepingTasks(
     params.push(filters.limit);
   }
 
-  const result = await db.prepare(query).bind(...params).all<HousekeepingTaskRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<HousekeepingTaskRow>();
   return (result.results ?? []).map(rowToTask);
 }
 

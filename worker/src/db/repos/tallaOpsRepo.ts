@@ -47,7 +47,10 @@ export async function createTask(
     )
     .bind(id, tenantId, input.title, input.due ?? "", input.category ?? "general")
     .run();
-  const row = await db.prepare("SELECT * FROM tala_tasks WHERE id = ?1").bind(id).first<TalaTaskRow>();
+  const row = await db
+    .prepare("SELECT * FROM tala_tasks WHERE id = ?1")
+    .bind(id)
+    .first<TalaTaskRow>();
   return rowToTask(row!);
 }
 
@@ -58,10 +61,20 @@ export async function listTasks(
 ): Promise<TalaTask[]> {
   let query = "SELECT * FROM tala_tasks WHERE tenant_id = ?1";
   const params: unknown[] = [tenantId];
-  if (filters?.status) { query += " AND status = ?2"; params.push(filters.status); }
-  if (filters?.category) { const i = params.length + 1; query += ` AND category = ?${i}`; params.push(filters.category); }
+  if (filters?.status) {
+    query += " AND status = ?2";
+    params.push(filters.status);
+  }
+  if (filters?.category) {
+    const i = params.length + 1;
+    query += ` AND category = ?${i}`;
+    params.push(filters.category);
+  }
   query += " ORDER BY created_at DESC";
-  const result = await db.prepare(query).bind(...params).all<TalaTaskRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<TalaTaskRow>();
   return (result.results ?? []).map(rowToTask);
 }
 
@@ -130,9 +143,20 @@ export async function createLead(
       `INSERT INTO tala_leads (id, tenant_id, name, contact, note, source, source_url)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
     )
-    .bind(id, tenantId, input.name, input.contact ?? "", input.note ?? "", input.source ?? "talla_chat", input.sourceUrl ?? "")
+    .bind(
+      id,
+      tenantId,
+      input.name,
+      input.contact ?? "",
+      input.note ?? "",
+      input.source ?? "talla_chat",
+      input.sourceUrl ?? "",
+    )
     .run();
-  const row = await db.prepare("SELECT * FROM tala_leads WHERE id = ?1").bind(id).first<TalaLeadRow>();
+  const row = await db
+    .prepare("SELECT * FROM tala_leads WHERE id = ?1")
+    .bind(id)
+    .first<TalaLeadRow>();
   return rowToLead(row!);
 }
 
@@ -143,10 +167,20 @@ export async function listLeads(
 ): Promise<TalaLead[]> {
   let query = "SELECT * FROM tala_leads WHERE tenant_id = ?1";
   const params: unknown[] = [tenantId];
-  if (filters?.source) { query += " AND source = ?2"; params.push(filters.source); }
+  if (filters?.source) {
+    query += " AND source = ?2";
+    params.push(filters.source);
+  }
   query += " ORDER BY created_at DESC";
-  if (filters?.limit) { const i = params.length + 1; query += ` LIMIT ?${i}`; params.push(filters.limit); }
-  const result = await db.prepare(query).bind(...params).all<TalaLeadRow>();
+  if (filters?.limit) {
+    const i = params.length + 1;
+    query += ` LIMIT ?${i}`;
+    params.push(filters.limit);
+  }
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<TalaLeadRow>();
   return (result.results ?? []).map(rowToLead);
 }
 
@@ -197,7 +231,10 @@ export async function createGoal(
     )
     .bind(id, tenantId, input.title, input.description ?? "", input.targetDate ?? "")
     .run();
-  const row = await db.prepare("SELECT * FROM tala_goals WHERE id = ?1").bind(id).first<TalaGoalRow>();
+  const row = await db
+    .prepare("SELECT * FROM tala_goals WHERE id = ?1")
+    .bind(id)
+    .first<TalaGoalRow>();
   return rowToGoal(row!);
 }
 
@@ -208,9 +245,15 @@ export async function listGoals(
 ): Promise<TalaGoal[]> {
   let query = "SELECT * FROM tala_goals WHERE tenant_id = ?1";
   const params: unknown[] = [tenantId];
-  if (filters?.status) { query += " AND status = ?2"; params.push(filters.status); }
+  if (filters?.status) {
+    query += " AND status = ?2";
+    params.push(filters.status);
+  }
   query += " ORDER BY created_at DESC";
-  const result = await db.prepare(query).bind(...params).all<TalaGoalRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<TalaGoalRow>();
   return (result.results ?? []).map(rowToGoal);
 }
 
@@ -278,7 +321,10 @@ export async function createBriefing(
     )
     .bind(id, tenantId, input.briefDate, input.summary, JSON.stringify(input.highlights ?? []))
     .run();
-  const row = await db.prepare("SELECT * FROM tala_briefings WHERE id = ?1").bind(id).first<TalaBriefingRow>();
+  const row = await db
+    .prepare("SELECT * FROM tala_briefings WHERE id = ?1")
+    .bind(id)
+    .first<TalaBriefingRow>();
   return rowToBriefing(row!);
 }
 
@@ -290,8 +336,15 @@ export async function listBriefings(
   let query = "SELECT * FROM tala_briefings WHERE tenant_id = ?1";
   const params: unknown[] = [tenantId];
   query += " ORDER BY generated_at DESC";
-  if (filters?.limit) { const i = params.length + 1; query += ` LIMIT ?${i}`; params.push(filters.limit); }
-  const result = await db.prepare(query).bind(...params).all<TalaBriefingRow>();
+  if (filters?.limit) {
+    const i = params.length + 1;
+    query += ` LIMIT ?${i}`;
+    params.push(filters.limit);
+  }
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<TalaBriefingRow>();
   return (result.results ?? []).map(rowToBriefing);
 }
 
@@ -352,7 +405,10 @@ export async function createWin(
     )
     .bind(id, tenantId, input.briefDate, input.text)
     .run();
-  const row = await db.prepare("SELECT * FROM tala_wins WHERE id = ?1").bind(id).first<TalaWinRow>();
+  const row = await db
+    .prepare("SELECT * FROM tala_wins WHERE id = ?1")
+    .bind(id)
+    .first<TalaWinRow>();
   return rowToWin(row!);
 }
 
@@ -364,7 +420,14 @@ export async function listWins(
   let query = "SELECT * FROM tala_wins WHERE tenant_id = ?1";
   const params: unknown[] = [tenantId];
   query += " ORDER BY created_at DESC";
-  if (filters?.limit) { const i = params.length + 1; query += ` LIMIT ?${i}`; params.push(filters.limit); }
-  const result = await db.prepare(query).bind(...params).all<TalaWinRow>();
+  if (filters?.limit) {
+    const i = params.length + 1;
+    query += ` LIMIT ?${i}`;
+    params.push(filters.limit);
+  }
+  const result = await db
+    .prepare(query)
+    .bind(...params)
+    .all<TalaWinRow>();
   return (result.results ?? []).map(rowToWin);
 }
