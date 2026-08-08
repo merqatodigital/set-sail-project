@@ -602,8 +602,15 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         }
 
         let toolResult;
-        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled && this.computer.ready) {
-          // Computer tool — execute via workspace
+        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled) {
+          // Computer tool — auto-initialize the lazy workspace on first use
+          // (mirrors the direct /computer/* endpoints) so LLM-selected tool
+          // calls actually execute against the workspace, not the D1 registry.
+          try {
+            await this.computer.initialize();
+          } catch (err) {
+            console.error(`[TallaAgent] Computer auto-init failed for ${tc.name}:`, err);
+          }
           toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
         } else {
           // D1 resort tool — execute via tool registry
