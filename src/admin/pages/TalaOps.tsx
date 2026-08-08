@@ -50,7 +50,7 @@ import {
   type TalaTask,
   type TalaWin,
 } from "@/components/tala/talaOps";
-import { fetchLatestBriefing, triggerBriefing } from "@/lib/tallaCloud";
+import { askTalla, fetchLatestBriefing, triggerBriefing } from "@/lib/tallaCloud";
 
 type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins" | "leads";
 
