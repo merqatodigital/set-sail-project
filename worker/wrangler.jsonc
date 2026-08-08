@@ -1,0 +1,31 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "talla-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "talla-resort-db",
+      "database_id": "placeholder-will-be-set-on-first-deploy"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TALLA_AGENT",
+        "class_name": "TallaAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TallaAgent"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
