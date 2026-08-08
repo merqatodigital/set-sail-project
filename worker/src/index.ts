@@ -19,6 +19,7 @@ import { handleInventory } from "./routes/inventory.js";
 import { handleTallaOps } from "./routes/tallaOps.js";
 import { handleTallaChat } from "./routes/chat.js";
 import { handleWorkflows } from "./routes/workflows.js";
+import { handleComputer } from "./routes/computer.js";
 import type { Env } from "./env.js";
 
 // Re-export TallaAgent for wrangler discovery
@@ -41,8 +42,10 @@ export default {
     // Route agent requests (WebSocket + HTTP) to the Durable Object
     const agentResponse = await routeAgentRequest(request, env);
     if (agentResponse) {
+      console.log(`[index] routeAgentRequest intercepted: ${path}`);
       return agentResponse;
     }
+    console.log(`[index] routeAgentRequest passed through: ${path}`);
 
     // CORS headers for all API responses
     const corsHeaders = {
@@ -62,7 +65,27 @@ export default {
       return Response.json({
         service: "talla-worker",
         status: "running",
-        phase: 5,
+        timestamp: new Date().toISOString(),
+        capabilities: {
+          agent: true,
+          d1: true,
+          computer: env.TALLA_COMPUTER_ENABLED === "true" ? "enabled" : "disabled",
+          workflows: true,
+        },
+        debug: {
+          tallaComputerEnabled: env.TALLA_COMPUTER_ENABLED,
+          supabaseUrl: env.SUPABASE_URL ? "set" : "not set",
+        },
+      }, { headers: corsHeaders });
+    }
+
+    // Debug: test if requests reach the fetch handler
+    if (path === "/api/debug/routes") {
+      return Response.json({
+        path,
+        method: request.method,
+        hasAuth: !!request.headers.get("Authorization"),
+        hasDevTenant: !!request.headers.get("X-Dev-Tenant"),
         timestamp: new Date().toISOString(),
       }, { headers: corsHeaders });
     }
@@ -89,6 +112,10 @@ export default {
       response = await handleInventory(request, env, auth, path);
     } else if (path.startsWith("/api/workflows")) {
       response = await handleWorkflows(request, env, auth, path);
+    } else if (path.startsWith("/api/computer")) {
+      console.log(`[index] Routing to computer: ${path}, method: ${request.method}`);
+      console.log(`[index] Auth: tenantId=${auth.tenantId}, role=${auth.role}`);
+      response = await handleComputer(request, env, auth, path);
     } else if (path.startsWith("/api/talla")) {
       // Chat endpoint goes to DO, other talla ops to routes
       if (path === "/api/talla/chat" && request.method === "POST") {

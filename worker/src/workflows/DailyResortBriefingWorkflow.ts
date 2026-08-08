@@ -9,7 +9,6 @@
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "../env.js";
-import { resolveWorkspacePath, describePath } from "../computer/paths.js";
 
 // Workflow input parameters
 export interface BriefingParams {
@@ -168,30 +167,72 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         );
       });
 
-      // Step 4: Write briefing to Computer workspace
+      // Step 4: Store artifact in D1 (reliable cross-invocation persistence)
+      const relativePath = `briefings/${date}-morning-brief.md`;
       const artifactResult = await step.do("write-artifact", async () => {
-        if (this.env.TALLA_COMPUTER_ENABLED !== "true") {
-          throw new Error("Computer workspace is not enabled");
-        }
-
-        const relativePath = `briefings/${date}-morning-brief.md`;
-        const absolutePath = resolveWorkspacePath(tenantId, relativePath);
+        // Upsert into D1 — reliable, durable, accessible from any Worker invocation
+        await this.env.DB.prepare(
+          `INSERT INTO workflow_artifacts (tenant_id, workflow_type, artifact_type, artifact_path, content, content_length)
+           VALUES (?, 'daily-briefing', 'morning_brief', ?, ?, ?)
+           ON CONFLICT(tenant_id, workflow_type, artifact_path)
+           DO UPDATE SET content = excluded.content, content_length = excluded.content_length, created_at = datetime('now')`
+        ).bind(tenantId, relativePath, briefingContent, briefingContent.length).run();
 
         return {
           relativePath,
-          absolutePath,
-          describePath: describePath(absolutePath),
+          absolutePath: `/talla/${tenantId}/${relativePath}`,
           contentLength: briefingContent.length,
         };
       });
-      artifactPath = artifactResult.describePath;
+      artifactPath = artifactResult.relativePath;
 
-      // Step 5: Verify artifact (content is ready for persistence)
+      // Step 5: Write to Computer workspace (best-effort, for local proof)
+      await step.do("write-computer-workspace", async () => {
+        if (this.env.TALLA_COMPUTER_ENABLED !== "true") return;
+
+        try {
+          const doId = this.env.TALLA_AGENT.idFromName(tenantId);
+          const stub = this.env.TALLA_AGENT.get(doId);
+          await stub.fetch(
+            new Request("https://talla-agent/computer/write", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Tenant-Id": tenantId,
+                "X-User-Role": "owner",
+                "X-User-Id": "workflow",
+              },
+              body: JSON.stringify({
+                path: relativePath,
+                content: briefingContent,
+              }),
+            }),
+          );
+        } catch {
+          // Computer workspace write is best-effort — D1 is the source of truth
+        }
+      });
+
+      // Step 6: Verify artifact — read back from D1
       const verification = await step.do("verify-artifact", async () => {
+        const row = await this.env.DB.prepare(
+          `SELECT content, content_length FROM workflow_artifacts
+           WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`
+        ).bind(tenantId, relativePath).first<{ content: string; content_length: number }>();
+
+        if (!row) {
+          throw new Error(`Artifact not found in D1: ${relativePath}`);
+        }
+
+        const contentMatches = row.content === briefingContent;
+        const sizeMatches = row.content_length === briefingContent.length;
+
         return {
           contentLength: briefingContent.length,
-          ready: true,
-          path: artifactPath,
+          verifiedSize: row.content_length,
+          contentMatches,
+          ready: contentMatches && sizeMatches,
+          path: artifactResult.relativePath,
         };
       });
       artifactVerified = verification.ready;

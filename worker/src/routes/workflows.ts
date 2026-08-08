@@ -9,7 +9,6 @@
 
 import type { Env } from "../env.js";
 import type { AuthContext } from "../auth/context.js";
-import { resolveWorkspacePath } from "../computer/paths.js";
 
 interface WorkflowResponse {
   success: boolean;
@@ -26,12 +25,23 @@ export async function handleWorkflows(
   auth: AuthContext,
   path: string,
 ): Promise<Response> {
-  // Owner/admin only
-  if (auth.role !== "owner" && auth.role !== "admin") {
+  let tenantId = auth.tenantId;
+  let isDevMode = false;
+
+  // Development mode: allow X-Dev-Tenant header when no Authorization header is present
+  if (!tenantId && !request.headers.get("Authorization")) {
+    const devTenant = request.headers.get("X-Dev-Tenant");
+    if (devTenant) {
+      tenantId = devTenant;
+      isDevMode = true;
+    }
+  }
+
+  // Production auth check
+  if (!isDevMode && auth.role !== "owner" && auth.role !== "admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const tenantId = auth.tenantId;
   if (!tenantId) {
     return Response.json({ error: "Tenant ID required" }, { status: 400 });
   }
@@ -215,27 +225,30 @@ async function getBriefingStatus(
 }
 
 /**
- * List briefing artifacts in the Computer workspace.
+ * List briefing artifacts from D1.
  */
 async function listBriefingArtifacts(
   env: Env,
   tenantId: string,
 ): Promise<Response> {
-  // This is a best-effort listing — Computer may not be enabled
-  if (env.TALLA_COMPUTER_ENABLED !== "true") {
+  const today = new Date().toISOString().split("T")[0];
+  const relativePath = `briefings/${today}-morning-brief.md`;
+
+  // Read artifact from D1
+  const row = await env.DB.prepare(
+    `SELECT content, content_length, created_at FROM workflow_artifacts
+     WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`
+  ).bind(tenantId, relativePath).first<{ content: string; content_length: number; created_at: string }>();
+
+  if (!row) {
     return Response.json({
       success: true,
       data: {
         artifacts: [],
-        message: "Computer workspace not enabled",
+        message: "No artifact found for today. Workflow may not have completed yet.",
       },
     } as WorkflowResponse);
   }
-
-  // Return the expected artifact path for today
-  const today = new Date().toISOString().split("T")[0];
-  const relativePath = `briefings/${today}-morning-brief.md`;
-  const absolutePath = resolveWorkspacePath(tenantId, relativePath);
 
   return Response.json({
     success: true,
@@ -244,11 +257,12 @@ async function listBriefingArtifacts(
         {
           date: today,
           relativePath,
-          absolutePath,
           type: "daily_morning_briefing",
+          contentLength: row.content_length,
+          createdAt: row.created_at,
+          contentPreview: row.content.substring(0, 200) + "...",
         },
       ],
-      message: "Artifact paths returned. Use workspaceRead to verify persistence.",
     },
   } as WorkflowResponse);
 }

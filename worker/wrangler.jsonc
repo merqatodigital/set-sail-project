@@ -40,5 +40,8 @@
   ],
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    "TALLA_COMPUTER_ENABLED": "true"
   }
 }

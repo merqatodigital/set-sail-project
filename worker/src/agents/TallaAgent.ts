@@ -86,6 +86,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
   };
 
   async onStart(): Promise<void> {
+    console.log(`[TallaAgent] onStart — env.TALLA_COMPUTER_ENABLED=${this.env.TALLA_COMPUTER_ENABLED}, state.tenantId=${this.state.tenantId}`);
     if (!this.state.initialized) {
       this.setState({
         ...this.state,
@@ -105,11 +106,12 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         this.workspace = new Workspace({
           storage: this.ctx.storage as unknown as DurableObjectStorageLike,
           backends: [backend],
+          waitUntil: this.ctx.waitUntil.bind(this.ctx),
         });
         await this.workspace.ready();
         console.log(`[TallaAgent] Computer workspace initialized for tenant: ${this.state.tenantId}`);
       } catch (err) {
-        console.error("[TallaAgent] Failed to initialize Computer workspace:", err);
+        console.log(`[TallaAgent] Failed to initialize Computer workspace: ${(err as Error).message}`);
         this.workspace = null;
         this.computerEnabled = false;
       }
@@ -185,6 +187,21 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
   async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
+    // Read tenant/role from headers (set by route handler)
+    const headerTenantId = request.headers.get("X-Tenant-Id");
+    const headerRole = request.headers.get("X-User-Role");
+    const headerUserId = request.headers.get("X-User-Id");
+
+    // Update state from headers if provided (for HTTP requests)
+    if (headerTenantId && headerRole) {
+      this.setState({
+        ...this.state,
+        tenantId: headerTenantId,
+        role: headerRole,
+        userId: headerUserId || this.state.userId,
+      });
+    }
+
     // Health check
     if (url.pathname === "/health") {
       return Response.json({
@@ -250,6 +267,112 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       try {
         const proof = await this.runComputerRuntimeProof();
         return Response.json(proof);
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
+    // Direct write endpoint — for persistence testing and workflow artifact storage
+    if (url.pathname === "/computer/write" && request.method === "POST") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled || !this.workspace) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const body = (await request.json()) as { path: string; content: string };
+        if (!body.path || !body.content) {
+          return Response.json({ error: "path and content required" }, { status: 400 });
+        }
+        const absolutePath = resolveWorkspacePath(this.state.tenantId, body.path);
+        await this.workspace!.fs.writeFile(absolutePath, body.content);
+        const stat = await this.workspace!.fs.stat(absolutePath);
+        return Response.json({
+          success: true,
+          path: describePath(absolutePath),
+          bytesWritten: body.content.length,
+          verified: stat.size === body.content.length,
+        });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
+    // Direct read endpoint — for persistence testing and artifact retrieval
+    if (url.pathname === "/computer/read" && request.method === "GET") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled || !this.workspace) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const urlObj = new URL(request.url);
+        const relativePath = urlObj.searchParams.get("path");
+        if (!relativePath) {
+          return Response.json({ error: "path query parameter required" }, { status: 400 });
+        }
+        const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
+        const content = await this.workspace!.fs.readFile(absolutePath, "utf8");
+        const stat = await this.workspace!.fs.stat(absolutePath);
+        return Response.json({
+          success: true,
+          path: describePath(absolutePath),
+          content,
+          size: stat.size,
+        });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
+    // Direct list endpoint — for directory listing
+    if (url.pathname === "/computer/list" && request.method === "GET") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled || !this.workspace) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const urlObj = new URL(request.url);
+        const relativePath = urlObj.searchParams.get("path") || "/";
+        const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
+        const entries = await this.workspace!.fs.readdir(absolutePath);
+        return Response.json({
+          success: true,
+          path: describePath(absolutePath),
+          entries: entries.map((e) => ({ name: e.name, isFile: e.isFile, isDirectory: e.isDirectory })),
+        });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
+    // Direct search endpoint — for grep/search
+    if (url.pathname === "/computer/search" && request.method === "GET") {
+      if (this.state.role !== "owner" && this.state.role !== "admin") {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (!this.computerEnabled || !this.workspace) {
+        return Response.json({ error: "Computer workspace is not available" }, { status: 503 });
+      }
+      try {
+        const urlObj = new URL(request.url);
+        const pattern = urlObj.searchParams.get("pattern");
+        const relativePath = urlObj.searchParams.get("path") || "/";
+        if (!pattern) {
+          return Response.json({ error: "pattern query parameter required" }, { status: 400 });
+        }
+        const absolutePath = resolveWorkspacePath(this.state.tenantId, relativePath);
+        const hits = await this.workspace!.fs.grep(pattern, absolutePath, { ignoreCase: true });
+        return Response.json({
+          success: true,
+          pattern,
+          path: describePath(absolutePath),
+          matches: hits.map((h) => ({ path: h.path, line: h.line, text: h.text })),
+        });
       } catch (err) {
         return Response.json({ error: (err as Error).message }, { status: 500 });
       }
