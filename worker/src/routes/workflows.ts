@@ -59,7 +59,7 @@ export async function handleWorkflows(
 
     // GET /api/workflows/daily-briefing/artifacts — list briefing artifacts
     if (path === "/api/workflows/daily-briefing/artifacts" && request.method === "GET") {
-      return await listBriefingArtifacts(env, tenantId);
+      return await listBriefingArtifacts(env, tenantId, new URL(request.url));
     }
 
     return Response.json({ error: "Not found" }, { status: 404 });
@@ -227,39 +227,42 @@ async function getBriefingStatus(env: Env, tenantId: string): Promise<Response> 
 /**
  * List briefing artifacts from D1.
  */
-async function listBriefingArtifacts(env: Env, tenantId: string): Promise<Response> {
-  const today = new Date().toISOString().split("T")[0];
-  const relativePath = `briefings/${today}-morning-brief.md`;
+async function listBriefingArtifacts(env: Env, tenantId: string, url: URL): Promise<Response> {
+  const full = url.searchParams.get("full") === "1";
 
-  // Read artifact from D1
+  // Latest artifact (any date) — the most recent completed briefing.
   const row = await env.DB.prepare(
-    `SELECT content, content_length, created_at FROM workflow_artifacts
-     WHERE tenant_id = ? AND workflow_type = 'daily-briefing' AND artifact_path = ?`,
+    `SELECT content, content_length, created_at, artifact_path FROM workflow_artifacts
+     WHERE tenant_id = ? AND workflow_type = 'daily-briefing'
+     ORDER BY created_at DESC LIMIT 1`,
   )
-    .bind(tenantId, relativePath)
-    .first<{ content: string; content_length: number; created_at: string }>();
+    .bind(tenantId)
+    .first<{ content: string; content_length: number; created_at: string; artifact_path: string }>();
 
   if (!row) {
     return Response.json({
       success: true,
       data: {
         artifacts: [],
-        message: "No artifact found for today. Workflow may not have completed yet.",
+        message: "No artifact found. Workflow may not have completed yet.",
       },
     } as WorkflowResponse);
   }
+
+  const date = row.artifact_path.replace(/^briefings\//, "").replace(/-morning-brief\.md$/, "");
 
   return Response.json({
     success: true,
     data: {
       artifacts: [
         {
-          date: today,
-          relativePath,
+          date,
+          relativePath: row.artifact_path,
           type: "daily_morning_briefing",
           contentLength: row.content_length,
           createdAt: row.created_at,
-          contentPreview: row.content.substring(0, 200) + "...",
+          content: full ? row.content : undefined,
+          contentPreview: full ? row.content : row.content.substring(0, 200) + "...",
         },
       ],
     },

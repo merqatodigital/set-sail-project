@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bike,
   BedDouble,
@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Package,
   Plus,
+  RefreshCw,
   Send,
   Sparkles,
   Target,
@@ -49,6 +50,7 @@ import {
   type TalaTask,
   type TalaWin,
 } from "@/components/tala/talaOps";
+import { fetchLatestBriefing, triggerBriefing } from "@/lib/tallaCloud";
 
 type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins" | "leads";
 
@@ -77,9 +79,7 @@ export default function TalaOps() {
           { id: "leads", label: "Leads" },
         ]}
       />
-      {tab === "chat" && (
-        <ChatTab tala={tala} cms={data} ops={ops} refreshOps={refreshOps} notify={notify} />
-      )}
+      {tab === "chat" && <ChatTab cms={data} ops={ops} refreshOps={refreshOps} notify={notify} />}
       {tab === "briefing" && <BriefingTab cms={data} ops={ops} notify={notify} />}
       {tab === "goals" && <GoalsTab notify={notify} />}
       {tab === "tasks" && <TasksTab notify={notify} />}
@@ -105,34 +105,51 @@ function operatorPrompt(siteName: string): string {
 }
 
 function ChatTab({
-  tala,
   cms,
   ops,
   refreshOps,
   notify,
 }: {
-  tala: ReturnType<typeof useTalaChat>;
   cms: import("@/types/cms").CmsData;
   ops: OperationsSnapshot;
   refreshOps: () => Promise<void>;
   notify: ReturnType<typeof useToast>["notify"];
 }) {
   const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<
+    { id: string; role: "user" | "assistant"; content: string }[]
+  >([]);
+  const [thinking, setThinking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const siteName = cms.settings.siteName || "Marina Terrace";
-  const modelId = cms.settings.tala.modelId || undefined;
-  const adminKey = cms.settings.tala.apiKey?.trim() || undefined;
 
   const send = useCallback(async () => {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
-    await tala.send(text, operatorPrompt(siteName), {
-      model: modelId,
-      adminApiKey: adminKey,
-      cms,
-      owner: true,
-    });
-  }, [draft, tala, siteName, modelId, adminKey, cms, ops, refreshOps]);
+    setErr(null);
+    setThinking(true);
+    setMessages((m) => [...m, { id: `u-${Date.now()}`, role: "user", content: text }]);
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const result = await askTalla(
+        `${operatorPrompt(siteName)}\n\n${text}`,
+        { role: "owner" },
+        ac.signal,
+      );
+      setMessages((m) => [
+        ...m,
+        { id: `a-${Date.now()}`, role: "assistant", content: result.content ?? "(no reply)" },
+      ]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "TALA didn't respond.");
+    } finally {
+      setThinking(false);
+    }
+  }, [draft, siteName]);
 
   return (
     <Card className="p-6">
@@ -141,13 +158,13 @@ function ChatTab({
         <p className="font-serif text-lg text-[#26221C]">Talk to TALA</p>
       </div>
       <div className="mb-4 max-h-96 space-y-3 overflow-y-auto rounded-lg bg-[#FAF6EF] p-4">
-        {tala.messages.length === 0 && (
+        {messages.length === 0 && (
           <p className="text-sm text-[#26221C]/45">
             Ask TALA for today's rundown, "what needs my attention?", or "summarise this week's
             bookings". She uses the same brain as the guest orb.
           </p>
         )}
-        {tala.messages.map((m) => (
+        {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
@@ -158,7 +175,7 @@ function ChatTab({
             </div>
           </div>
         ))}
-        {tala.thinking && (
+        {thinking && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 rounded-2xl bg-white px-3.5 py-2 text-sm text-[#26221C]/60 shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#C6A15B]" />
@@ -167,7 +184,7 @@ function ChatTab({
           </div>
         )}
       </div>
-      {tala.error && <p className="mb-3 text-xs text-red-500">{tala.error}</p>}
+      {err && <p className="mb-3 text-xs text-red-500">{err}</p>}
       <div className="flex items-end gap-2">
         <Textarea
           value={draft}
@@ -181,7 +198,7 @@ function ChatTab({
           placeholder="Message TALA as the operator…"
           className="min-h-[52px]"
         />
-        <Button onClick={send} disabled={tala.thinking || !draft.trim()}>
+        <Button onClick={send} disabled={thinking || !draft.trim()}>
           <Send className="h-4 w-4" /> Send
         </Button>
       </div>
@@ -211,6 +228,14 @@ function BriefingTab({
   const [weather, setWeather] = useState<WeatherNow | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [yesterdayWins, setYesterdayWins] = useState<TalaWin[]>([]);
+  // Real briefing from the proven DailyResortBriefingWorkflow (Cloudflare/D1).
+  const [cloudBriefing, setCloudBriefing] = useState<{
+    date: string;
+    summary: string;
+    createdAt: string;
+  } | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudError, setCloudError] = useState<string | null>(null);
 
   const live = computeBriefing(ops, cms.homepage.rooms);
 
@@ -219,7 +244,8 @@ function BriefingTab({
   }, []);
   useEffect(() => {
     load();
-  }, [load]);
+    void loadCloudBriefing();
+  }, [load, loadCloudBriefing]);
 
   useEffect(() => {
     setWeatherLoading(true);
@@ -236,27 +262,56 @@ function BriefingTab({
     );
   }, []);
 
-  const generate = useCallback(async () => {
+  const loadCloudBriefing = useCallback(async () => {
+    setCloudLoading(true);
+    setCloudError(null);
+    try {
+      const { artifacts } = await fetchLatestBriefing();
+      const latest = artifacts[0];
+      if (latest) {
+        setCloudBriefing({
+          date: latest.date,
+          summary: latest.content ?? latest.contentPreview,
+          createdAt: latest.createdAt,
+        });
+      } else {
+        setCloudBriefing(null);
+      }
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : "Couldn't load the latest briefing.");
+    } finally {
+      setCloudLoading(false);
+    }
+  }, []);
+
+  // Refresh briefing = trigger the EXISTING DailyResortBriefingWorkflow on the
+  // proven Cloudflare backend (then surface its D1 artifact). Supabase
+  // generate path remains as a fallback if the backend is unreachable.
+  const refreshFromCloud = useCallback(async () => {
     setGenerating(true);
-    // Prefer the server-side SQL function (same logic as the daily cron).
-    let saved = await generateTalaBriefing();
-    // Fallback: if the RPC isn't deployed yet, compute in-browser + insert.
-    if (!saved) {
-      const snap = computeBriefing(ops, cms.homepage.rooms);
-      saved = await addTalaBriefing({
-        brief_date: snap.briefDate,
-        summary: snap.summary,
-        highlights: snap.highlights,
-      });
-    }
-    setGenerating(false);
-    if (saved) {
-      notify("Morning briefing saved.", "success");
+    try {
+      await triggerBriefing();
+      await loadCloudBriefing();
+      notify("Morning briefing refreshed from TALA's automation.", "success");
+    } catch (e) {
+      notify(
+        `Cloud briefing unavailable (${e instanceof Error ? e.message : "error"}) — using the Supabase generator instead.`,
+        "error",
+      );
+      const saved = await generateTalaBriefing();
+      if (!saved) {
+        const snap = computeBriefing(ops, cms.homepage.rooms);
+        await addTalaBriefing({
+          brief_date: snap.briefDate,
+          summary: snap.summary,
+          highlights: snap.highlights,
+        });
+      }
       load();
-    } else {
-      notify("Could not save briefing (Supabase not connected?).", "error");
+    } finally {
+      setGenerating(false);
     }
-  }, [ops, cms.homepage.rooms, notify, load]);
+  }, [ops, cms.homepage.rooms, notify, load, loadCloudBriefing]);
 
   const sendToWhatsApp = useCallback(
     async (b: TalaBriefing) => {
@@ -373,13 +428,13 @@ function BriefingTab({
             <ClipboardList className="h-4 w-4 text-[#C6A15B]" />
             <p className="font-serif text-lg text-[#26221C]">This morning's brief</p>
           </div>
-          <Button onClick={generate} disabled={generating}>
+          <Button onClick={refreshFromCloud} disabled={generating}>
             {generating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Sparkles className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
             )}
-            Generate briefing
+            Refresh from TALA
           </Button>
           {briefings && briefings.length > 0 && (
             <Button variant="outline" onClick={() => sendToWhatsApp(briefings[0])}>
@@ -388,6 +443,30 @@ function BriefingTab({
             </Button>
           )}
         </div>
+        {/* Real briefing produced by TALA's automation (DailyResortBriefingWorkflow
+            on the proven Cloudflare backend). This is the source of truth. */}
+        {cloudLoading ? (
+          <p className="text-sm text-[#26221C]/45">Loading TALA's latest briefing…</p>
+        ) : cloudError ? (
+          <p className="text-sm text-[#26221C]/45">
+            TALA's automation briefing is unavailable right now ({cloudError}).
+          </p>
+        ) : cloudBriefing ? (
+          <div className="mt-4 rounded-lg border border-[#C6A15B]/30 bg-[#FBF7EE] p-4">
+            <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-[#26221C]/45">
+              <Sparkles className="h-3.5 w-3.5 text-[#C6A15B]" />
+              TALA automation · {cloudBriefing.date}
+              <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                Generated {new Date(cloudBriefing.createdAt).toLocaleString()}
+              </span>
+            </p>
+            <p className="text-sm leading-relaxed text-[#26221C]">{cloudBriefing.summary}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-[#26221C]/45">
+            No automation briefing yet. Click "Refresh from TALA" to generate today's rundown.
+          </p>
+        )}
         {briefings && briefings.length > 0 ? (
           <div className="rounded-lg bg-[#FAF6EF] p-4">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[#26221C]/45">

@@ -14,17 +14,23 @@ import {
   Bot,
   MessageCircle,
   Package,
+  CircleCheck,
+  CircleSlash,
+  CircleHelp,
+  Loader2,
 } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { formatPHP } from "../ops/opsUtils";
 import { useOperations } from "../ops/useOperations";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
+import { useTallaStatus } from "@/hooks/useTallaStatus";
 
 export default function Dashboard() {
   const { data } = useCms();
   const { data: ops, loading: opsLoading } = useOperations();
   const brief = computeBriefing(ops, data.homepage.rooms);
+  const { status: tallaStatus, loading: tallaLoading } = useTallaStatus();
 
   const stats = [
     { label: "Pricing Packages", value: data.pricing.length, icon: Tags, to: "/admin/pricing" },
@@ -127,6 +133,41 @@ export default function Dashboard() {
                 {h}
               </span>
             ))}
+          </p>
+        )}
+      </div>
+
+      {/* Real TALA backend status — live from the proven Cloudflare Worker.
+          No hard-coded green lights: every pill is derived from /api/health. */}
+      <div className="mb-8 rounded-2xl border border-[#26221C]/8 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-serif text-lg text-[#26221C]">TALA is online</p>
+          <Link to="/admin/tala/ops" className="text-xs font-medium text-[#C6A15B] hover:underline">
+            Open console →
+          </Link>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <TalaStatusPill
+            label="TALA"
+            state={tallaLoading ? "loading" : (tallaStatus?.tala ?? "unknown")}
+          />
+          <TalaStatusPill
+            label="Computer"
+            state={tallaLoading ? "loading" : (tallaStatus?.computer ?? "unknown")}
+          />
+          <TalaStatusPill
+            label="Automation"
+            state={tallaLoading ? "loading" : (tallaStatus?.automation ?? "unknown")}
+          />
+          <TalaStatusPill
+            label="OpenRouter"
+            state={tallaLoading ? "loading" : (tallaStatus?.model ?? "unknown")}
+          />
+        </div>
+        {tallaStatus && !tallaStatus.reachable && (
+          <p className="mt-3 text-xs text-[#26221C]/45">
+            Could not reach the TALA backend just now — the rest of the dashboard still works from
+            live operations data.
           </p>
         )}
       </div>
@@ -256,5 +297,31 @@ function TalaStat({ value, label, alert }: { value: string; label: string; alert
       <p className={`font-serif text-2xl ${alert ? "text-[#E8B04B]" : "text-white"}`}>{value}</p>
       <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
     </div>
+  );
+}
+
+type PillState = "online" | "ready" | "running" | "connected" | "off" | "unknown" | "loading";
+
+const PILL_META: Record<PillState, { text: string; tone: string; Icon: typeof CircleCheck }> = {
+  online: { text: "Online", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
+  ready: { text: "Ready", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
+  running: { text: "Running", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
+  connected: { text: "Connected", tone: "bg-green-100 text-green-700", Icon: CircleCheck },
+  off: { text: "Off", tone: "bg-slate-100 text-slate-500", Icon: CircleSlash },
+  unknown: { text: "Unknown", tone: "bg-amber-100 text-amber-700", Icon: CircleHelp },
+  loading: { text: "Checking…", tone: "bg-slate-100 text-slate-500", Icon: Loader2 },
+};
+
+function TalaStatusPill({ label, state }: { label: string; state: PillState }) {
+  const meta = PILL_META[state];
+  const Icon = state === "loading" ? Loader2 : meta.Icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${meta.tone}`}
+    >
+      <Icon className={`h-3.5 w-3.5 ${state === "loading" ? "animate-spin" : ""}`} />
+      <span className="text-[#26221C]/55">{label}:</span>
+      {meta.text}
+    </span>
   );
 }
