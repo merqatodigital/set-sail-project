@@ -36,7 +36,6 @@ import {
   BookOpen,
   Brain,
   BarChart3,
-  Network,
   Package,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -70,12 +69,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/payments", label: "Payments", icon: CircleDollarSign },
       { to: "/admin/financial", label: "Financial", icon: BarChart3 },
       { to: "/admin/inventory", label: "Inventory", icon: Package },
-    ],
-  },
-  {
-    title: "Hermes Workforce",
-    items: [
-      { to: "/admin/hermes", label: "AI Command Center", icon: Network },
     ],
   },
   {

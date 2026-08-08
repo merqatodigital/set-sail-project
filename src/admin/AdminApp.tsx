@@ -32,7 +32,6 @@ import RentalsManager from "./pages/RentalsManager";
 import FoodOrdersManager from "./pages/FoodOrdersManager";
 import MessagesManager from "./pages/MessagesManager";
 import FinancialPage from "./pages/FinancialPage";
-import HermesWorkforce from "./pages/HermesWorkforce";
 import InventoryManager from "./pages/InventoryManager";
 
 export default function AdminApp() {
@@ -76,7 +75,6 @@ export default function AdminApp() {
         <Route path="messages" element={<MessagesManager />} />
         <Route path="financial" element={<FinancialPage />} />
         <Route path="inventory" element={<InventoryManager />} />
-        <Route path="hermes" element={<HermesWorkforce />} />
       </Route>
     </Routes>
   );

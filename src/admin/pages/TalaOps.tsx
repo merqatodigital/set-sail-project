@@ -57,7 +57,6 @@ type Tab = "chat" | "briefing" | "goals" | "tasks" | "wins" | "leads";
 export default function TalaOps() {
   const { data } = useCms();
   const { notify } = useToast();
-  const tala = useTalaChat();
   const [tab, setTab] = useState<Tab>("chat");
   const { data: ops, refresh: refreshOps } = useOperations();
 
@@ -203,9 +202,8 @@ function ChatTab({
         </Button>
       </div>
       <p className="mt-2 text-[11px] text-[#26221C]/40">
-        Brain: Admin → TALA model {modelId ? `(${modelId})` : "(free fallback)"}. If chat is
-        blank/erroring, set the model + API key in Admin → TALA, or ensure the tala-chat edge
-        function secret is set.
+        TALA runs on the Cloudflare agentic backend (same TallaAgent as the guest orb). If chat is
+        blank or errors, the backend may be unreachable — check the status on the Dashboard.
       </p>
     </Card>
   );
