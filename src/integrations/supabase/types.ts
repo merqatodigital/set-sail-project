@@ -644,6 +644,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tala_knowledge: {
+        Row: {
+          body: string
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string
+          sort_order: number
+          tags: string
+          topic: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          sort_order?: number
+          tags?: string
+          topic?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          sort_order?: number
+          tags?: string
+          topic?: string
+        }
+        Relationships: []
+      }
       tala_leads: {
         Row: {
           contact: string
