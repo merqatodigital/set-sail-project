@@ -31,10 +31,11 @@ export async function getResortKnowledge(
   resortId: string,
 ): Promise<ResortKnowledgeEntry[]> {
   const baseRaw = env.SUPABASE_URL;
-  // Knowledge read is a scoped, read-only query (resort_id + enabled). The
-  // publishable/anon key is RLS-permitted for SELECT and is sufficient here.
-  // Prefer SUPABASE_ANON_KEY; fall back to the service-role key if anon is unset.
-  const keyRaw = env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+  // Knowledge read is a scoped, read-only query (resort_id + enabled) that runs
+  // only inside the Worker. The anon key has no Data API grant on
+  // public.tala_knowledge (it returns HTTP 401), so prefer the server-side
+  // service-role secret and fall back to anon only if it is unset.
+  const keyRaw = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
   // Secrets are sometimes stored with surrounding quotes (e.g. when set via
   // `wrangler secret put` with a quoted shell value). Strip a single pair of
   // enclosing quotes and trim whitespace so the URL/key parse correctly.
