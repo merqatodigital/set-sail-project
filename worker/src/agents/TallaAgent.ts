@@ -35,7 +35,17 @@ import { evaluateToolApproval } from "./toolApprovalPolicy.js";
 import { insertApproval, getApprovals, getApprovalByWorkflowId, decideApproval } from "../db/repos/approvalsRepo.js";
 import { logEmail } from "../db/repos/emailLogRepo.js";
 import { markEventProcessed } from "../db/repos/eventLogRepo.js";
+import { logBrowser } from "../db/repos/browserLogRepo.js";
+import { inspectPage } from "./tools/browserTools.js";
 import { RESORT_EMAIL_SENDER } from "./tools/emailTools.js";
+
+function safeDomain(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
 
 // Import repos for system prompt context
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
@@ -813,10 +823,38 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     if (ev.eventType === "booking.created") {
       const p = (ev.payload ?? {}) as {
         specialRequests?: string;
-        guestName?: string;
         arrivalNote?: string;
+        guestName?: string;
+        listingUrl?: string;
       };
       const special = (p.specialRequests || p.arrivalNote || "").trim();
+      // Composition: a public listing URL can be verified read-only.
+      if (p.listingUrl) {
+        const startedAt = new Date().toISOString();
+        const bres = await inspectPage(this.env.BROWSER as never, p.listingUrl, {
+          includeLinks: false,
+        });
+        await logBrowser(db, {
+          tenantId,
+          requestedBy: "event:booking.created",
+          trigger: "event:booking.created",
+          url: p.listingUrl,
+          domain: safeDomain(p.listingUrl),
+          action: "inspect",
+          startedAt,
+          completedAt: new Date().toISOString(),
+          success: bres.ok ? 1 : 0,
+          statusCode: bres.statusCode ?? null,
+          error: bres.error ?? null,
+          resultMeta: JSON.stringify({
+            title: bres.title ?? null,
+            status: bres.ok ? "reachable" : "failed",
+            note: bres.ok ? "listing reachable" : bres.error,
+          }),
+        });
+        await markEventProcessed(db, ev.eventId, "processed", `browser inspect ${bres.ok ? "ok" : "fail"}: ${bres.error ?? ""}`);
+        return { action: "browserInspect", status: "processed", detail: bres.ok ? "listing reachable" : (bres.error ?? "failed") };
+      }
       if (special) {
         // External action (email to guest) → approval-gated via existing policy.
         const approval = evaluateToolApproval({ actionName: "sendGuestEmail", role: "owner", tenantId });

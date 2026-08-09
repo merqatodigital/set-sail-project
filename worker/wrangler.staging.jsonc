@@ -50,6 +50,9 @@
       "forwarding_email": "forward@merqato.digital"
     }
   ],
+  "browser": {
+    "binding": "BROWSER"
+  },
   "email_routes": [
     "*@tala.merqato.digital"
   ],

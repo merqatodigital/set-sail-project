@@ -40,6 +40,8 @@ export interface Env {
   EMAIL_SECRET?: string;
   // Webhook signature secret for event ingestion (HMAC-SHA256).
   WEBHOOK_SECRET?: string;
+  // Cloudflare Browser Run binding (Quick Actions: markdown/links/screenshot…).
+  BROWSER?: { quickAction(action: string, options: unknown): Promise<Response> };
   // Secrets (set via `wrangler secret put`)
   OPENROUTER_API_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;

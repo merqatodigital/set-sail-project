@@ -16,6 +16,7 @@ import { getInventoryTool } from "./inventoryTools.js";
 import { getTodayOperationsTool } from "./operationsTools.js";
 import { getResortOperationsTool } from "./operationsSupabaseTool.js";
 import { sendGuestEmailTool } from "./emailTools.js";
+import { browserInspectPageTool, browserReadPageTool } from "./browserTools.js";
 
 // Computer tools (Phase 6)
 import { computerTools } from "../../computer/tools.js";
@@ -47,6 +48,8 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
   if (isOwner) {
     tools.push(getTodayOperationsTool);
     tools.push(getResortOperationsTool);
+    tools.push(browserInspectPageTool);
+    tools.push(browserReadPageTool);
   }
 
   // Computer workspace tools — owner/admin only, when enabled
