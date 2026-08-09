@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
   Bell,
-  Bike,
   Bot,
   CalendarCheck,
   ChefHat,
