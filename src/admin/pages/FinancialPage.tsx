@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calculator } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, ReferenceLine } from "recharts";
 import { useCms } from "@/context/CmsContext";
+import { useOperations } from "../ops/useOperations";
 import { PageHeader } from "../shared/PageHeader";
 import { KpiCard } from "../ops/OpsPrimitives";
 import { formatPHP } from "../ops/opsUtils";
@@ -58,16 +59,20 @@ function calcOccupancyProjection(occupancy: number, dailyLabor: number, monthlyU
 
 export default function FinancialPage() {
   const { data } = useCms();
+  const { data: ops, loading: opsLoading } = useOperations();
   const [period, setPeriod] = useState<Period>("month");
 
   const { start, end } = getPeriodRange(period);
   const daysInPeriod = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) || 30;
 
+  // Authoritative operational data now lives in the Supabase admin-only
+  // tables (see operations_tables migration), not the stale cms_data blob.
   const financial = data.settings.financial;
-  const bookings = data.operations.bookings;
-  const tourBookings = data.operations.tourBookings;
-  const rentals = data.operations.motorbikeRentals;
-  const foodOrders = data.operations.foodOrders;
+  const bookings = ops.bookings;
+  const tourBookings = ops.tourBookings;
+  const rentals = ops.motorbikeRentals;
+  const foodOrders = ops.foodOrders;
+  const payments = ops.payments;
 
   const inRange = <T extends { createdAt: string }>(items: T[]) =>
     items.filter((i) => i.createdAt >= start && i.createdAt <= end);
@@ -77,23 +82,31 @@ export default function FinancialPage() {
   const activeRentals = inRange(rentals).filter((r) => r.status !== "cancelled");
   const activeFoodOrders = inRange(foodOrders).filter((o) => o.status !== "cancelled");
 
-  const revenueAccommodation = activeBookings.reduce((s, b) => s + b.amount, 0);
-  const revenueTours = activeTourBookings.reduce((s, t) => s + t.amount, 0);
-  const revenueRentals = activeRentals.reduce((s, r) => s + r.amount, 0);
-  const revenueFood = activeFoodOrders.reduce((s, o) => s + o.total, 0);
+  const revenueAccommodation = activeBookings.reduce((s, b) => s + (b.amount ?? 0), 0);
+  const revenueTours = activeTourBookings.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const revenueRentals = activeRentals.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const revenueFood = activeFoodOrders.reduce((s, o) => s + (o.total ?? 0), 0);
   const totalRevenue = revenueAccommodation + revenueTours + revenueRentals + revenueFood;
 
-  const costTours = activeTourBookings.reduce((s, t) => s + t.cost, 0);
-  const costFood = activeFoodOrders.reduce((s, o) => s + o.totalCost, 0);
+  // Costs: variable costs from operations + fixed labor/utilities. Actual
+  // cash outflows are also recorded in the payments ledger (direction "out");
+  // that ledger is the authoritative expense record, so include it here.
+  const costTours = activeTourBookings.reduce((s, t) => s + (t.cost ?? 0), 0);
+  const costFood = activeFoodOrders.reduce((s, o) => s + (o.totalCost ?? 0), 0);
+  const paymentsOut = (payments ?? [])
+    .filter((p) => p.direction === "out" && p.date >= start && p.date <= end)
+    .reduce((s, p) => s + (p.amount ?? 0), 0);
   const fixedCosts = calcFixedCosts(financial.dailyLaborCost, financial.monthlyUtilities, daysInPeriod);
-  const totalCosts = fixedCosts + costTours + costFood;
+  const totalCosts = fixedCosts + costTours + costFood + paymentsOut;
 
   const profitAccommodation = revenueAccommodation - (fixedCosts * (revenueAccommodation / (totalRevenue || 1)));
   const profitTours = revenueTours - costTours;
   const profitRentals = revenueRentals;
   const profitFood = revenueFood - costFood;
   const netProfit = totalRevenue - totalCosts;
-  const profitMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
+  const profitMargin = totalRevenue > 0 && Number.isFinite(netProfit)
+    ? Math.round((netProfit / totalRevenue) * 100)
+    : 0;
 
   const monthlyData = useMemo(() => {
     const months: { month: string; revenue: number; costs: number; profit: number }[] = [];
@@ -206,10 +219,17 @@ export default function FinancialPage() {
         <div className="rounded-xl bg-white p-6 shadow-sm">
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#26221C]/60">Current Occupancy</h3>
           <p className="font-serif text-4xl font-light">
-            {Math.round((activeBookings.reduce((s, b) => {
-              const nights = Math.ceil((new Date(b.checkOut).getTime() - new Date(b.checkIn).getTime()) / 86400000) || 1;
-              return s + nights;
-            }, 0) / TOTAL_ROOM_NIGHTS) * 100) || 0}%
+            {Math.round(
+              (activeBookings.reduce((s, b) => {
+                const nights =
+                  Math.ceil(
+                    (new Date(b.checkOut).getTime() - new Date(b.checkIn).getTime()) / 86400000,
+                  ) || 1;
+                return s + (Number.isFinite(nights) ? nights : 0);
+              }, 0) /
+                TOTAL_ROOM_NIGHTS) *
+                100,
+            ) || 0}%
           </p>
           <p className="mt-1 text-xs text-[#26221C]/50">{TOTAL_ROOM_NIGHTS} room-nights/month capacity</p>
         </div>

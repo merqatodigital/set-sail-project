@@ -2,13 +2,32 @@
 // Provides typed functions for all Phase 4 operational domains.
 // Replaces direct Supabase calls in React components.
 
+import { supabase } from "./supabase";
+
 const WORKER_BASE = import.meta.env.VITE_WORKER_URL || "";
+
+/**
+ * Resolve the owner's Supabase session JWT. Supabase JS v2 persists the
+ * session under `sb-<project-ref>-auth-token` (a JSON blob containing the
+ * access token), NOT under a literal `supabase-auth-token` key, so we read it
+ * from the live client rather than guessing the localStorage key. Returns ""
+ * when no session is active (routes that need owner auth will then 401 as
+ * intended).
+ */
+async function getBearerToken(): Promise<string> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? "";
+  } catch {
+    return "";
+  }
+}
 
 async function apiFetch<T>(
   path: string,
   options?: { method?: string; body?: unknown },
 ): Promise<T> {
-  const token = localStorage.getItem("supabase-auth-token") || "";
+  const token = await getBearerToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };

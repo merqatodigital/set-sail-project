@@ -161,9 +161,49 @@ export default function Dashboard() {
     (o) => o.status !== "delivered" && o.status !== "cancelled",
   );
 
+  // Booking-derived attention (real resort state, not hard-coded names).
+  const activeBookings = active;
+  const tomorrowArrivals = activeBookings.filter((b) => b.checkIn === tomorrow);
+  const tomorrowDepartures = activeBookings.filter((b) => b.checkOut === tomorrow);
+  const outstandingBalances = activeBookings.filter(
+    (b) => (b.paidAmount ?? 0) < (b.amount ?? 0) && (b.amount ?? 0) > 0,
+  );
+  const bookingNotes = activeBookings.filter(
+    (b) => (b.notes ?? "").trim().length > 0,
+  );
+
   const attention: { label: string; to: string; count?: string }[] = [];
   if (brief.pendingBookings)
     attention.push({ label: "Bookings awaiting your confirmation", to: "/admin/bookings", count: String(brief.pendingBookings) });
+  if (tomorrowArrivals.length)
+    attention.push({
+      label: `Arrivals tomorrow (${tomorrowArrivals.length}) need preparation`,
+      to: "/admin/bookings",
+      count: String(tomorrowArrivals.length),
+    });
+  if (tomorrowDepartures.length)
+    attention.push({
+      label: `Departures tomorrow (${tomorrowDepartures.length}) — checkout & keys`,
+      to: "/admin/bookings",
+      count: String(tomorrowDepartures.length),
+    });
+  if (outstandingBalances.length) {
+    const total = outstandingBalances.reduce(
+      (s, b) => s + ((b.amount ?? 0) - (b.paidAmount ?? 0)),
+      0,
+    );
+    attention.push({
+      label: `Outstanding balances (${outstandingBalances.length})`,
+      to: "/admin/bookings",
+      count: formatPHP(total),
+    });
+  }
+  if (bookingNotes.length)
+    attention.push({
+      label: `Special requests / notes (${bookingNotes.length})`,
+      to: "/admin/bookings",
+      count: String(bookingNotes.length),
+    });
   if (openRequests.length)
     attention.push({ label: "Open guest requests", to: "/admin/messages", count: String(openRequests.length) });
   if (openMaintenance.length)

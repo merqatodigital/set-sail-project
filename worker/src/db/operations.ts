@@ -27,6 +27,11 @@ export interface BookingRow {
   guests: number;
   status: string;
   source: string;
+  amount: number;
+  paidAmount: number;
+  notes: string;
+  /** amount - paidAmount when positive; 0 when fully paid / overpaid. */
+  outstandingBalance: number;
 }
 
 export interface OperationsSnapshot {
@@ -36,11 +41,16 @@ export interface OperationsSnapshot {
   arrivalsTomorrow: BookingRow[];
   departuresTomorrow: BookingRow[];
   bookingsTomorrow: BookingRow[];
+  /** Active bookings currently in-house (check_in <= today < check_out). */
+  inHouseBookings: BookingRow[];
   rawBookingsChecked: number;
   readError?: string;
 }
 
 function sanitize(raw: Record<string, unknown>): BookingRow {
+  const amount = Number(raw.amount ?? 0) || 0;
+  const paidAmount = Number(raw.paid_amount ?? raw.paidAmount ?? 0) || 0;
+  const outstanding = Math.max(0, amount - paidAmount);
   return {
     id: String(raw.id ?? ""),
     reference: String(raw.reference ?? ""),
@@ -51,6 +61,10 @@ function sanitize(raw: Record<string, unknown>): BookingRow {
     guests: Number(raw.guests ?? raw.guest_count ?? 0) || 0,
     status: String(raw.status ?? ""),
     source: String(raw.source ?? ""),
+    amount,
+    paidAmount,
+    notes: String(raw.notes ?? ""),
+    outstandingBalance: outstanding,
   };
 }
 
@@ -80,6 +94,7 @@ export async function getResortOperations(
     arrivalsTomorrow: [],
     departuresTomorrow: [],
     bookingsTomorrow: [],
+    inHouseBookings: [],
     rawBookingsChecked: 0,
   };
 
@@ -106,7 +121,10 @@ export async function getResortOperations(
 
   try {
     const url = new URL(`${base.replace(/\/$/, "")}/rest/v1/bookings`);
-    url.searchParams.set("select", "id,reference,guest_name,room_type,check_in,check_out,guests,status,source");
+    url.searchParams.set(
+      "select",
+      "id,reference,guest_name,room_type,check_in,check_out,guests,status,source,amount,paid_amount,notes",
+    );
     url.searchParams.set("order", "check_in.asc");
     const res = await fetch(url.toString(), {
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -121,13 +139,15 @@ export async function getResortOperations(
     const all = rows.map(sanitize);
 
     // In-house: check_in <= today AND check_out > today, not cancelled.
-    snapshot.inHouseCount = all.filter(
+    const inHouse = all.filter(
       (b) =>
         b.checkIn <= todayStr &&
         b.checkOut > todayStr &&
         b.status !== "cancelled" &&
         b.status !== "cancelled_booking",
-    ).length;
+    );
+    snapshot.inHouseCount = inHouse.length;
+    snapshot.inHouseBookings = inHouse;
 
     // Tomorrow arrivals/departures/bookings.
     for (const b of all) {

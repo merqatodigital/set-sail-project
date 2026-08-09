@@ -669,6 +669,12 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     const trimmedMessages = messages.slice(-MAX_HISTORY);
     this.setState({ ...this.state, messages: trimmedMessages });
 
+    // Strip any model chain-of-thought so the owner never sees internal
+    // reasoning (mirrors runBriefing's sanitizer).
+    if (finalResponse?.content) {
+      finalResponse = { ...finalResponse, content: this.sanitizeOwnerReply(finalResponse.content) };
+    }
+
     return finalResponse;
   }
 
