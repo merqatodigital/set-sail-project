@@ -1,47 +1,41 @@
-# Cloudflare Staging Secret Fix + Phase 2 Verification
+# Cloudflare Staging Supabase Key — Resolution Path
 
-## What I found before planning
+## What I verified
 
-- This workspace does not contain commit `e188583`. Local history tops out at `396b737` (chain: `f564885` → `7e2a28e` → `4816f7c` → `396b737`).
-- No `getResortOperations` tool exists anywhere in `worker/src` here, and no Worker code reads `public.bookings` (only `guestRequestTools.ts` mentions the word "bookings" in a request-type description). So the Phase 2 code is not present in this environment.
-- `worker/src/env.ts` declares both `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY` as optional secrets; only `SUPABASE_ANON_KEY` is currently consumed (`worker/src/auth/middleware.ts`).
-- `worker/wrangler.staging.jsonc` defines Worker `talla-agent-staging`, no named environments, D1 `talla-staging-db`, DO `TALLA_AGENT`, workflows, and vars `TALLA_COMPUTER_ENABLED=true` / `ENVIRONMENT=staging`.
-- This sandbox has no Cloudflare credentials (`CLOUDFLARE_API_TOKEN` unset, no wrangler login), and the privileged backend service key is not accessible to me. So I cannot set the secret or publish the Worker myself — you run those two commands.
+- The privileged backend service-role credential **is available to me** inside the server sandbox as `SUPABASE_SERVICE_ROLE_KEY`. I never print, echo, commit, or place it in any `VITE_` variable.
+- **Cloudflare access is not available**: no `CLOUDFLARE_API_TOKEN` and no wrangler login in this environment. That is now the only blocker — not the Supabase key.
+- Staging target confirmed: `worker/wrangler.staging.jsonc` → Worker `talla-agent-staging`, no `[env.*]` blocks, so no `--env` flag. `SUPABASE_ANON_KEY` stays untouched.
+- Note: `getResortOperations` and any Supabase `bookings` read do not exist in `worker/src` in this workspace, and commit `e188583` is not present here. Phase 2 code must reach this workspace (or be verified against the deployed Worker built from your machine) before runtime proof can pass.
 
-## Steps you run locally
+## The one action needed from you
 
-Confirm the environment first, then set the secret and deploy. `wrangler.staging.jsonc` has no `[env.*]` blocks, so the top-level Worker `talla-agent-staging` is the target and no `--env` flag is used.
+Create a Cloudflare API token with **Workers Scripts: Edit** (plus Account Settings: Read) for account `2a51cf4fe2181cb0085fe8ffb9960009`, then save it in Lovable as the secret `CLOUDFLARE_API_TOKEN`. I will request it through the secure secret form on your go-ahead.
 
-```bash
+That single token lets me do everything else without you touching a dashboard again, and without the Supabase key ever leaving the server sandbox.
+
+## What I do once the token exists
+
+1. Pipe the sandbox-held key straight into Cloudflare — value never rendered:
+   `npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config wrangler.staging.jsonc` fed from stdin.
+2. Confirm with `wrangler secret list` (names only) that `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY` are both present.
+3. `npx wrangler deploy --config wrangler.staging.jsonc` so the secret applies to the live Worker.
+4. Prove the key itself is valid by a direct authenticated `bookings` read (expect HTTP 200), then prove the **deployed Worker** reads bookings at HTTP 200.
+5. Capture real ground truth from the database for Manila "today/tomorrow": in-house count, arrivals tomorrow, departures tomorrow.
+6. Run the four questions through Admin → Ask TALA → `/api/talla/chat` → TallaAgent → operations tool → answer, checking for each: tool executed, HTTP 200, counts matching the database, and the answer using the live result. Zero rows is reported as a real result with the 200 shown.
+7. Regression: Phase 1 `tala_knowledge` read, Ask TALA HTTP 200, D1 tools, Computer staying lazy during normal chat, worker typecheck/tests, frontend build.
+
+## If you would rather not issue a Cloudflare token
+
+Then the exact action is, on your machine:
+
+```
 cd worker
-npx wrangler whoami
-npx wrangler deployments list --config wrangler.staging.jsonc
-
-# paste the real service-role / secret key when prompted (never echoed, never committed)
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config wrangler.staging.jsonc
-
-npx wrangler secret list --config wrangler.staging.jsonc   # name-only check
 npx wrangler deploy --config wrangler.staging.jsonc
 ```
 
-`SUPABASE_ANON_KEY` is left untouched. Nothing is added to `.env`, Vite vars, or the repo.
+and paste the key at the prompt. I then take over from step 4.
 
-## What I do after you confirm the deploy
+## Scope
 
-1. Confirm the live Worker identity and health via `/api/health` on the staging URL.
-2. Prove the bookings read path returns HTTP 200 rather than 401, using the deployed Worker (not a local curl to the database).
-3. Establish real ground truth directly from the database — in-house count, arrivals tomorrow, departures tomorrow (Manila date) — so the agent answers can be checked against actual rows.
-4. Run the four questions through the real path: Admin Ask TALA → `/api/talla/chat` → TallaAgent → the bookings-backed operations tool → answer. For each: tool actually executed, HTTP 200 observed, counts match the database, and the answer uses the result. Zero rows is reported as a valid real result with the 200 shown.
-5. Regression: Phase 1 `tala_knowledge` read, Ask TALA HTTP 200, D1 operational tools, Computer staying lazy during normal chat, plus `worker` typecheck/tests and the frontend build.
-
-## Phase 2 code gap
-
-Because the bookings tool is absent from this workspace, step 4 cannot pass here even with a valid secret. Options at that point:
-- If GitHub `main` already carries `e188583`, the workspace needs to sync from GitHub before verification — no code written by me.
-- If Phase 2 lives only on your machine, push it to `main` first.
-
-I write no code unless runtime proves an actual bug; a secret/deploy-only fix gets no commit.
-
-## Reporting
-
-I return exactly the requested report block, marking anything still blocked as a blocker, then stop. Phase 3 is not touched.
+No product code, schema, Admin, or TallaAgent architecture changes. No Phase 3. A secret/deploy-only fix gets no commit; a genuine runtime-proven bug gets a minimum fix, tested, with the SHA reported.
