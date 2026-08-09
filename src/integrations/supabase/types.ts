@@ -651,6 +651,7 @@ export type Database = {
           enabled: boolean
           id: string
           label: string
+          resort_id: string
           sort_order: number
           tags: string
           topic: string
@@ -661,6 +662,7 @@ export type Database = {
           enabled?: boolean
           id?: string
           label?: string
+          resort_id?: string
           sort_order?: number
           tags?: string
           topic?: string
@@ -671,6 +673,7 @@ export type Database = {
           enabled?: boolean
           id?: string
           label?: string
+          resort_id?: string
           sort_order?: number
           tags?: string
           topic?: string
