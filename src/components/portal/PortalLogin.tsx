@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useCms } from "@/context/CmsContext";
+import { createPortalSession } from "@/lib/portalRepo";
 
 // ---------------------------------------------------------------------------
 // Portal login — guest enters phone + name. If phone matches a booking,
-// name is auto-filled. Always allows login.
+// name is auto-filled. The server issues a signed guest session (validated
+// identity) so all private reads are scoped to this guest's phone number.
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
@@ -18,6 +20,7 @@ export default function PortalLogin({ onLogin }: Props) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
 
   const normalize = (p: string) => p.replace(/[\s\-+()]/g, "").replace(/^0/, "63");
 
@@ -56,7 +59,7 @@ export default function PortalLogin({ onLogin }: Props) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const cleaned = phone.replace(/\s/g, "").replace(/^0/, "+63");
     const trimmedName = name.trim();
 
@@ -66,6 +69,20 @@ export default function PortalLogin({ onLogin }: Props) {
     }
     if (!trimmedName) {
       setError("Please enter your name");
+      return;
+    }
+
+    setError("");
+    setStarting(true);
+
+    // Start a validated server-side guest session. Private reads are only
+    // available inside this signed session — no session, no portal.
+    const token = await createPortalSession(cleaned, trimmedName);
+
+    setStarting(false);
+
+    if (!token) {
+      setError("Could not start a secure session. Please try again or contact reception.");
       return;
     }
 
@@ -138,16 +155,16 @@ export default function PortalLogin({ onLogin }: Props) {
 
         <button
           onClick={handleSubmit}
-          disabled={!phone || !name}
+          disabled={!phone || !name || starting}
           className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-40"
           style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
         >
-          Enter Portal
+          {starting ? "Starting secure session…" : "Enter Portal"}
         </button>
       </div>
 
       <p className="mt-6 text-center text-xs opacity-40">
-        No password required. Your phone number links to your bookings.
+        Your phone number links to your bookings and keeps your data private to you.
       </p>
     </div>
   );

@@ -9,17 +9,19 @@ import MessageReception from "@/components/portal/MessageReception";
 import ViewBill from "@/components/portal/ViewBill";
 import ViewPackages from "@/components/portal/ViewPackages";
 import MyBookings from "@/components/portal/MyBookings";
-import GCashQR from "@/components/portal/GCashQR";
+import RequestReceived from "@/components/portal/RequestReceived";
 import { usePortalRecords } from "@/lib/usePortalRecords";
+import { clearPortalToken } from "@/lib/portalRepo";
 
 // ---------------------------------------------------------------------------
 // Guest Portal — phone-number login, book tours, rent bikes, view bookings.
 // Dark theme with gold accents matching Marina Terrace branding.
 //
-// Records come from usePortalRecords(): authoritative Supabase
-// tala_*_requests / tala_food_orders / tala_guest_messages / tala_folio_lines
-// with a demo blob fallback. Guests always create REQUESTED intents; the
-// owner confirms + records payment in admin.
+// Records come from usePortalRecords(): the server-side Guest Portal API
+// (signed session, scoped strictly to this guest's phone) with a demo blob
+// fallback. Guests always create REQUESTED intents; the owner confirms +
+// records payment in admin. Payment UI (GCashQR) is only shown after an
+// actual confirmation — never after a mere request.
 // ---------------------------------------------------------------------------
 
 export type PortalView =
@@ -32,7 +34,7 @@ export type PortalView =
   | "bill"
   | "packages"
   | "bookings"
-  | "gcash";
+  | "request";
 
 export interface PortalGuest {
   phone: string;
@@ -49,10 +51,8 @@ export interface PortalBookingResult {
   days?: number;
 }
 
-const GREEN = "#1F3D2B";
 const GOLD = "#C6A15B";
 const DARK = "#1a1a2e";
-const DARK_CARD = "#16213e";
 
 export default function Portal() {
   const { data } = useCms();
@@ -67,19 +67,20 @@ export default function Portal() {
   }, []);
 
   const handleLogout = useCallback(() => {
+    clearPortalToken();
     setGuest(null);
     setView("login");
     setBookingResult(null);
   }, []);
 
-  const handleBookingComplete = useCallback((result: PortalBookingResult) => {
+  const handleRequestComplete = useCallback((result: PortalBookingResult) => {
     setBookingResult(result);
-    setView("gcash");
+    setView("request");
   }, []);
 
-  const handlePaymentDone = useCallback(() => {
+  const handleRequestDone = useCallback(() => {
     setBookingResult(null);
-    setView("home");
+    setView("bookings");
   }, []);
 
   return (
@@ -131,7 +132,7 @@ export default function Portal() {
           <BookExperiences
             guest={guest}
             tours={data.operations.tours.filter((t) => t.active)}
-            onComplete={handleBookingComplete}
+            onComplete={handleRequestComplete}
             onBack={() => setView("home")}
           />
         )}
@@ -140,7 +141,7 @@ export default function Portal() {
           <RentMotorbike
             guest={guest}
             motorbikes={data.operations.motorbikes.filter((m) => m.active && m.status === "available")}
-            onComplete={handleBookingComplete}
+            onComplete={handleRequestComplete}
             onBack={() => setView("home")}
           />
         )}
@@ -188,10 +189,14 @@ export default function Portal() {
           />
         )}
 
-        {view === "gcash" && bookingResult && (
-          <GCashQR
+        {view === "request" && bookingResult && (
+          <RequestReceived
             booking={bookingResult}
-            onDone={handlePaymentDone}
+            onViewBookings={handleRequestDone}
+            onHome={() => {
+              setBookingResult(null);
+              setView("home");
+            }}
           />
         )}
       </main>

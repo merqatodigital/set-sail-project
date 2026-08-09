@@ -1,19 +1,20 @@
 // ---------------------------------------------------------------------------
-// Guest Portal persistence layer (Supabase-first).
+// Guest Portal persistence layer (Supabase-first, server-scoped reads).
 //
-// Authoritative source of truth for guest-created transactions, matching the
-// existing tala_*_requests RLS pattern (anon INSERT+SELECT, owner UPDATE):
+// Authoritative source of truth for guest-created transactions:
 //   - Tours   -> public.tala_tour_requests
 //   - Rentals -> public.tala_rental_requests
 //   - Food    -> public.tala_food_orders
 //   - Messages-> public.tala_guest_messages
 //   - Folio   -> derived from the above + public.tala_folio_lines
 //
-// Rules honored:
-//   * Guests always create REQUESTED/pending intents — never auto-confirm,
-//     never fake a payment. The owner confirms + records payment in admin.
-//   * Pricing is authoritative (tour.price, bike.dailyRate) — never invented.
-//   * localStorage / cms_data blobs are UI cache / demo fallback ONLY.
+// SECURITY: private READS go through the signed server-side Guest Portal API
+// (GET /api/portal/records) which returns only the session guest's rows. The
+// anon Supabase role is INSERT-only (guest submissions) — it can never SELECT
+// other guests' data. Submissions are anon INSERTs with a REQUESTED/pending
+// status; the owner confirms + records payment in admin. Pricing is
+// authoritative (tour.price, bike.dailyRate) — never invented. localStorage /
+// cms_data blobs are UI cache / demo fallback ONLY.
 // ---------------------------------------------------------------------------
 
 import { supabase, isSupabaseConnected } from "@/lib/supabase";
@@ -146,6 +147,56 @@ function connected(): boolean {
   return isSupabaseConnected() && !!supabase;
 }
 
+// --- Guest session (server-issued, HMAC-signed, stored client-side) ---------
+
+const SESSION_STORAGE_KEY = "mt_portal_session";
+
+export function savePortalToken(token: string): void {
+  try {
+    window.localStorage.setItem(SESSION_STORAGE_KEY, token);
+  } catch {
+    // ignore storage failures — reads will fall back to the demo blob
+  }
+}
+
+export function clearPortalToken(): void {
+  try {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function getPortalToken(): string {
+  try {
+    return window.localStorage.getItem(SESSION_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Requests a signed guest session from the server (POST /api/portal/session).
+ * The returned token is stored locally and used for all scoped private reads.
+ * Returns null when the server cannot issue a session (portal is degraded).
+ */
+export async function createPortalSession(phone: string, name: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/portal/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone, name }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { token?: string };
+    if (!data?.token) return null;
+    savePortalToken(data.token);
+    return data.token;
+  } catch {
+    return null;
+  }
+}
+
 // --- Tours ------------------------------------------------------------------
 
 export interface CreateTourRequestInput {
@@ -172,25 +223,74 @@ export async function createTourRequest(input: CreateTourRequestInput): Promise<
     status: "requested",
     source: "portal",
   };
-  const { data, error } = await db()
+  const { error } = await db()
     .from("tala_tour_requests")
-    .insert(payload)
-    .select("*")
-    .single();
-  if (error || !data) return null;
-  return mapTourRequestRow(data);
+    .insert(payload);
+  if (error) return null;
+  // NOTE: anon role is INSERT-only (RLS) — PostgREST's RETURNING is filtered,
+  // so build the returned row from our own payload instead of .select().
+  return {
+    id: "",
+    reference,
+    guest_name: payload.guest_name,
+    guest_phone: payload.guest_phone,
+    tour_name: payload.tour_name,
+    tour_date: payload.tour_date,
+    guests: payload.guests,
+    amount: payload.amount,
+    notes: payload.notes,
+    status: payload.status,
+    source: payload.source,
+    confirmed_at: null,
+    paid_amount: 0,
+    paid_at: null,
+    created_at: new Date().toISOString(),
+  };
 }
 
-export async function fetchTourRequests(guest: PortalGuestIdentity): Promise<PortalTourRequestRow[]> {
-  if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_tour_requests")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapTourRequestRow);
+// --- Private reads (server-side contract) ------------------------------------
+// All reads go through GET /api/portal/records (src/server.ts) which verifies
+// the signed guest session and returns ONLY the rows whose guest_phone matches
+// the session phone. The frontend never touches private rows via the anon key.
+
+export async function fetchGuestRecords(guest: PortalGuestIdentity): Promise<PortalGuestRecords> {
+  const empty: PortalGuestRecords = {
+    bookings: [],
+    tours: [],
+    rentals: [],
+    foodOrders: [],
+    messages: [],
+    folioLines: [],
+  };
+
+  const token = getPortalToken();
+  if (!token) return empty;
+
+  try {
+    const res = await fetch("/api/portal/records", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return empty;
+    const data = (await res.json()) as {
+      bookings?: Record<string, unknown>[];
+      tours?: Record<string, unknown>[];
+      rentals?: Record<string, unknown>[];
+      foodOrders?: Record<string, unknown>[];
+      messages?: Record<string, unknown>[];
+      folioLines?: Record<string, unknown>[];
+    };
+
+    return {
+      bookings: Array.isArray(data.bookings) ? data.bookings.map(mapBookingRequestRow) : [],
+      tours: Array.isArray(data.tours) ? data.tours.map(mapTourRequestRow) : [],
+      rentals: Array.isArray(data.rentals) ? data.rentals.map(mapRentalRequestRow) : [],
+      foodOrders: Array.isArray(data.foodOrders) ? data.foodOrders.map(mapFoodOrderRow) : [],
+      messages: Array.isArray(data.messages) ? data.messages.map(mapGuestMessageRow) : [],
+      folioLines: Array.isArray(data.folioLines) ? data.folioLines.map(mapFolioLineRow) : [],
+    };
+  } catch {
+    return empty;
+  }
 }
 
 function mapTourRequestRow(r: Record<string, unknown>): PortalTourRequestRow {
@@ -241,25 +341,34 @@ export async function createRentalRequest(input: CreateRentalRequestInput): Prom
     status: "requested",
     source: "portal",
   };
-  const { data, error } = await db()
+  const { error } = await db()
     .from("tala_rental_requests")
-    .insert(payload)
-    .select("*")
-    .single();
-  if (error || !data) return null;
-  return mapRentalRequestRow(data);
+    .insert(payload);
+  if (error) return null;
+  // anon is INSERT-only under RLS — build the returned row locally.
+  return {
+    id: "",
+    reference,
+    guest_name: payload.guest_name,
+    guest_phone: payload.guest_phone,
+    bike_name: payload.bike_name,
+    start_date: payload.start_date,
+    end_date: payload.end_date,
+    days: payload.days,
+    amount: payload.amount,
+    notes: payload.notes,
+    status: payload.status,
+    source: payload.source,
+    confirmed_at: null,
+    paid_amount: 0,
+    paid_at: null,
+    created_at: new Date().toISOString(),
+  };
 }
 
 export async function fetchRentalRequests(guest: PortalGuestIdentity): Promise<PortalRentalRequestRow[]> {
-  if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_rental_requests")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapRentalRequestRow);
+  const records = await fetchGuestRecords(guest);
+  return records.rentals;
 }
 
 function mapRentalRequestRow(r: Record<string, unknown>): PortalRentalRequestRow {
@@ -311,25 +420,34 @@ export async function createBookingRequest(input: CreateBookingRequestInput): Pr
     status: "pending",
     source: "portal",
   };
-  const { data, error } = await db()
+  const { error } = await db()
     .from("tala_booking_requests")
-    .insert(payload)
-    .select("*")
-    .single();
-  if (error || !data) return null;
-  return mapBookingRequestRow(data);
+    .insert(payload);
+  if (error) return null;
+  // anon is INSERT-only under RLS — build the returned row locally.
+  return {
+    id: "",
+    reference,
+    guest_name: payload.guest_name,
+    guest_phone: payload.guest_phone,
+    room_type: payload.room_type,
+    check_in: payload.check_in,
+    check_out: payload.check_out,
+    guests: payload.guests,
+    amount: payload.amount,
+    notes: payload.notes,
+    status: payload.status,
+    source: payload.source,
+    confirmed_at: null,
+    paid_amount: 0,
+    paid_at: null,
+    created_at: new Date().toISOString(),
+  };
 }
 
 export async function fetchBookingRequests(guest: PortalGuestIdentity): Promise<PortalBookingRequestRow[]> {
-  if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_booking_requests")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapBookingRequestRow);
+  const records = await fetchGuestRecords(guest);
+  return records.bookings;
 }
 
 function mapBookingRequestRow(r: Record<string, unknown>): PortalBookingRequestRow {
@@ -377,25 +495,36 @@ export async function createFoodOrder(input: CreateFoodOrderInput): Promise<Port
     status: "pending",
     source: "portal",
   };
-  const { data, error } = await db()
+  const { error } = await db()
     .from("tala_food_orders")
-    .insert(payload)
-    .select("*")
-    .single();
-  if (error || !data) return null;
-  return mapFoodOrderRow(data);
+    .insert(payload);
+  if (error) return null;
+  // anon is INSERT-only under RLS — build the returned row locally.
+  return {
+    id: "",
+    reference,
+    guest_name: payload.guest_name,
+    guest_phone: payload.guest_phone,
+    items: payload.items,
+    total: payload.total,
+    total_cost: payload.total_cost,
+    status: payload.status,
+    notes: payload.notes,
+    source: payload.source,
+    created_at: new Date().toISOString(),
+    confirmed_at: null,
+    preparing_at: null,
+    ready_at: null,
+    delivered_at: null,
+    cancelled_at: null,
+    paid_amount: 0,
+    paid_at: null,
+  };
 }
 
 export async function fetchFoodOrders(guest: PortalGuestIdentity): Promise<PortalFoodOrderRow[]> {
-  if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_food_orders")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapFoodOrderRow);
+  const records = await fetchGuestRecords(guest);
+  return records.foodOrders;
 }
 
 function mapFoodOrderRow(r: Record<string, unknown>): PortalFoodOrderRow {
@@ -429,7 +558,7 @@ export async function sendGuestMessage(
   message: string,
 ): Promise<PortalGuestMessageRow | null> {
   if (!connected()) return null;
-  const { data, error } = await db()
+  const { error } = await db()
     .from("tala_guest_messages")
     .insert({
       guest_name: guest.name.slice(0, 200),
@@ -437,24 +566,26 @@ export async function sendGuestMessage(
       message: message.trim().slice(0, 2000),
       status: "unread",
       source: "portal",
-    })
-    .select("*")
-    .single();
-  if (error || !data) return null;
-  return mapGuestMessageRow(data);
+    });
+  if (error) return null;
+  // anon is INSERT-only under RLS — build the returned row locally.
+  return {
+    id: "",
+    guest_name: guest.name.slice(0, 200),
+    guest_phone: normalizePhone(guest.phone).slice(0, 200),
+    message: message.trim().slice(0, 2000),
+    reply: "",
+    status: "unread",
+    source: "portal",
+    created_at: new Date().toISOString(),
+    replied_at: null,
+  };
 }
 
 export async function fetchGuestMessages(guest: PortalGuestIdentity): Promise<PortalGuestMessageRow[]> {
   if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_guest_messages")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapGuestMessageRow);
+  const records = await fetchGuestRecords(guest);
+  return records.messages;
 }
 
 function mapGuestMessageRow(r: Record<string, unknown>): PortalGuestMessageRow {
@@ -474,15 +605,8 @@ function mapGuestMessageRow(r: Record<string, unknown>): PortalGuestMessageRow {
 // --- Folio ------------------------------------------------------------------
 
 export async function fetchFolioLines(guest: PortalGuestIdentity): Promise<PortalFolioLineRow[]> {
-  if (!connected()) return [];
-  const phone = normalizePhone(guest.phone);
-  const { data, error } = await db()
-    .from("tala_folio_lines")
-    .select("*")
-    .or(`guest_phone.eq.${phone},guest_name.ilike.%${guest.name}%`)
-    .order("created_at", { ascending: true });
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapFolioLineRow);
+  const records = await fetchGuestRecords(guest);
+  return records.folioLines;
 }
 
 function mapFolioLineRow(r: Record<string, unknown>): PortalFolioLineRow {
@@ -511,16 +635,4 @@ export interface PortalGuestRecords {
   foodOrders: PortalFoodOrderRow[];
   messages: PortalGuestMessageRow[];
   folioLines: PortalFolioLineRow[];
-}
-
-export async function fetchGuestRecords(guest: PortalGuestIdentity): Promise<PortalGuestRecords> {
-  const [bookings, tours, rentals, foodOrders, messages, folioLines] = await Promise.all([
-    fetchBookingRequests(guest),
-    fetchTourRequests(guest),
-    fetchRentalRequests(guest),
-    fetchFoodOrders(guest),
-    fetchGuestMessages(guest),
-    fetchFolioLines(guest),
-  ]);
-  return { bookings, tours, rentals, foodOrders, messages, folioLines };
 }

@@ -2,6 +2,12 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import {
+  normalizePhone,
+  issueGuestSession,
+  verifyGuestSession,
+  fetchScopedGuestRecords,
+} from "./lib/portalApi.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -163,6 +169,48 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// --- Guest Portal session + scoped read API (server-side, service role) ------
+// Secure contract: the guest logs in with phone + name, the server issues an
+// HMAC-signed session token, and all private reads are filtered strictly by
+// the verified phone number. anon RLS is INSERT-only; anon can never SELECT
+// other guests' data directly from the database.
+
+async function portalSessionHandler(request: Request, env: unknown): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+
+  let body: { phone?: unknown; name?: unknown };
+  try {
+    body = (await request.json()) as { phone?: unknown; name?: unknown };
+  } catch {
+    return json({ error: "invalid JSON body" }, 400);
+  }
+
+  const phone = normalizePhone(typeof body?.phone === "string" ? body.phone : "");
+  const name = (typeof body?.name === "string" ? body.name : "").trim().slice(0, 200);
+
+  if (!/^[0-9]{11,14}$/.test(phone)) return json({ error: "invalid phone number" }, 400);
+  if (!name) return json({ error: "name is required" }, 400);
+
+  const token = await issueGuestSession(env, phone, name);
+  if (!token) return json({ error: "portal sessions are temporarily unavailable" }, 503);
+
+  return json({ token, guest: { phone, name } });
+}
+
+async function portalRecordsHandler(request: Request, env: unknown): Promise<Response> {
+  if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+
+  const auth = request.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return json({ error: "unauthorized" }, 401);
+
+  const session = await verifyGuestSession(env, token);
+  if (!session) return json({ error: "invalid or expired session" }, 401);
+
+  const records = await fetchScopedGuestRecords(env, session.phone);
+  return json(records);
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
@@ -171,6 +219,12 @@ export default {
       }
       if (new URL(request.url).pathname === "/api/openrouter/models") {
         return await openRouterModels(request);
+      }
+      if (new URL(request.url).pathname === "/api/portal/session") {
+        return await portalSessionHandler(request, env);
+      }
+      if (new URL(request.url).pathname === "/api/portal/records") {
+        return await portalRecordsHandler(request, env);
       }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

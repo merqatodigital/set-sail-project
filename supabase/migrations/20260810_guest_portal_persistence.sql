@@ -7,8 +7,13 @@
 -- records. localStorage / cms_data blobs remain UI cache / demo fallback only.
 --
 -- Design rules honored:
---   * Reuse the existing tala_*_requests tables (already RLS-correct: anon
---     INSERT+SELECT, owner UPDATE) — no duplicate request tables.
+--   * Reuse the existing tala_*_requests tables (no duplicate request tables).
+--   * SECURITY: anon may INSERT (submit) guest intents but must NEVER be able
+--     to SELECT another guest's data. All private guest reads go through the
+--     server-side Guest Portal API (src/lib/portalApi.server.ts + src/server.ts)
+--     which uses the service role key and filters strictly by the signed guest
+--     session's phone number. This migration removes any anon SELECT policy /
+--     grant on private guest tables.
 --   * Every guest-created transaction persists server-side with a lifecycle
 --     (requested -> confirmed -> ... -> settled) driven by the OWNER, never
 --     auto-confirmed by the guest.
@@ -114,10 +119,11 @@ CREATE TABLE IF NOT EXISTS public.tala_folio_lines (
 );
 
 -- ---------------------------------------------------------------------------
--- Grants + RLS — mirror the tala_*_requests pattern exactly: anyone (anon /
--- authenticated) may INSERT + SELECT (portal guests are anonymous; they read
--- their own rows and the app filters by phone/name). Authenticated (owner /
--- admin face) may UPDATE/DELETE to confirm, reply, and settle.
+-- Grants + RLS for the new portal tables.
+-- SECURITY: anon can INSERT (guest submissions) only. NO anon SELECT — private
+-- guest data (food orders, messages, folio) is only readable through the
+-- server-side Guest Portal API (service role key, scoped by signed session).
+-- Authenticated (owner / admin face) can manage rows: confirm, reply, settle.
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE t TEXT;
@@ -127,33 +133,26 @@ BEGIN
     'tala_guest_messages',
     'tala_folio_lines'
   ] LOOP
-    EXECUTE format('GRANT SELECT, INSERT ON public.%I TO anon', t);
+    -- Revoke any anon SELECT that an earlier (unlocked) version of this file
+    -- may have granted, and re-grant INSERT-only for anon.
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
+    EXECUTE format('GRANT INSERT ON public.%I TO anon', t);
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
     EXECUTE format('GRANT ALL ON public.%I TO service_role', t);
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
 
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      'Anyone can submit ' || t, t
-    );
+    -- Drop every prior read/write policy name this file may have created.
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Anyone can submit ' || t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Anyone can read ' || t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Authenticated can manage ' || t, t);
+
+    -- anon: INSERT only. NO SELECT policy -> RLS denies every anon read.
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR INSERT TO anon, authenticated WITH CHECK (true)',
       'Anyone can submit ' || t, t
     );
 
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      'Anyone can read ' || t, t
-    );
-    EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR SELECT TO anon, authenticated USING (true)',
-      'Anyone can read ' || t, t
-    );
-
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.%I',
-      'Authenticated can manage ' || t, t
-    );
+    -- authenticated (owner/admin): full management.
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)',
       'Authenticated can manage ' || t, t
@@ -162,13 +161,72 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
+-- 5. Harden the existing tala_*_requests tables: anon INSERT-only.
+--    The original 20260729090000 migration left permissive "Anyone can read"
+--    policies (anon SELECT USING true) and 20260804_security_fix_rls.sql
+--    dropped policy names that never existed ("Allow public read on ..."),
+--    so those permissive anon SELECT policies may still be live in the DB.
+--    Remove every anon SELECT path so private reads are server-scoped only.
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE t TEXT;
+DECLARE label TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['tala_booking_requests', 'tala_tour_requests', 'tala_rental_requests'] LOOP
+    label := CASE t
+      WHEN 'tala_booking_requests' THEN 'booking'
+      WHEN 'tala_tour_requests'    THEN 'tour'
+      WHEN 'tala_rental_requests'  THEN 'rental'
+      ELSE t END;
+
+    -- Revoke any anon SELECT grant; keep anon INSERT.
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
+    EXECUTE format('GRANT INSERT ON public.%I TO anon', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE ON public.%I TO authenticated', t);
+    EXECUTE format('GRANT ALL ON public.%I TO service_role', t);
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+
+    -- Drop every permissive / duplicate policy, using BOTH the original
+    -- 20260729090000 names and the (never-created) names the security-fix
+    -- migration tried to drop — belt and suspenders, all idempotent.
+    EXECUTE format('DROP POLICY IF EXISTS "Anyone can read %s requests" ON public.%I', label, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Anyone can submit a %s request" ON public.%I', label, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow public read on %I" ON public.%I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow anonymous insert on %I" ON public.%I', t, t);
+
+    -- anon: INSERT only.
+    EXECUTE format(
+      'CREATE POLICY "Anonymous can insert %s requests" ON public.%I FOR INSERT TO anon, authenticated WITH CHECK (true)',
+      label, t
+    );
+
+    -- authenticated (owner/admin): read + update.
+    EXECUTE format(
+      'CREATE POLICY "Authenticated can read %s requests" ON public.%I FOR SELECT TO authenticated USING (true)',
+      label, t
+    );
+    EXECUTE format(
+      'CREATE POLICY "Authenticated can update %s requests" ON public.%I FOR UPDATE TO authenticated USING (true)',
+      label, t
+    );
+  END LOOP;
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- Verification (run after applying)
 -- ---------------------------------------------------------------------------
--- select has_table_privilege('anon', 'public.tala_food_orders',   'INSERT'); -- expect: true
--- select has_table_privilege('anon', 'public.tala_food_orders',   'SELECT'); -- expect: true
--- select has_table_privilege('anon', 'public.tala_food_orders',   'UPDATE'); -- expect: false
--- select has_table_privilege('anon', 'public.tala_guest_messages','INSERT'); -- expect: true
--- select has_table_privilege('anon', 'public.tala_folio_lines',   'SELECT'); -- expect: true
+-- select has_table_privilege('anon', 'public.tala_food_orders',    'INSERT'); -- expect: true
+-- select has_table_privilege('anon', 'public.tala_food_orders',    'SELECT'); -- expect: false
+-- select has_table_privilege('anon', 'public.tala_guest_messages', 'INSERT'); -- expect: true
+-- select has_table_privilege('anon', 'public.tala_guest_messages', 'SELECT'); -- expect: false
+-- select has_table_privilege('anon', 'public.tala_folio_lines',    'INSERT'); -- expect: true
+-- select has_table_privilege('anon', 'public.tala_folio_lines',    'SELECT'); -- expect: false
+-- select has_table_privilege('anon', 'public.tala_tour_requests',  'INSERT'); -- expect: true
+-- select has_table_privilege('anon', 'public.tala_tour_requests',  'SELECT'); -- expect: false
+-- select has_table_privilege('anon', 'public.tala_booking_requests','SELECT'); -- expect: false
+-- select polname, polroles::regrole[] from pg_policy
+--   where polrelid = 'public.tala_guest_messages'::regclass;
+--   -- expect: only the INSERT policy + authenticated manage (no anon SELECT)
 -- select column_name from information_schema.columns
 --   where table_schema='public' and table_name='tala_tour_requests'
 --   order by ordinal_position;  -- expect reference, confirmed_at, paid_amount, paid_at present
