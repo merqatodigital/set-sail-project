@@ -35,6 +35,7 @@ import { evaluatePolicy } from "../computer/policy.js";
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
 import { listActiveTours } from "../db/repos/toursRepo.js";
 import { listMenuItems } from "../db/repos/menuRepo.js";
+import { getResortKnowledge } from "../db/knowledge.js";
 
 const MAX_HISTORY = 20; // bounded conversation history
 const MAX_TOOL_HOPS = 5; // max tool-calling iterations
@@ -658,10 +659,11 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
    */
   private async buildLiveSystemPrompt(ctx: ToolContext): Promise<string> {
     try {
-      const [settings, tours, menuItems] = await Promise.all([
+      const [settings, tours, menuItems, knowledge] = await Promise.all([
         getAllSettings(ctx.db, ctx.tenantId),
         listActiveTours(ctx.db, ctx.tenantId),
         listMenuItems(ctx.db, ctx.tenantId, { activeOnly: true }),
+        getResortKnowledge(this.env, ctx.tenantId || this.state.resortId),
       ]);
 
       // Convert settings to key-value record
@@ -688,6 +690,12 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           price: m.price,
           inventoryCount: m.inventoryCount,
         })),
+        knowledge: knowledge.map((k) => ({
+          topic: k.topic,
+          label: k.label,
+          body: k.body,
+          tags: k.tags,
+        })),
         computerEnabled: this.computerEnabled,
       };
 
@@ -702,6 +710,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         propertyInfo: {},
         tours: [],
         menuItems: [],
+        knowledge: [],
         computerEnabled: this.computerEnabled,
       });
     }

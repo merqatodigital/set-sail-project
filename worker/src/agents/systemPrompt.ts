@@ -10,6 +10,7 @@ export interface SystemPromptContext {
   propertyInfo: Record<string, string>;
   tours: Array<{ name: string; description: string; price: number; duration: string }>;
   menuItems: Array<{ name: string; category: string; price: number; inventoryCount: number }>;
+  knowledge?: Array<{ topic: string; label: string; body: string; tags: string }>;
   computerEnabled?: boolean;
 }
 
@@ -85,6 +86,20 @@ You know the resort, the area, and how to help guests have a great time.`);
       }
     }
     sections.push(`MENU:\n${menuLines.join("\n")}`);
+  }
+
+  // ---- Resort Knowledge ----
+  const knowledge = ctx.knowledge ?? [];
+  if (knowledge.length > 0) {
+    const knowLines = knowledge
+      .map((k) => {
+        const header = k.label?.trim() || k.topic?.trim() || "Knowledge";
+        const tags = k.tags?.trim() ? ` [${k.tags.trim()}]` : "";
+        const body = (k.body ?? "").trim();
+        return `### ${header}${tags}\n${body}`;
+      })
+      .join("\n\n");
+    sections.push(`RESORT KNOWLEDGE (Marina Terrace):\n${knowLines}`);
   }
 
   // ---- Context ----
