@@ -1,52 +1,47 @@
-# TALA Staging Sync, Verification and Database Health
+# Cloudflare Staging Secret Fix + Phase 2 Verification
 
-## What I verified before writing this plan
+## What I found before planning
 
-- **Code version**: the project is at `0e3f384` ("Work in progress"), whose parent is `9f7edd8`. Nothing is behind GitHub main, so no sync-from-GitHub is needed and no older version will be pushed over main.
-- **Cloudflare TALA staging Worker** is reachable and healthy right now: `status: running`, `agent: true`, `d1: true`, `computer: enabled`, `workflows: true`. The Admin dashboard reads these live via `useTallaStatus` → `/api/health`, not hard-coded values.
-- **Hermes owner UI is gone**: no Hermes Workforce or AI Command Center page or route exists. Only legacy non-UI references remain (`src/server.ts`, two TALA persona/tool files). Those stay untouched.
-- **TALA Operations** already points at the Cloudflare backend (`fetchLatestBriefing`, `triggerBriefing`, `askTalla`).
-- **`public.tala_knowledge` exists** with the expected fields.
+- This workspace does not contain commit `e188583`. Local history tops out at `396b737` (chain: `f564885` → `7e2a28e` → `4816f7c` → `396b737`).
+- No `getResortOperations` tool exists anywhere in `worker/src` here, and no Worker code reads `public.bookings` (only `guestRequestTools.ts` mentions the word "bookings" in a request-type description). So the Phase 2 code is not present in this environment.
+- `worker/src/env.ts` declares both `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY` as optional secrets; only `SUPABASE_ANON_KEY` is currently consumed (`worker/src/auth/middleware.ts`).
+- `worker/wrangler.staging.jsonc` defines Worker `talla-agent-staging`, no named environments, D1 `talla-staging-db`, DO `TALLA_AGENT`, workflows, and vars `TALLA_COMPUTER_ENABLED=true` / `ENVIRONMENT=staging`.
+- This sandbox has no Cloudflare credentials (`CLOUDFLARE_API_TOKEN` unset, no wrangler login), and the privileged backend service key is not accessible to me. So I cannot set the secret or publish the Worker myself — you run those two commands.
 
-## Two real blockers found
+## Steps you run locally
 
-1. **Ask TALA in TALA Operations will crash at runtime.** `askTalla(...)` is called in the chat tab but is never imported in `src/admin/pages/TalaOps.tsx`; the Morning Brief functions are imported and it was left out. This throws as soon as an owner submits a question — a different crash from the fixed `modelId` one (`modelId` is now correctly read from `cms.settings.tala.modelId` in scope).
-2. **`tala_knowledge` has no Data API permissions.** The table has row-security rules for read and add, but the API roles were never granted table privileges, so every Knowledge Base request fails at the permission layer. This is the real cause of the previous failing `/rest/v1/tala_knowledge` call. The Knowledge Base UI also edits and deletes entries, which currently have no matching access rule at all.
+Confirm the environment first, then set the secret and deploy. `wrangler.staging.jsonc` has no `[env.*]` blocks, so the top-level Worker `talla-agent-staging` is the target and no `--env` flag is used.
 
-## Plan
+```bash
+cd worker
+npx wrangler whoami
+npx wrangler deployments list --config wrangler.staging.jsonc
 
-### 1. Database protection first
-Reported honestly: Lovable Cloud gives me **no snapshot or point-in-time backup I can trigger**. What I can do is export every existing table to CSV under `/mnt/documents/` as a plain-data safety copy, which I will do before anything else. No table will be dropped, truncated, reset or replaced — the only database change proposed below is additive (permissions and access rules).
+# paste the real service-role / secret key when prompted (never echoed, never committed)
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config wrangler.staging.jsonc
 
-### 2. Smallest safe database change
-One additive migration:
-- Grant Data API access on `public.tala_knowledge` to the signed-in role and the service role (read, add, edit, remove), plus read for anonymous visitors, since the public TALA concierge reads the knowledge base.
-- Add the missing edit and remove access rules so the existing Knowledge Base buttons work.
+npx wrangler secret list --config wrangler.staging.jsonc   # name-only check
+npx wrangler deploy --config wrangler.staging.jsonc
+```
 
-No other table, function or policy is touched. No redesign, no global loosening.
+`SUPABASE_ANON_KEY` is left untouched. Nothing is added to `.env`, Vite vars, or the repo.
 
-### 3. One code fix
-`src/admin/pages/TalaOps.tsx` — add `askTalla` to the existing `@/lib/tallaCloud` import. One line, preserves the Cloudflare architecture, no logic or design change. This is the only application file I intend to change, and it flows back through the connected GitHub workflow.
+## What I do after you confirm the deploy
 
-### 4. Runtime verification in the hosted app (not just a build)
-Drive the real running Admin and read the browser console at each step:
-- Dashboard renders; TALA / Computer / Automation / OpenRouter badges show live Worker values.
-- Existing resort operational data still loads.
-- TALA Operations renders with no error boundary and no `modelId` error.
-- Morning Brief loads the real Workflow briefing artifact.
-- Ask TALA submits, the request hits `/api/talla/chat`, and the Cloudflare TallaAgent reply is displayed.
-- Knowledge Base loads with no permission/404 failure; adding an entry works.
-- Owner navigation contains no Hermes Workforce and no AI Command Center.
+1. Confirm the live Worker identity and health via `/api/health` on the staging URL.
+2. Prove the bookings read path returns HTTP 200 rather than 401, using the deployed Worker (not a local curl to the database).
+3. Establish real ground truth directly from the database — in-house count, arrivals tomorrow, departures tomorrow (Manila date) — so the agent answers can be checked against actual rows.
+4. Run the four questions through the real path: Admin Ask TALA → `/api/talla/chat` → TallaAgent → the bookings-backed operations tool → answer. For each: tool actually executed, HTTP 200 observed, counts match the database, and the answer uses the result. Zero rows is reported as a valid real result with the 200 shown.
+5. Regression: Phase 1 `tala_knowledge` read, Ask TALA HTTP 200, D1 operational tools, Computer staying lazy during normal chat, plus `worker` typecheck/tests and the frontend build.
 
-### 5. Security note for later (report only)
-`tala_knowledge` currently allows anonymous add. Acceptable while developing, must be tightened to owner-only before commercial multi-resort deployment. I will list this and similar items in the final report without changing authentication or rewriting access control in this task.
+## Phase 2 code gap
 
-### 6. Final report
-The exact PASS/FAIL report in the requested format, then stop. No dashboard redesign, no resort skills, no next phase.
+Because the bookings tool is absent from this workspace, step 4 cannot pass here even with a valid secret. Options at that point:
+- If GitHub `main` already carries `e188583`, the workspace needs to sync from GitHub before verification — no code written by me.
+- If Phase 2 lives only on your machine, push it to `main` first.
 
-## Technical details
+I write no code unless runtime proves an actual bug; a secret/deploy-only fix gets no commit.
 
-- Migration: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.tala_knowledge TO authenticated`; `GRANT ALL ... TO service_role`; `GRANT SELECT ... TO anon`; add `UPDATE` and `DELETE` policies mirroring the existing permissive ones.
-- Backup: `psql COPY (...) TO STDOUT WITH CSV HEADER` per table into `/mnt/documents/backup-<date>/`.
-- Runtime test: headless browser against the running app with the existing owner session, capturing console errors and the `/api/talla/chat` network call.
-- Files changed: `src/admin/pages/TalaOps.tsx` only.
+## Reporting
+
+I return exactly the requested report block, marking anything still blocked as a blocker, then stop. Phase 3 is not touched.
