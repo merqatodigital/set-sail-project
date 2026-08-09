@@ -30,6 +30,8 @@ import { LazyComputerService } from "../computer/LazyComputerService.js";
 import type { DurableObjectStorageLike } from "../computer/CloudflareComputerAdapter.js";
 import { resolveWorkspacePath, describePath } from "../computer/paths.js";
 import { evaluatePolicy } from "../computer/policy.js";
+import { evaluateToolApproval } from "./toolApprovalPolicy.js";
+import { insertApproval, getApprovals, getApprovalByWorkflowId, decideApproval } from "../db/repos/approvalsRepo.js";
 
 // Import repos for system prompt context
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
@@ -40,6 +42,14 @@ import { getResortKnowledge } from "../db/knowledge.js";
 const MAX_HISTORY = 20; // bounded conversation history
 const MAX_TOOL_HOPS = 5; // max tool-calling iterations
 const MAX_FILE_SIZE = 512 * 1024; // 512KB max file size
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 // Computer tool names — intercepted and executed via workspace
 const COMPUTER_TOOL_NAMES = new Set([
@@ -527,7 +537,132 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       }
     }
 
+    // Owner approval management — list / inspect / approve / reject durable
+    // approval workflows started by TallaAgent. Owner/admin only; guests are
+    // forbidden. Scoped to this DO's own tenant (this.state.tenantId) so a
+    // caller cannot reach another tenant's approvals.
+    if (url.pathname.startsWith("/approvals")) {
+      return this.handleApprovals(request, url);
+    }
+
     return new Response("TallaAgent — Phase 6.1", { status: 200 });
+  }
+
+  /**
+   * Handle owner approval CRUD over durable TallaAgent approval workflows.
+   *
+   * The owner-facing LIST/VIEW is backed by the `workflow_approvals` D1 table
+   * (cross-tenant scoped by this.state.tenantId — the DO is per-tenant, so a
+   * caller cannot reach another tenant's rows). The durable PAUSE/APPROVE/
+   * REJECT gate itself is the native Cloudflare AgentWorkflow: approve/reject
+   * call this.approveWorkflow()/this.rejectWorkflow() which resume/terminate
+   * the runWorkflow instance started in the tool loop.
+   */
+  private async handleApprovals(request: Request, url: URL): Promise<Response> {
+    // Role gate — guests cannot list, inspect, approve, or reject.
+    const role = request.headers.get("X-User-Role");
+    if (role !== "owner" && role !== "admin") {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (!this.state.tenantId) {
+      return Response.json({ error: "Missing tenant" }, { status: 400 });
+    }
+    const tenantId = this.state.tenantId;
+
+    const segments = url.pathname.split("/").filter(Boolean); // ["approvals", ":id", "approve"?]
+    const id = segments[1];
+    const sub = segments[2]; // "approve" | "reject" | undefined
+
+    try {
+      // GET /approvals — list pending/active approvals for this tenant.
+      if (request.method === "GET" && !id) {
+        const rows = await getApprovals(this.env.DB, tenantId, { limit: 100 });
+        const approvals = rows.map((r) => ({
+          workflowId: r.workflow_id,
+          status: r.status,
+          actionName: r.action_name,
+          requestedBy: r.requested_by,
+          reason: r.reason,
+          actionArgs: safeJsonParse(r.action_args),
+          createdAt: r.created_at,
+          decidedAt: r.decided_at,
+          decidedBy: r.decided_by,
+          decisionReason: r.decision_reason,
+        }));
+        return Response.json({ success: true, data: { approvals, total: approvals.length } });
+      }
+
+      // GET /approvals/:id — inspect one (must belong to this tenant).
+      if (request.method === "GET" && id) {
+        const row = await getApprovalByWorkflowId(this.env.DB, tenantId, id);
+        if (!row) return Response.json({ error: "Approval not found" }, { status: 404 });
+        return Response.json({
+          success: true,
+          data: {
+            workflowId: row.workflow_id,
+            status: row.status,
+            actionName: row.action_name,
+            requestedBy: row.requested_by,
+            reason: row.reason,
+            actionArgs: safeJsonParse(row.action_args),
+            createdAt: row.created_at,
+            decidedAt: row.decided_at,
+            decidedBy: row.decided_by,
+            decisionReason: row.decision_reason,
+          },
+        });
+      }
+
+      // POST /approvals/:id/approve — owner approves → native workflow resumes.
+      if (request.method === "POST" && id && sub === "approve") {
+        const row = await getApprovalByWorkflowId(this.env.DB, tenantId, id);
+        if (!row) return Response.json({ error: "Approval not found" }, { status: 404 });
+        if (row.status !== "pending") {
+          return Response.json({ error: `Approval is already ${row.status}` }, { status: 409 });
+        }
+        let reason: string | undefined;
+        try {
+          const body = (await request.json()) as { reason?: string };
+          reason = body.reason;
+        } catch { /* no body */ }
+        await decideApproval(this.env.DB, tenantId, id, "approved", this.state.userId ?? role, reason);
+        // Resume the native workflow instance directly via sendWorkflowEvent.
+        // We bypass approveWorkflow()/rejectWorkflow() because the SDK's
+        // cf_agents_workflows tracking table is not reliably queryable from the
+        // request path in this DO arrangement; sendWorkflowEvent reaches the
+        // workflow instance directly (it waits on waitForApproval).
+        await this.sendWorkflowEvent("TALLA_APPROVAL", id, {
+          type: "approval",
+          payload: { approved: true, reason, metadata: { approvedBy: this.state.userId ?? role } },
+        });
+        return Response.json({ success: true, data: { workflowId: id, approved: true } });
+      }
+
+      // POST /approvals/:id/reject — owner rejects → native workflow terminates.
+      if (request.method === "POST" && id && sub === "reject") {
+        const row = await getApprovalByWorkflowId(this.env.DB, tenantId, id);
+        if (!row) return Response.json({ error: "Approval not found" }, { status: 404 });
+        if (row.status !== "pending") {
+          return Response.json({ error: `Approval is already ${row.status}` }, { status: 409 });
+        }
+        let reason: string | undefined;
+        try {
+          const body = (await request.json()) as { reason?: string };
+          reason = body.reason;
+        } catch { /* no body */ }
+        await decideApproval(this.env.DB, tenantId, id, "rejected", this.state.userId ?? role, reason);
+        await this.sendWorkflowEvent("TALLA_APPROVAL", id, {
+          type: "approval",
+          payload: { approved: false, reason },
+        });
+        return Response.json({ success: true, data: { workflowId: id, rejected: true } });
+      }
+
+      return Response.json({ error: "Not found" }, { status: 404 });
+    } catch (err) {
+      console.error(`[TallaAgent] handleApprovals error:`, err);
+      return Response.json({ error: (err as Error).message }, { status: 500 });
+    }
   }
 
   /**
@@ -633,7 +768,66 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
         } else {
           // D1 resort tool — execute via tool registry
-          toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+          // Approval gate: some tool actions require durable owner approval.
+          // When REQUIRES_APPROVAL, start an AgentWorkflow and DO NOT execute
+          // the tool here — the LLM only receives a pending marker, so it
+          // cannot bypass the policy and obtain/trigger the side effect.
+          const approval = evaluateToolApproval({
+            actionName: tc.name,
+            role: toolCtx.role,
+            tenantId: toolCtx.tenantId,
+          });
+          if (approval.decision === "REQUIRES_APPROVAL") {
+            let workflowId: string | null = null;
+            try {
+              workflowId = await this.runWorkflow(
+                "TALLA_APPROVAL",
+                {
+                  tenantId: toolCtx.tenantId,
+                  requestedBy: toolCtx.userId,
+                  actionName: tc.name,
+                  actionArgs: args,
+                  reason: approval.reason,
+                  requestedAt: new Date().toISOString(),
+                },
+                { metadata: { tenantId: toolCtx.tenantId, actionName: tc.name } },
+              );
+              // Record the durable approval in D1 so the owner can list/inspect
+              // it cross-request. The native workflow instance (workflowId) is
+              // the durable gate; this row is the queryable owner-facing list.
+              if (workflowId) {
+                await insertApproval(toolCtx.env.DB, {
+                  workflowId,
+                  tenantId: toolCtx.tenantId,
+                  requestedBy: toolCtx.userId ?? null,
+                  actionName: tc.name,
+                  actionArgs: args,
+                  reason: approval.reason,
+                });
+              }
+            } catch (wfErr) {
+              console.error(`[TallaAgent] Failed to start approval workflow for ${tc.name}:`, wfErr);
+            }
+            if (!workflowId) {
+              toolResult = {
+                success: false,
+                error: `Failed to start approval workflow for ${tc.name}. Please try again or contact support.`,
+              };
+            } else {
+              toolResult = {
+                success: true,
+                data: {
+                  status: "pending_approval",
+                  workflowId,
+                  actionName: tc.name,
+                  message:
+                    "This action requires owner approval. It has been queued and will execute once an owner approves it.",
+                },
+              };
+            }
+          } else {
+            toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+          }
         }
 
         // Add tool result to history

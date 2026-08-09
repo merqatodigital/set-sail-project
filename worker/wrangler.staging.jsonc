@@ -30,6 +30,11 @@
       "binding": "DAILY_BRIEFING",
       "class_name": "DailyResortBriefingWorkflow",
       "schedules": ["0 0 * * *"]
+    },
+    {
+      "name": "talla-approval",
+      "binding": "TALLA_APPROVAL",
+      "class_name": "TallaApprovalWorkflow"
     }
   ],
   "migrations": [

@@ -20,6 +20,7 @@ import { handleTallaOps } from "./routes/tallaOps.js";
 import { handleTallaChat } from "./routes/chat.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleComputer } from "./routes/computer.js";
+import { handleApprovals } from "./routes/approvals.js";
 import type { Env } from "./env.js";
 
 // Re-export TallaAgent for wrangler discovery
@@ -27,6 +28,7 @@ export { TallaAgent } from "./agents/TallaAgent.js";
 
 // Re-export Workflow for wrangler discovery
 export { DailyResortBriefingWorkflow } from "./workflows/DailyResortBriefingWorkflow.js";
+export { TallaApprovalWorkflow } from "./workflows/TallaApprovalWorkflow.js";
 
 // ---- Worker fetch handler ----
 
@@ -165,6 +167,8 @@ export default {
       } catch (err) {
         return Response.json({ error: (err as Error).message, stack: (err as Error).stack?.substring(0, 500) }, { status: 500 });
       }
+    } else if (path.startsWith("/api/approvals")) {
+      response = await handleApprovals(request, env, auth, path);
     } else if (path.startsWith("/api/computer")) {
       console.log(`[index] Routing to computer: ${path}, method: ${request.method}`);
       console.log(`[index] Auth: tenantId=${auth.tenantId}, role=${auth.role}`);
