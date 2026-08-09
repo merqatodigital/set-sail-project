@@ -6,6 +6,7 @@ import { useOperations } from "../ops/useOperations";
 import { PageHeader } from "../shared/PageHeader";
 import { KpiCard } from "../ops/OpsPrimitives";
 import { formatPHP } from "../ops/opsUtils";
+import type { FoodOrder } from "@/types/cms";
 
 const COLORS = ["#C6A15B", "#4ade80", "#60a5fa", "#f87171", "#a78bfa", "#fbbf24"];
 
@@ -71,7 +72,9 @@ export default function FinancialPage() {
   const bookings = ops.bookings;
   const tourBookings = ops.tourBookings;
   const rentals = ops.motorbikeRentals;
-  const foodOrders = ops.foodOrders;
+  // Food orders still live in the cms_data operations blob (there is no
+  // Supabase ops table for them yet), so read them from CmsContext.
+  const foodOrders: FoodOrder[] = data.operations?.foodOrders ?? [];
   const payments = ops.payments;
 
   const inRange = <T extends { createdAt: string }>(items: T[]) =>
