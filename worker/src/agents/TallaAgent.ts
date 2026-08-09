@@ -194,13 +194,15 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     const headerRole = request.headers.get("X-User-Role");
     const headerUserId = request.headers.get("X-User-Id");
 
-    // Update state from headers if provided (for HTTP requests)
-    if (headerTenantId && headerRole) {
+    // Update state from headers if provided (for HTTP requests).
+    // Tenant is set whenever provided (briefing route passes X-Tenant-Id only);
+    // role/userId are set when present.
+    if (headerTenantId) {
       this.setState({
         ...this.state,
         tenantId: headerTenantId,
-        role: headerRole,
-        userId: headerUserId || this.state.userId,
+        ...(headerRole ? { role: headerRole } : {}),
+        ...(headerUserId ? { userId: headerUserId } : {}),
       });
     }
 
@@ -510,6 +512,21 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       }
     }
 
+    // Internal owner briefing — runs the SAME agent loop as interactive Ask
+    // TALA (runBriefing), invoked by the DailyResortBriefingWorkflow. Server-
+    // side only; requires X-Tenant-Id. TallaAgent decides which tools to use.
+    if (url.pathname === "/briefing" && request.method === "POST") {
+      try {
+        if (!this.state.tenantId) {
+          return Response.json({ error: "Missing X-Tenant-Id" }, { status: 400 });
+        }
+        const briefing = await this.runBriefing();
+        return Response.json({ content: briefing });
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
+      }
+    }
+
     return new Response("TallaAgent — Phase 6.1", { status: 200 });
   }
 
@@ -653,6 +670,119 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     this.setState({ ...this.state, messages: trimmedMessages });
 
     return finalResponse;
+  }
+
+  /**
+   * Generate the daily owner operations briefing by running the SAME agent
+   * loop used by interactive Ask TALA — not a separate hardcoded generator.
+   *
+   * The Workflow invokes this with an internal, owner-level execution
+   * objective. TallaAgent reasons over Marina Terrace knowledge, live Supabase
+   * bookings, and D1 operational tools, selects the tools it needs, observes
+   * the results, continues reasoning, and returns the final briefing.
+   *
+   * Computer stays lazy: it is only initialized if the agent reasoning
+   * actually selects a Computer capability (the loop handles that below).
+   */
+  async runBriefing(): Promise<string> {
+    const apiKey = this.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return "Talla is not configured yet. The OPENROUTER_API_KEY is missing.";
+    }
+
+    // Internal owner execution context.
+    this.setState({
+      ...this.state,
+      role: "owner",
+      userId: "workflow",
+      lastInteractionAt: new Date().toISOString(),
+    });
+
+    const toolCtx: ToolContext = {
+      tenantId: this.state.tenantId,
+      userId: this.state.userId,
+      role: this.state.role,
+      db: this.env.DB,
+      env: this.env,
+    };
+
+    const systemPrompt = await this.buildLiveSystemPrompt(toolCtx);
+
+    const objective =
+      "Prepare today's Marina Terrace owner operations briefing. Inspect the live resort state using the tools available to you: current in-house guests, arrivals, departures, bookings, guest requests, housekeeping, maintenance, food orders, inventory alerts, tours, TALA tasks, and any connected operational state. Identify what needs attention, what is normal, and any actions or approvals the owner should know about. Return a concise operational briefing in Markdown.";
+
+    const messages: ConversationMessage[] = [{ role: "user", content: objective }];
+    const tools = getTools(this.state.role, this.computerEnabled);
+    const orTools = toOpenRouterTools(tools);
+
+    let finalResponse: ChatResponse | null = null;
+    const audit = createAuditWrapper(
+      this.env.DB,
+      this.state.tenantId,
+      this.state.userId,
+      this.state.sessionId,
+    );
+
+    for (let hop = 0; hop < MAX_TOOL_HOPS; hop++) {
+      const wire: ConversationMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...messages.slice(-MAX_HISTORY),
+      ];
+
+      const response = await chatCompletion(apiKey, { messages: wire, tools: orTools });
+
+      if (response.toolCalls.length === 0) {
+        finalResponse = response;
+        break;
+      }
+
+      const assistantMsg: ConversationMessage = {
+        role: "assistant",
+        content: response.content ?? "",
+        tool_calls: response.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      };
+      messages.push(assistantMsg);
+
+      for (const tc of response.toolCalls) {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(tc.arguments);
+        } catch {
+          // Invalid JSON arguments
+        }
+
+        let toolResult;
+        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled) {
+          try {
+            await this.computer.initialize();
+          } catch (err) {
+            console.error(`[TallaAgent] Computer auto-init failed for ${tc.name}:`, err);
+          }
+          toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
+        } else {
+          toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+        }
+
+        const toolMsg: ConversationMessage = {
+          role: "tool",
+          content: JSON.stringify(toolResult),
+          tool_call_id: tc.id,
+          name: tc.name,
+        };
+        messages.push(toolMsg);
+      }
+
+      finalResponse = response;
+    }
+
+    if (!finalResponse || !finalResponse.content) {
+      return "I wasn't able to complete the morning briefing. Please try again.";
+    }
+    return finalResponse.content;
   }
 
   /**

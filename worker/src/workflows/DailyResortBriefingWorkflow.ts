@@ -1,11 +1,13 @@
 // DailyResortBriefingWorkflow — Cloudflare Workflow for autonomous resort briefing.
 //
 // Architecture:
-//   Cron/Manual trigger → Workflow → D1 queries → Analysis → Computer artifact → Owner status
+//   Cron/Manual trigger → Workflow → TallaAgent (SAME agent loop as Ask TALA)
+//   → tool calls (D1 ops + Supabase bookings/knowledge) → reasoning
+//   → operational briefing → D1 artifact → (best-effort) Computer workspace
 //
-// This workflow runs daily to generate a morning briefing for resort owners.
-// It queries authoritative D1 data, analyzes operational state, and persists
-// a briefing artifact to the Computer workspace.
+// The Workflow is trigger/retry infrastructure only. The briefing intelligence
+// is the existing TallaAgent — invoked via its internal /briefing endpoint —
+// so the Morning Brief uses the SAME reasoning TALA applies interactively.
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "../env.js";
@@ -15,11 +17,6 @@ export interface BriefingParams {
   tenantId: string;
   date?: string; // YYYY-MM-DD, defaults to today
   timezone?: string; // IANA timezone, defaults to tenant setting
-}
-
-// Simplified D1 row type for serialization
-interface D1Row {
-  [key: string]: string | number | boolean | null;
 }
 
 // Workflow result
@@ -33,6 +30,7 @@ export interface BriefingResult {
   degradedReasons: string[];
   error: string | null;
   completedAt: string;
+  agentDriven: boolean;
 }
 
 export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, BriefingParams> {
@@ -40,21 +38,8 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
     const params = event.payload;
     const tenantId = params.tenantId;
     const date = params.date || new Date().toISOString().split("T")[0];
-    const timezone = params.timezone || "Asia/Manila";
 
     const degradedReasons: string[] = [];
-
-    // State persisted between steps
-    let guestRequests: D1Row[] = [];
-    let housekeeping: D1Row[] = [];
-    let maintenance: D1Row[] = [];
-    let foodOrders: D1Row[] = [];
-    let inventoryAlerts: D1Row[] = [];
-    let tours: D1Row[] = [];
-    let tallaTasks: D1Row[] = [];
-    let briefingContent = "";
-    let artifactPath = "";
-    let artifactVerified = false;
 
     try {
       // Step 1: Load tenant context and validate
@@ -72,128 +57,37 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         return { tenantId, valid: true };
       });
 
-      // Step 2: Collect D1 operations data
-      const todayStart = `${date}T00:00:00.000Z`;
-      const todayEnd = `${date}T23:59:59.999Z`;
-
-      guestRequests = await step.do("query-guest-requests", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM guest_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
-          )
-            .bind(tenantId, todayStart, todayEnd)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query guest requests: ${err}`);
-          return [];
-        }
-      });
-
-      housekeeping = await step.do("query-housekeeping", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM housekeeping_tasks WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
-          )
-            .bind(tenantId, todayStart, todayEnd)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query housekeeping: ${err}`);
-          return [];
-        }
-      });
-
-      maintenance = await step.do("query-maintenance", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM maintenance_requests WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
-          )
-            .bind(tenantId, todayStart, todayEnd)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query maintenance: ${err}`);
-          return [];
-        }
-      });
-
-      foodOrders = await step.do("query-food-orders", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM food_orders WHERE tenant_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC",
-          )
-            .bind(tenantId, todayStart, todayEnd)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query food orders: ${err}`);
-          return [];
-        }
-      });
-
-      inventoryAlerts = await step.do("query-inventory-alerts", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM inventory WHERE tenant_id = ? AND quantity <= alert_threshold",
-          )
-            .bind(tenantId)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query inventory: ${err}`);
-          return [];
-        }
-      });
-
-      tours = await step.do("query-tours", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT name, description, price, duration FROM tours WHERE tenant_id = ? AND active = 1",
-          )
-            .bind(tenantId)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query tours: ${err}`);
-          return [];
-        }
-      });
-
-      tallaTasks = await step.do("query-talla-tasks", async () => {
-        try {
-          const results = await this.env.DB.prepare(
-            "SELECT * FROM talla_tasks WHERE tenant_id = ? AND status != 'completed' ORDER BY created_at DESC",
-          )
-            .bind(tenantId)
-            .all();
-          return (results.results || []) as unknown as D1Row[];
-        } catch (err) {
-          console.error(`[Workflow] Failed to query talla tasks: ${err}`);
-          return [];
-        }
-      });
-
-      // Step 3: Generate briefing content (deterministic from D1 data)
-      briefingContent = await step.do("generate-briefing", async () => {
-        return this.generateBriefingContent(
-          tenantId,
-          date,
-          timezone,
-          guestRequests,
-          housekeeping,
-          maintenance,
-          foodOrders,
-          inventoryAlerts,
-          tours,
-          tallaTasks,
+      // Step 2: Invoke the SAME TallaAgent used by interactive Ask TALA.
+      // The agent reasons over Marina Terrace knowledge, live Supabase
+      // bookings, and D1 operational tools, selects what it needs, and returns
+      // the operational briefing. The Workflow does NOT assemble the narrative.
+      const briefingContent = await step.do("generate-briefing", async () => {
+        const doId = this.env.TALLA_AGENT.idFromName(tenantId);
+        const stub = this.env.TALLA_AGENT.get(doId);
+        const res = await stub.fetch(
+          new Request("https://talla-agent/briefing", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Tenant-Id": tenantId,
+            },
+            body: JSON.stringify({}),
+          }),
         );
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          throw new Error(`TallaAgent briefing failed (HTTP ${res.status}): ${errText}`);
+        }
+        const data = (await res.json()) as { content?: string };
+        if (!data.content) {
+          throw new Error("TallaAgent returned empty briefing");
+        }
+        return data.content;
       });
 
-      // Step 4: Store artifact in D1 (reliable cross-invocation persistence)
+      // Step 3: Store artifact in D1 (reliable cross-invocation persistence)
       const relativePath = `briefings/${date}-morning-brief.md`;
       const artifactResult = await step.do("write-artifact", async () => {
-        // Upsert into D1 — reliable, durable, accessible from any Worker invocation
         await this.env.DB.prepare(
           `INSERT INTO workflow_artifacts (tenant_id, workflow_type, artifact_type, artifact_path, content, content_length)
            VALUES (?, 'daily-briefing', 'morning_brief', ?, ?, ?)
@@ -209,9 +103,9 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
           contentLength: briefingContent.length,
         };
       });
-      artifactPath = artifactResult.relativePath;
+      const artifactPath = artifactResult.relativePath;
 
-      // Step 5: Write to Computer workspace (best-effort, for local proof)
+      // Step 4: Write to Computer workspace (best-effort, for local proof)
       await step.do("write-computer-workspace", async () => {
         if (this.env.TALLA_COMPUTER_ENABLED !== "true") return;
 
@@ -238,7 +132,7 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         }
       });
 
-      // Step 6: Verify artifact — read back from D1
+      // Step 5: Verify artifact — read back from D1
       const verification = await step.do("verify-artifact", async () => {
         const row = await this.env.DB.prepare(
           `SELECT content, content_length FROM workflow_artifacts
@@ -262,9 +156,8 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
           path: artifactResult.relativePath,
         };
       });
-      artifactVerified = verification.ready;
+      const artifactVerified = verification.ready;
 
-      // Step 6: Record completion status
       return {
         success: true,
         tenantId,
@@ -275,6 +168,7 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         degradedReasons,
         error: null,
         completedAt: new Date().toISOString(),
+        agentDriven: true,
       };
     } catch (err) {
       const errorMsg = (err as Error).message;
@@ -284,187 +178,14 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         success: false,
         tenantId,
         date,
-        artifactPath: artifactPath || null,
-        artifactVerified,
+        artifactPath: null,
+        artifactVerified: false,
         degraded: true,
         degradedReasons: [...degradedReasons, errorMsg],
         error: errorMsg,
         completedAt: new Date().toISOString(),
+        agentDriven: true,
       };
     }
-  }
-
-  /**
-   * Generate briefing content from D1 data.
-   * This is deterministic — no LLM required.
-   */
-  private generateBriefingContent(
-    tenantId: string,
-    date: string,
-    timezone: string,
-    guestRequests: D1Row[],
-    housekeeping: D1Row[],
-    maintenance: D1Row[],
-    foodOrders: D1Row[],
-    inventoryAlerts: D1Row[],
-    tours: D1Row[],
-    tallaTasks: D1Row[],
-  ): string {
-    const sections: string[] = [];
-
-    sections.push(`# Daily Resort Briefing`);
-    sections.push(`**Date:** ${date}`);
-    sections.push(`**Resort:** ${tenantId}`);
-    sections.push(`**Generated:** ${new Date().toISOString()}`);
-    sections.push(`**Timezone:** ${timezone}`);
-    sections.push("");
-
-    // Operational Snapshot
-    sections.push("## Operational Snapshot");
-    sections.push(`- Guest requests today: ${guestRequests.length}`);
-    sections.push(`- Housekeeping tasks today: ${housekeeping.length}`);
-    sections.push(`- Maintenance requests today: ${maintenance.length}`);
-    sections.push(`- Food orders today: ${foodOrders.length}`);
-    sections.push(`- Inventory alerts: ${inventoryAlerts.length}`);
-    sections.push(`- Active tours: ${tours.length}`);
-    sections.push(`- Open Talla tasks: ${tallaTasks.length}`);
-    sections.push("");
-
-    // Guest Attention Needed
-    sections.push("## Guest Attention Needed");
-    const pendingRequests = guestRequests.filter((r) => r.status === "pending");
-    if (pendingRequests.length > 0) {
-      for (const req of pendingRequests) {
-        sections.push(
-          `- [${req.status}] ${req.type || "request"}: ${req.description || "No description"}`,
-        );
-      }
-    } else {
-      sections.push("No pending guest requests.");
-    }
-    sections.push("");
-
-    // Housekeeping
-    sections.push("## Housekeeping");
-    const pendingHousekeeping = housekeeping.filter((t) => t.status !== "completed");
-    if (pendingHousekeeping.length > 0) {
-      for (const task of pendingHousekeeping) {
-        sections.push(
-          `- [${task.status}] Room ${task.roomNumber || "?"}: ${task.taskType || task.type || "task"}`,
-        );
-      }
-    } else {
-      sections.push("All housekeeping tasks completed.");
-    }
-    sections.push("");
-
-    // Maintenance
-    sections.push("## Maintenance");
-    const pendingMaintenance = maintenance.filter((m) => m.status !== "completed");
-    if (pendingMaintenance.length > 0) {
-      for (const req of pendingMaintenance) {
-        sections.push(
-          `- [${req.status}] ${req.priority || "normal"}: ${req.description || "No description"}`,
-        );
-      }
-    } else {
-      sections.push("No pending maintenance requests.");
-    }
-    sections.push("");
-
-    // Food / Kitchen
-    sections.push("## Food / Kitchen");
-    const pendingOrders = foodOrders.filter(
-      (o) => o.status !== "delivered" && o.status !== "completed",
-    );
-    if (pendingOrders.length > 0) {
-      for (const order of pendingOrders) {
-        sections.push(
-          `- [${order.status}] Room ${order.roomNumber || "?"}: ${order.items || "order"}`,
-        );
-      }
-    } else {
-      sections.push("No pending food orders.");
-    }
-    sections.push("");
-
-    // Inventory Alerts
-    sections.push("## Inventory Alerts");
-    if (inventoryAlerts.length > 0) {
-      for (const alert of inventoryAlerts) {
-        sections.push(
-          `- ${alert.name || "Item"}: ${alert.quantity || 0} remaining (threshold: ${alert.alertThreshold || "?"})`,
-        );
-      }
-    } else {
-      sections.push("No inventory alerts.");
-    }
-    sections.push("");
-
-    // Tours / Activities
-    sections.push("## Tours / Activities");
-    if (tours.length > 0) {
-      for (const tour of tours) {
-        sections.push(
-          `- ${tour.name}: ${tour.description || ""} (₱${tour.price}, ${tour.duration})`,
-        );
-      }
-    } else {
-      sections.push("No active tours configured.");
-    }
-    sections.push("");
-
-    // Open Talla Tasks
-    sections.push("## Open Talla Tasks");
-    if (tallaTasks.length > 0) {
-      for (const task of tallaTasks) {
-        sections.push(`- [${task.status}] ${task.title || task.description || "Task"}`);
-      }
-    } else {
-      sections.push("No open Talla tasks.");
-    }
-    sections.push("");
-
-    // Priority Items
-    sections.push("## Priority Items");
-    const priorityItems: string[] = [];
-    if (pendingRequests.length > 0)
-      priorityItems.push(`${pendingRequests.length} pending guest requests`);
-    const urgentMaintenance = maintenance.filter((m) => {
-      const priority = m.priority;
-      return priority === "urgent" || priority === "high";
-    });
-    if (urgentMaintenance.length > 0)
-      priorityItems.push(`${urgentMaintenance.length} urgent/high priority maintenance`);
-    if (inventoryAlerts.length > 0)
-      priorityItems.push(`${inventoryAlerts.length} inventory alerts`);
-    if (priorityItems.length > 0) {
-      for (const item of priorityItems) {
-        sections.push(`- ${item}`);
-      }
-    } else {
-      sections.push("No priority items requiring immediate attention.");
-    }
-    sections.push("");
-
-    // Recommended Owner Actions
-    sections.push("## Recommended Owner Actions");
-    const actions: string[] = [];
-    if (pendingRequests.length > 0)
-      actions.push(`Review ${pendingRequests.length} pending guest requests`);
-    if (urgentMaintenance.length > 0)
-      actions.push(`Address ${urgentMaintenance.length} urgent maintenance items`);
-    if (inventoryAlerts.length > 0)
-      actions.push(`Reorder ${inventoryAlerts.length} low inventory items`);
-    if (actions.length > 0) {
-      for (const action of actions) {
-        sections.push(`- ${action}`);
-      }
-    } else {
-      sections.push("No immediate actions required. Resort operations look smooth.");
-    }
-    sections.push("");
-
-    return sections.join("\n");
   }
 }
