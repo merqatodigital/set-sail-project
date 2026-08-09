@@ -23,6 +23,7 @@ import { handleTallaChat } from "./routes/chat.js";
 import { handleWorkflows } from "./routes/workflows.js";
 import { handleComputer } from "./routes/computer.js";
 import { handleApprovals } from "./routes/approvals.js";
+import { handleEvents } from "./routes/events.js";
 import type { Env } from "./env.js";
 
 // Re-export TallaAgent for wrangler discovery
@@ -171,6 +172,8 @@ export default {
       }
     } else if (path.startsWith("/api/approvals")) {
       response = await handleApprovals(request, env, auth, path);
+    } else if (path.startsWith("/api/events")) {
+      response = await handleEvents(request, env, path);
     } else if (path.startsWith("/api/computer")) {
       console.log(`[index] Routing to computer: ${path}, method: ${request.method}`);
       console.log(`[index] Auth: tenantId=${auth.tenantId}, role=${auth.role}`);

@@ -38,6 +38,8 @@ export interface Env {
   EMAIL?: EmailSendBinding;
   // Secret for signing agent reply-routing headers (HMAC). Optional in dev.
   EMAIL_SECRET?: string;
+  // Webhook signature secret for event ingestion (HMAC-SHA256).
+  WEBHOOK_SECRET?: string;
   // Secrets (set via `wrangler secret put`)
   OPENROUTER_API_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;

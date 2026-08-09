@@ -34,10 +34,14 @@ import { evaluatePolicy } from "../computer/policy.js";
 import { evaluateToolApproval } from "./toolApprovalPolicy.js";
 import { insertApproval, getApprovals, getApprovalByWorkflowId, decideApproval } from "../db/repos/approvalsRepo.js";
 import { logEmail } from "../db/repos/emailLogRepo.js";
+import { markEventProcessed } from "../db/repos/eventLogRepo.js";
 import { RESORT_EMAIL_SENDER } from "./tools/emailTools.js";
 
 // Import repos for system prompt context
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
+import { createHousekeepingTask } from "../db/repos/housekeepingRepo.js";
+import { createMaintenanceRequest } from "../db/repos/maintenanceRepo.js";
+import { getGuestRequest } from "../db/repos/guestRequestRepo.js";
 import { listActiveTours } from "../db/repos/toursRepo.js";
 import { listMenuItems } from "../db/repos/menuRepo.js";
 import { getResortKnowledge } from "../db/knowledge.js";
@@ -548,6 +552,10 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       return this.handleApprovals(request, url);
     }
 
+    if (url.pathname === "/events") {
+      return this.handleEventRequest(request);
+    }
+
     return new Response("TallaAgent — Phase 6.1", { status: 200 });
   }
 
@@ -719,6 +727,152 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     } catch (e) {
       console.error(`[TallaAgent] email reply failed:`, e);
     }
+  }
+
+  /**
+   * Webhook event ingress for this TallaAgent instance (per-tenant DO).
+   * Called by the Worker /api/events/* route after signature verification +
+   * dedup. Evaluates the event using the SAME live-state + tool/policy
+   * architecture as chat: reloads authoritative data where possible, runs a
+   * safe action directly, or routes an approval-gated action through the
+   * existing TallaApprovalWorkflow.
+   */
+  private async handleEventRequest(request: Request): Promise<Response> {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+    const ev = body as {
+      eventType: string;
+      eventId: string;
+      tenantId: string;
+      recordId?: string | null;
+      occurredAt?: string | null;
+      payload?: unknown;
+    };
+    try {
+      const result = await this.processEvent(ev);
+      return Response.json({ ok: true, eventId: ev.eventId, ...result }, { status: 200 });
+    } catch (err) {
+      console.error(`[TallaAgent] processEvent failed:`, err);
+      return Response.json({ ok: false, error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  /**
+   * Narrow event reasoning — reuses existing tool/policy architecture.
+   * Returns a small result summary (no chain-of-thought persisted).
+   */
+  private async processEvent(ev: {
+    eventType: string;
+    eventId: string;
+    tenantId: string;
+    recordId?: string | null;
+    payload?: unknown;
+  }): Promise<{ action: string; status: string; detail?: string }> {
+    const tenantId = this.state.tenantId ?? ev.tenantId;
+    const db = this.env.DB;
+
+    // Reload authoritative live state where a repo exists; otherwise trust the
+    // validated webhook payload (payload is not used for authorization).
+    if (ev.eventType === "guest_request.created" && ev.recordId) {
+      const live = await getGuestRequest(db, tenantId, ev.recordId);
+      if (!live) {
+        await markEventProcessed(db, ev.eventId, "error", "guest request not found");
+        return { action: "none", status: "error", detail: "guest request not found" };
+      }
+      // Decide a safe internal follow-up (no owner approval required).
+      const wantMaintenance = /maintenance|repair|broken|fix|ac|plumb|electrical/i.test(
+        `${live.type} ${live.notes}`,
+      );
+      if (wantMaintenance) {
+        const task = await createMaintenanceRequest(db, tenantId, {
+          title: `Event: ${live.type} for ${live.guestName}`,
+          description: live.notes || "Auto-created from guest request event.",
+          location: live.roomType || "resort",
+          issueType: "guest_request",
+          priority: "normal",
+          notes: `source_event_id=${ev.eventId}`,
+        });
+        await markEventProcessed(db, ev.eventId, "processed", `maintenance task ${task.id}`);
+        return { action: "createMaintenanceTask", status: "processed", detail: task.id };
+      }
+      // Default: housekeeping follow-up for any guest request.
+      const task = await createHousekeepingTask(db, tenantId, {
+        room: live.roomType || "resort",
+        taskType: "other",
+        priority: "normal",
+        notes: `Auto-created from guest request event ${ev.eventId}: ${live.notes}`,
+      });
+      await markEventProcessed(db, ev.eventId, "processed", `housekeeping task ${task.id}`);
+      return { action: "createHousekeepingTask", status: "processed", detail: task.id };
+    }
+
+    if (ev.eventType === "booking.created") {
+      const p = (ev.payload ?? {}) as {
+        specialRequests?: string;
+        guestName?: string;
+        arrivalNote?: string;
+      };
+      const special = (p.specialRequests || p.arrivalNote || "").trim();
+      if (special) {
+        // External action (email to guest) → approval-gated via existing policy.
+        const approval = evaluateToolApproval({ actionName: "sendGuestEmail", role: "owner", tenantId });
+        if (approval.decision === "REQUIRES_APPROVAL") {
+          const workflowId = await this.runWorkflow("TALLA_APPROVAL", {
+            tenantId,
+            requestedBy: "event:booking.created",
+            actionName: "sendGuestEmail",
+            actionArgs: {
+              recipient: "frontdesk@merqato.digital",
+              subject: "Special arrival request received",
+              body: `Booking special request: ${special}`,
+            },
+            reason: approval.reason,
+            requestedAt: new Date().toISOString(),
+          });
+          // Mirror the chat tool loop: record the approval in the owner-facing
+          // D1 table so it shows in /api/approvals and is approvable/rejectable.
+          await insertApproval(db, {
+            workflowId,
+            tenantId,
+            actionName: "sendGuestEmail",
+            actionArgs: {
+              recipient: "frontdesk@merqato.digital",
+              subject: "Special arrival request received",
+              body: `Booking special request: ${special}`,
+            },
+            requestedBy: "event:booking.created",
+            reason: approval.reason,
+          });
+          await markEventProcessed(db, ev.eventId, "pending_approval", "approval workflow started");
+          return { action: "sendGuestEmail", status: "pending_approval" };
+        }
+      }
+      await markEventProcessed(db, ev.eventId, "processed", "no action required");
+      return { action: "none", status: "processed", detail: "no special request" };
+    }
+
+    if (ev.eventType === "payment.recorded") {
+      const p = (ev.payload ?? {}) as { outstandingBalance?: number; amount?: number };
+      const attention = (p.outstandingBalance ?? 0) > 0;
+      await markEventProcessed(
+        db,
+        ev.eventId,
+        "processed",
+        attention ? "outstanding balance — owner attention" : "balanced",
+      );
+      return {
+        action: attention ? "flag_owner_attention" : "none",
+        status: "processed",
+        detail: `balance=${(p.outstandingBalance ?? 0).toFixed(2)}`,
+      };
+    }
+
+    await markEventProcessed(db, ev.eventId, "processed", "unsupported type — ignored");
+    return { action: "none", status: "processed", detail: "unsupported" };
   }
 
   /**
