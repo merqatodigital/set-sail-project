@@ -46,6 +46,8 @@ export interface Env {
   AI_SEARCH_TOKEN?: string;
   // Cloudflare Browser Run binding (Quick Actions: markdown/links/screenshot…).
   BROWSER?: { quickAction(action: string, options: unknown): Promise<Response> };
+  // Cloudflare Sandbox Durable Object (real Linux/code/data execution).
+  Sandbox?: unknown;
   // Secrets (set via `wrangler secret put`)
   OPENROUTER_API_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;

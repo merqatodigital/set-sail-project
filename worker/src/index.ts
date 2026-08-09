@@ -10,6 +10,7 @@
 import { routeAgentRequest } from "agents";
 import { routeAgentEmail } from "agents";
 import { createCatchAllEmailResolver } from "agents/email";
+import { proxyToSandbox } from "@cloudflare/sandbox";
 import { resolveAuth } from "./auth/middleware.js";
 import { handleTours } from "./routes/tours.js";
 import { handleGuestRequests } from "./routes/requests.js";
@@ -29,6 +30,9 @@ import type { Env } from "./env.js";
 // Re-export TallaAgent for wrangler discovery
 export { TallaAgent } from "./agents/TallaAgent.js";
 
+// Re-export Sandbox (Cloudflare Containers-backed Durable Object) for wrangler discovery
+export { Sandbox } from "@cloudflare/sandbox";
+
 // Re-export Workflow for wrangler discovery
 export { DailyResortBriefingWorkflow } from "./workflows/DailyResortBriefingWorkflow.js";
 export { TallaApprovalWorkflow } from "./workflows/TallaApprovalWorkflow.js";
@@ -47,6 +51,11 @@ export default {
       return agentResponse;
     }
     console.log(`[index] routeAgentRequest passed through: ${path}`);
+
+    // Sandbox container proxy (preview URLs / container control). Returns a
+    // Response only when the request targets a Sandbox container; otherwise null.
+    const sandboxProxy = await proxyToSandbox(request, env as never);
+    if (sandboxProxy) return sandboxProxy;
 
     // CORS headers for all API responses
     const corsHeaders = {

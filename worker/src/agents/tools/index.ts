@@ -18,6 +18,7 @@ import { getResortOperationsTool } from "./operationsSupabaseTool.js";
 import { sendGuestEmailTool } from "./emailTools.js";
 import { browserInspectPageTool, browserReadPageTool } from "./browserTools.js";
 import { searchResortKnowledgeTool } from "./aiSearchTools.js";
+import { sandboxWriteFileTool, sandboxReadFileTool, sandboxListFilesTool, sandboxRunAnalysisTool } from "./sandboxTools.js";
 
 // Computer tools (Phase 6)
 import { computerTools } from "../../computer/tools.js";
@@ -52,6 +53,10 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     tools.push(getResortOperationsTool);
     tools.push(browserInspectPageTool);
     tools.push(browserReadPageTool);
+    tools.push(sandboxWriteFileTool);
+    tools.push(sandboxReadFileTool);
+    tools.push(sandboxListFilesTool);
+    tools.push(sandboxRunAnalysisTool);
   }
 
   // Computer workspace tools — owner/admin only, when enabled

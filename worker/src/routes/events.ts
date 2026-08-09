@@ -4,6 +4,7 @@
 //   POST /api/events/booking
 //   POST /api/events/payment
 //   POST /api/events/guest-request
+//   POST /api/events/report        (event-driven Sandbox artifact generation)
 //
 // Flow: verify HMAC signature -> parse+payload validation -> persist (dedup)
 //   -> forward to the tenant's TallaAgent DO -> return 202 Accepted.
@@ -24,6 +25,7 @@ const PATH_TO_TYPE: Record<string, string> = {
   "/api/events/booking": "booking.created",
   "/api/events/payment": "payment.recorded",
   "/api/events/guest-request": "guest_request.created",
+  "/api/events/report": "report.generated",
 };
 
 function timingSafeEqual(a: string, b: string): boolean {
