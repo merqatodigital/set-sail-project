@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { useCms } from "@/context/CmsContext";
-import { uid, generateReference } from "@/admin/ops/opsUtils";
 import type { Tour } from "@/types/cms";
 import type { PortalBookingResult } from "@/pages/Portal";
+import { createTourRequest } from "@/lib/portalRepo";
 
 // ---------------------------------------------------------------------------
-// Book Experiences — select tour, set pax, confirm booking.
+// Book Experiences — select tour, set pax, submit a REQUESTED tour intent.
+// The request persists server-side (tala_tour_requests, source=portal) and
+// the owner confirms it in admin / via TALA. Guests are never auto-confirmed
+// and no fake payment is created.
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
 const DARK_CARD = "#16213e";
-const GREEN = "#1F3D2B";
 
 interface Props {
   guest: { phone: string; name: string };
@@ -20,7 +21,6 @@ interface Props {
 }
 
 export default function BookExperiences({ guest, tours, onComplete, onBack }: Props) {
-  const { update } = useCms();
   const [selectedTour, setSelectedTour] = useState<Tour | null>(null);
   const [pax, setPax] = useState(2);
   const [date, setDate] = useState(() => {
@@ -28,66 +28,42 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   });
-  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const total = selectedTour ? selectedTour.price * pax : 0;
   const tourCost = selectedTour ? selectedTour.boatCost + selectedTour.guideCost + (selectedTour.lunchCost * pax) + (selectedTour.entranceFee * pax) : 0;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedTour) return;
+    setError("");
+    setSubmitting(true);
 
-    const booking = {
-      id: uid("tb"),
-      reference: generateReference("TR"),
-      tourId: selectedTour.id,
+    const saved = await createTourRequest({
+      guest: { name: guest.name, phone: guest.phone },
       tourName: selectedTour.name,
-      guestName: guest.name,
-      guestPhone: guest.phone,
-      date,
+      tourDate: date,
       guests: pax,
       amount: total,
-      cost: tourCost,
-      paidAmount: 0,
-      status: "confirmed" as const,
-      notes: `Booked via Guest Portal. Pay on-site or GCash.`,
-      createdAt: new Date().toISOString(),
-    };
+      notes: `Booked via Guest Portal. ${tourCost > 0 ? `Est. cost: ₱${tourCost.toLocaleString()}. ` : ""}Awaiting team confirmation.`,
+    });
 
-    const payment = {
-      id: uid("pay"),
-      reference: generateReference("PY"),
-      date: new Date().toISOString().slice(0, 10),
-      category: "tour" as const,
-      direction: "in" as const,
-      amount: total,
-      method: "gcash" as const,
-      relatedId: booking.id,
-      description: `Tour: ${selectedTour.name} for ${guest.name} (${pax} pax)`,
-      notes: "",
-    };
+    setSubmitting(false);
 
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        tourBookings: [...d.operations.tourBookings, booking],
-        payments: [...d.operations.payments, payment],
-      },
-    }));
-
-    setConfirmed(true);
+    if (!saved) {
+      setError("We couldn't save your request right now. Please try again or message Reception.");
+      return;
+    }
 
     onComplete({
       type: "tour",
-      reference: booking.reference,
+      reference: saved.reference,
       name: selectedTour.name,
       date,
       amount: total,
       pax,
     });
   };
-
-  if (confirmed) return null;
 
   return (
     <div className="space-y-6">
@@ -213,19 +189,27 @@ export default function BookExperiences({ guest, tours, onComplete, onBack }: Pr
 
           {/* Guest Info */}
           <div className="rounded-lg p-3" style={{ backgroundColor: "#0f346022" }}>
-            <p className="text-xs opacity-50">Booking for</p>
+            <p className="text-xs opacity-50">Requesting for</p>
             <p className="text-sm font-medium">{guest.name}</p>
             <p className="text-xs opacity-50">{guest.phone}</p>
           </div>
 
+          {error && (
+            <p className="text-xs" style={{ color: "#f87171" }}>{error}</p>
+          )}
+
           {/* Confirm */}
           <button
             onClick={handleConfirm}
-            className="w-full rounded-lg py-3 text-sm font-medium transition"
+            disabled={submitting}
+            className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-50"
             style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
           >
-            Confirm Booking
+            {submitting ? "Submitting request…" : "Submit Tour Request"}
           </button>
+          <p className="text-center text-[10px] opacity-40">
+            Our team will confirm availability and message you.
+          </p>
         </div>
       )}
     </div>

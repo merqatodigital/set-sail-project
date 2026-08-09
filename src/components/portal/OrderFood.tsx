@@ -1,7 +1,14 @@
 import { useState, useMemo } from "react";
 import { useCms } from "@/context/CmsContext";
-import { uid, generateReference } from "@/admin/ops/opsUtils";
-import type { MenuItem, FoodOrderItem, MenuCategory } from "@/types/cms";
+import type { MenuItem, MenuCategory } from "@/types/cms";
+import { createFoodOrder } from "@/lib/portalRepo";
+
+// ---------------------------------------------------------------------------
+// Order Food & Drinks — guest builds a cart and places a PENDING food order.
+// The order persists server-side (tala_food_orders, source=portal) and the
+// kitchen confirms/prepares it in admin / via TALA. No fake payment and no
+// blob inventory mutation happen here — inventory is managed by admin.
+// ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
 const DARK_CARD = "#16213e";
@@ -28,11 +35,13 @@ interface Props {
 }
 
 export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
-  const { data, update } = useCms();
+  const { data } = useCms();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tab, setTab] = useState<MenuCategory>("breakfast");
   const [notes, setNotes] = useState("");
   const [placed, setPlaced] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [error, setError] = useState("");
 
   const menuItems = useMemo(
     () => data.operations.menuItems.filter((m) => m.active).sort((a, b) => a.order - b.order),
@@ -66,59 +75,25 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
   const totalCost = cart.reduce((s, c) => s + c.foodCost * c.quantity, 0);
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (cart.length === 0) return;
+    setError("");
+    setPlacing(true);
 
-    const now = new Date().toISOString();
-    const order = {
-      id: uid("fo"),
-      reference: generateReference("FO"),
-      guestName: guest.name,
-      guestPhone: guest.phone,
+    const saved = await createFoodOrder({
+      guest: { name: guest.name, phone: guest.phone },
       items: cart.map((c) => ({ menuItemId: c.menuItemId, name: c.name, quantity: c.quantity, price: c.price, foodCost: c.foodCost })),
       total,
       totalCost,
-      status: "pending" as const,
       notes,
-      createdAt: now,
-      confirmedAt: "",
-      preparingAt: "",
-      readyAt: "",
-      deliveredAt: "",
-      cancelledAt: "",
-    };
-
-    const payment = {
-      id: uid("pay"),
-      reference: generateReference("PY"),
-      date: now.slice(0, 10),
-      category: "food" as const,
-      direction: "in" as const,
-      amount: total,
-      method: "cash" as const,
-      relatedId: order.id,
-      description: `Food order for ${guest.name} (${cart.length} item${cart.length > 1 ? "s" : ""})`,
-      notes: "",
-    };
-
-    // Decrement inventory for each ordered item
-    const updatedMenu = menuItems.map((m) => {
-      const ordered = cart.find((c) => c.menuItemId === m.id);
-      if (ordered) {
-        return { ...m, inventoryCount: Math.max(0, m.inventoryCount - ordered.quantity) };
-      }
-      return m;
     });
 
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        foodOrders: [...d.operations.foodOrders, order],
-        payments: [...d.operations.payments, payment],
-        menuItems: updatedMenu,
-      },
-    }));
+    setPlacing(false);
+
+    if (!saved) {
+      setError("We couldn't place your order right now. Please try again or message Reception.");
+      return;
+    }
 
     setPlaced(true);
   };
@@ -280,12 +255,17 @@ export default function OrderFood({ guest, onOrderComplete, onBack }: Props) {
             <p className="text-xs opacity-50">{guest.phone}</p>
           </div>
 
+          {error && (
+            <p className="text-xs" style={{ color: "#f87171" }}>{error}</p>
+          )}
+
           <button
             onClick={placeOrder}
-            className="w-full rounded-lg py-3 text-sm font-medium transition"
+            disabled={placing}
+            className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-50"
             style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
           >
-            Place Order — {"\u20B1"}{total.toLocaleString()}
+            {placing ? "Placing order…" : `Place Order — \u20B1${total.toLocaleString()}`}
           </button>
         </div>
       )}

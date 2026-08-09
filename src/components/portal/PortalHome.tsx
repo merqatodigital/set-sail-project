@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useCms } from "@/context/CmsContext";
 import type { Tour, Motorbike } from "@/types/cms";
 import type { PortalView } from "@/pages/Portal";
+import type { PortalRecordsUI } from "@/lib/usePortalRecords";
 import { getProactiveMessages, markProactiveRead, type ProactiveMessage } from "@/components/tala/talaProactive";
 import { Bell, ChevronRight } from "lucide-react";
 
@@ -17,23 +18,16 @@ interface Props {
   guest: { phone: string; name: string };
   tours: Tour[];
   motorbikes: Motorbike[];
+  records: PortalRecordsUI;
   onNavigate: (view: PortalView) => void;
 }
 
-export default function PortalHome({ guest, tours, motorbikes, onNavigate }: Props) {
+export default function PortalHome({ guest, tours, motorbikes, records, onNavigate }: Props) {
   const { data } = useCms();
   const [proactiveMessages, setProactiveMessages] = useState<ProactiveMessage[]>([]);
-  const bookings = data.operations.bookings.filter(
-    (b) => b.guestName.toLowerCase() === guest.name.toLowerCase(),
-  );
-  const tourBookings = data.operations.tourBookings.filter(
-    (b) => (b.guestPhone?.replace(/\s/g, "") === guest.phone.replace(/\s/g, "")) ||
-           (b.guestName.toLowerCase() === guest.name.toLowerCase()),
-  );
-  const rentals = data.operations.motorbikeRentals.filter(
-    (b) => (b.guestPhone?.replace(/\s/g, "") === guest.phone.replace(/\s/g, "")) ||
-           (b.guestName.toLowerCase() === guest.name.toLowerCase()),
-  );
+  const bookings = records.bookings;
+  const tourBookings = records.tourBookings;
+  const rentals = records.rentals;
 
   const activeBooking = bookings.find(
     (b) => b.status === "confirmed" || b.status === "checked_in",

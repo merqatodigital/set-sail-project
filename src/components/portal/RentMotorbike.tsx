@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useCms } from "@/context/CmsContext";
-import { uid, generateReference } from "@/admin/ops/opsUtils";
 import type { Motorbike } from "@/types/cms";
 import type { PortalBookingResult } from "@/pages/Portal";
+import { createRentalRequest } from "@/lib/portalRepo";
 
 // ---------------------------------------------------------------------------
-// Rent Motorbike — select bike, set dates, confirm rental.
+// Rent Motorbike — select bike, set dates, submit a REQUESTED rental intent.
+// The request persists server-side (tala_rental_requests, source=portal) and
+// the owner confirms availability + rate in admin / via TALA. The bike is NOT
+// marked rented and NO payment is created until the owner confirms.
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
@@ -24,7 +26,6 @@ function daysBetween(a: string, b: string): number {
 }
 
 export default function RentMotorbike({ guest, motorbikes, onComplete, onBack }: Props) {
-  const { update } = useCms();
   const [selectedBike, setSelectedBike] = useState<Motorbike | null>(null);
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -35,70 +36,43 @@ export default function RentMotorbike({ guest, motorbikes, onComplete, onBack }:
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   });
-  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const days = selectedBike && startDate && endDate ? daysBetween(startDate, endDate) : 1;
   const total = selectedBike ? selectedBike.dailyRate * days : 0;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedBike) return;
+    setError("");
+    setSubmitting(true);
 
-    const rental = {
-      id: uid("bk"),
-      reference: generateReference("BK"),
-      bikeId: selectedBike.id,
+    const saved = await createRentalRequest({
+      guest: { name: guest.name, phone: guest.phone },
       bikeName: selectedBike.name,
-      guestName: guest.name,
-      guestPhone: guest.phone,
       startDate,
       endDate,
       days,
       amount: total,
-      paidAmount: 0,
-      deposit: 0,
-      status: "active" as const,
-      notes: `Booked via Guest Portal. Pay on-site or GCash.`,
-      createdAt: new Date().toISOString(),
-    };
+      notes: `Booked via Guest Portal. Awaiting team confirmation.`,
+    });
 
-    const payment = {
-      id: uid("pay"),
-      reference: generateReference("PY"),
-      date: new Date().toISOString().slice(0, 10),
-      category: "rental" as const,
-      direction: "in" as const,
-      amount: total,
-      method: "gcash" as const,
-      relatedId: rental.id,
-      description: `Rental: ${selectedBike.name} for ${guest.name} (${days} day${days > 1 ? "s" : ""})`,
-      notes: "",
-    };
+    setSubmitting(false);
 
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        motorbikeRentals: [...d.operations.motorbikeRentals, rental],
-        motorbikes: d.operations.motorbikes.map((m) =>
-          m.id === selectedBike.id ? { ...m, status: "rented" as const } : m,
-        ),
-        payments: [...d.operations.payments, payment],
-      },
-    }));
-
-    setConfirmed(true);
+    if (!saved) {
+      setError("We couldn't save your request right now. Please try again or message Reception.");
+      return;
+    }
 
     onComplete({
       type: "rental",
-      reference: rental.reference,
+      reference: saved.reference,
       name: selectedBike.name,
       date: startDate,
       amount: total,
       days,
     });
   };
-
-  if (confirmed) return null;
 
   return (
     <div className="space-y-6">
@@ -229,19 +203,27 @@ export default function RentMotorbike({ guest, motorbikes, onComplete, onBack }:
 
           {/* Guest Info */}
           <div className="rounded-lg p-3" style={{ backgroundColor: "#0f346022" }}>
-            <p className="text-xs opacity-50">Rental for</p>
+            <p className="text-xs opacity-50">Requesting for</p>
             <p className="text-sm font-medium">{guest.name}</p>
             <p className="text-xs opacity-50">{guest.phone}</p>
           </div>
 
+          {error && (
+            <p className="text-xs" style={{ color: "#f87171" }}>{error}</p>
+          )}
+
           {/* Confirm */}
           <button
             onClick={handleConfirm}
-            className="w-full rounded-lg py-3 text-sm font-medium transition"
+            disabled={submitting}
+            className="w-full rounded-lg py-3 text-sm font-medium transition disabled:opacity-50"
             style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
           >
-            Confirm Rental
+            {submitting ? "Submitting request…" : "Submit Rental Request"}
           </button>
+          <p className="text-center text-[10px] opacity-40">
+            Our team will confirm availability and the rate.
+          </p>
         </div>
       )}
     </div>

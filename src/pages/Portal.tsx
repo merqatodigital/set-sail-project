@@ -10,10 +10,16 @@ import ViewBill from "@/components/portal/ViewBill";
 import ViewPackages from "@/components/portal/ViewPackages";
 import MyBookings from "@/components/portal/MyBookings";
 import GCashQR from "@/components/portal/GCashQR";
+import { usePortalRecords } from "@/lib/usePortalRecords";
 
 // ---------------------------------------------------------------------------
 // Guest Portal — phone-number login, book tours, rent bikes, view bookings.
 // Dark theme with gold accents matching Marina Terrace branding.
+//
+// Records come from usePortalRecords(): authoritative Supabase
+// tala_*_requests / tala_food_orders / tala_guest_messages / tala_folio_lines
+// with a demo blob fallback. Guests always create REQUESTED intents; the
+// owner confirms + records payment in admin.
 // ---------------------------------------------------------------------------
 
 export type PortalView =
@@ -53,6 +59,7 @@ export default function Portal() {
   const [view, setView] = useState<PortalView>("login");
   const [guest, setGuest] = useState<PortalGuest | null>(null);
   const [bookingResult, setBookingResult] = useState<PortalBookingResult | null>(null);
+  const { records } = usePortalRecords(guest);
 
   const handleLogin = useCallback((phone: string, name: string) => {
     setGuest({ phone, name });
@@ -115,6 +122,7 @@ export default function Portal() {
             guest={guest}
             tours={data.operations.tours.filter((t) => t.active)}
             motorbikes={data.operations.motorbikes.filter((m) => m.active && m.status === "available")}
+            records={records}
             onNavigate={setView}
           />
         )}
@@ -155,11 +163,11 @@ export default function Portal() {
         {view === "bill" && guest && (
           <ViewBill
             guest={guest}
-            bookings={data.operations.bookings}
-            tourBookings={data.operations.tourBookings}
-            rentals={data.operations.motorbikeRentals}
-            foodOrders={data.operations.foodOrders}
-            payments={data.operations.payments}
+            bookings={records.bookings}
+            tourBookings={records.tourBookings}
+            rentals={records.rentals}
+            foodOrders={records.foodOrders}
+            payments={records.payments}
             onBack={() => setView("home")}
           />
         )}
@@ -173,9 +181,9 @@ export default function Portal() {
         {view === "bookings" && guest && (
           <MyBookings
             guest={guest}
-            bookings={data.operations.bookings}
-            tourBookings={data.operations.tourBookings}
-            rentals={data.operations.motorbikeRentals}
+            bookings={records.bookings}
+            tourBookings={records.tourBookings}
+            rentals={records.rentals}
             onBack={() => setView("home")}
           />
         )}

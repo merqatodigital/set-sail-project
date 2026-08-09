@@ -442,7 +442,7 @@ export interface MediaItem {
 // Supabase migration only needs to change src/lib/storage.ts.
 // ===========================================================================
 
-export type BookingStatus = "pending" | "confirmed" | "checked_in" | "checked_out" | "cancelled";
+export type BookingStatus = "pending" | "requested" | "confirmed" | "checked_in" | "checked_out" | "cancelled";
 export type PaymentStatus = "unpaid" | "partial" | "paid" | "refunded";
 export type PaymentMethod = "cash" | "gcash" | "bank_transfer" | "card" | "paypal" | "other";
 export type BookingSource =
@@ -514,7 +514,7 @@ export interface TourBooking {
   amount: number; // revenue
   cost: number; // total cost snapshot at booking time
   paidAmount: number;
-  status: "confirmed" | "completed" | "cancelled";
+  status: "requested" | "confirmed" | "completed" | "cancelled";
   notes: string;
   createdAt: string;
 }
@@ -592,7 +592,7 @@ export interface MotorbikeRental {
   amount: number;
   paidAmount: number;
   deposit: number;
-  status: "active" | "returned" | "cancelled";
+  status: "requested" | "active" | "returned" | "cancelled";
   notes: string;
   createdAt: string;
 }
