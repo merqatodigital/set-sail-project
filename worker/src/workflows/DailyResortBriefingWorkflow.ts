@@ -11,7 +11,7 @@
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "../env.js";
-
+import { sanitizeBriefing } from "./sanitizeBriefing.js";
 // Workflow input parameters
 export interface BriefingParams {
   tenantId: string;
@@ -82,7 +82,8 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
         if (!data.content) {
           throw new Error("TallaAgent returned empty briefing");
         }
-        return data.content;
+        // Strip any model chain-of-thought before persisting/displaying.
+        return sanitizeBriefing(data.content);
       });
 
       // Step 3: Store artifact in D1 (reliable cross-invocation persistence)

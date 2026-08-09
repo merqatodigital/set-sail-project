@@ -782,7 +782,44 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     if (!finalResponse || !finalResponse.content) {
       return "I wasn't able to complete the morning briefing. Please try again.";
     }
-    return finalResponse.content;
+    // Strip any model chain-of-thought so the owner never sees internal
+    // reasoning. These phrases never appear in a legitimate owner reply.
+    return this.sanitizeOwnerReply(finalResponse.content);
+  }
+
+  /**
+   * Remove a model's internal chain-of-thought from owner-facing output.
+   * Mirrors the workflow sanitizer: drops obvious monologue lines and trims
+   * everything before the first Markdown heading.
+   */
+  private sanitizeOwnerReply(raw: string): string {
+    const cotMarkers = [
+      "we need to",
+      "the instruction",
+      "we should comply",
+      "let me think",
+      "we'll produce",
+      "as an ai",
+      "chain of thought",
+      "reasoning trace",
+      "we can use markdown",
+      "to be safe, we can",
+      "let's interpret",
+      "that's for normal",
+      "however the user",
+      "but the user asks",
+    ];
+    const lines = raw.split("\n");
+    const kept: string[] = [];
+    for (const line of lines) {
+      const low = line.toLowerCase().trim();
+      if (cotMarkers.some((m) => low.includes(m))) continue;
+      kept.push(line);
+    }
+    let out = kept.join("\n").trim();
+    const firstHeading = out.search(/^#{1,6}\s/m);
+    if (firstHeading > 0) out = out.slice(firstHeading).trim();
+    return out;
   }
 
   /**
