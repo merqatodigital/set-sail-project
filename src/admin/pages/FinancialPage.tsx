@@ -6,6 +6,7 @@ import { useOperations } from "../ops/useOperations";
 import { PageHeader } from "../shared/PageHeader";
 import { KpiCard } from "../ops/OpsPrimitives";
 import { formatPHP } from "../ops/opsUtils";
+import type { FoodOrder } from "@/types/cms";
 
 const COLORS = ["#C6A15B", "#4ade80", "#60a5fa", "#f87171", "#a78bfa", "#fbbf24"];
 
