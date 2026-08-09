@@ -13,6 +13,7 @@
 // as the product grows toward multi-resort.
 
 import type { Env } from "../env.js";
+import { todayManila } from "../lib/date.js";
 
 // Canonical resort/tenant this Worker instance serves.
 const KNOWN_RESORT = "marina_terrace";
@@ -109,15 +110,11 @@ export async function getResortOperations(
   }
 
   // Tomorrow's date in YYYY-MM-DD (Asia/Manila).
-  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const y = tomorrow.getFullYear();
-  const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const d = String(tomorrow.getDate()).padStart(2, "0");
-  const tomorrowStr = `${y}-${m}-${d}`;
+  const tomorrowStr = todayManila(new Date(now.getTime() + 24 * 60 * 60 * 1000));
 
   // Also compute "in-house today": bookings whose check_in <= today and
   // check_out > today, status not cancelled.
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const todayStr = todayManila(now);
 
   try {
     const url = new URL(`${base.replace(/\/$/, "")}/rest/v1/bookings`);

@@ -2,6 +2,8 @@
 // Reuses persona knowledge from the existing talaPersona.ts
 // while clearly separating knowledge from action rules.
 
+import { todayManila } from "../lib/date.js";
+
 export interface SystemPromptContext {
   tenantId: string;
   role: string | null;
@@ -112,7 +114,7 @@ You know the resort, the area, and how to help guests have a great time.`);
   else timeOfDay = "night";
 
   sections.push(`Current time of day: ${timeOfDay}`);
-  sections.push(`Today's date: ${now.toISOString().split("T")[0]}`);
+  sections.push(`Today's date: ${todayManila(now)}`);
 
   // ---- Guest Context ----
   if (ctx.guestName) {

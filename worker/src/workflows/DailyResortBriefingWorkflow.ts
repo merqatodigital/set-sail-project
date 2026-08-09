@@ -12,6 +12,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "../env.js";
 import { sanitizeBriefing } from "./sanitizeBriefing.js";
+import { todayManila } from "../lib/date.js";
 // Workflow input parameters
 export interface BriefingParams {
   tenantId: string;
@@ -37,7 +38,7 @@ export class DailyResortBriefingWorkflow extends WorkflowEntrypoint<Env, Briefin
   async run(event: WorkflowEvent<BriefingParams>, step: WorkflowStep): Promise<BriefingResult> {
     const params = event.payload;
     const tenantId = params.tenantId;
-    const date = params.date || new Date().toISOString().split("T")[0];
+    const date = params.date || todayManila();
 
     const degradedReasons: string[] = [];
 
