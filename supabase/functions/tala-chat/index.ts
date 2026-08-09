@@ -130,6 +130,7 @@ const ALLOWED_ORIGINS = [
   "https://sanvic.ph",
   "https://www.marinaterrace.com",
   "https://www.sanvic.ph",
+  "https://nomads.merqato.digital",
 ];
 
 function getAllowedOrigin(req: Request): string {
