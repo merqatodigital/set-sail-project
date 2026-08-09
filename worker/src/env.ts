@@ -1,6 +1,8 @@
 // Environment bindings for the Cloudflare Worker.
 // Includes D1 database, Durable Object namespace, Workflows, and secrets.
 
+import type { EmailSendBinding } from "agents";
+
 export interface Env {
   // D1 database binding
   DB: D1Database;
@@ -32,6 +34,10 @@ export interface Env {
     }>;
     batchCreate?: (options: { params: unknown[] }) => Promise<{ instances: Array<{ id: string }> }>;
   };
+  // Cloudflare Agents Email API — send_email binding (outbound email)
+  EMAIL?: EmailSendBinding;
+  // Secret for signing agent reply-routing headers (HMAC). Optional in dev.
+  EMAIL_SECRET?: string;
   // Secrets (set via `wrangler secret put`)
   OPENROUTER_API_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;

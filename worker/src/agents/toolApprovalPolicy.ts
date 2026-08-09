@@ -30,6 +30,7 @@ export interface ToolApprovalResult {
  */
 export const APPROVAL_REQUIRED_TOOLS: ReadonlySet<string> = new Set([
   "createHousekeepingTask",
+  "sendGuestEmail",
 ]);
 
 /**

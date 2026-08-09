@@ -16,6 +16,7 @@
 // - Tool audit logging
 
 import { Agent, callable } from "agents";
+import type { AgentEmail } from "agents/email";
 import type { Env } from "../env.js";
 import { chatCompletion, type ChatResponse } from "./provider.js";
 import { buildSystemPrompt, type SystemPromptContext } from "./systemPrompt.js";
@@ -32,6 +33,8 @@ import { resolveWorkspacePath, describePath } from "../computer/paths.js";
 import { evaluatePolicy } from "../computer/policy.js";
 import { evaluateToolApproval } from "./toolApprovalPolicy.js";
 import { insertApproval, getApprovals, getApprovalByWorkflowId, decideApproval } from "../db/repos/approvalsRepo.js";
+import { logEmail } from "../db/repos/emailLogRepo.js";
+import { RESORT_EMAIL_SENDER } from "./tools/emailTools.js";
 
 // Import repos for system prompt context
 import { getAllSettings } from "../db/repos/propertySettingsRepo.js";
@@ -662,6 +665,59 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     } catch (err) {
       console.error(`[TallaAgent] handleApprovals error:`, err);
       return Response.json({ error: (err as Error).message }, { status: 500 });
+    }
+  }
+
+  /**
+   * Inbound email handler (Cloudflare Agents Email API).
+   *
+   * Security model:
+   *  - The inbound sender is NEVER treated as owner/admin. Inbound email is a
+   *    guest-facing channel; owner-only data is never disclosed in replies.
+   *  - The tenant is derived from the recipient address (this DO is keyed by
+   *    tenantId), NOT from any inbound header.
+   *  - Subject is read from headers; reply threading is handled by replyToEmail
+   *    (it sets In-Reply-To to the inbound Message-ID automatically).
+   *  - A safe acknowledgement is sent back; the owner can follow up manually.
+   */
+  async onEmail(email: AgentEmail): Promise<void> {
+    const to = email.to;
+    const from = email.from;
+    const subject = email.headers.get("subject") ?? "(no subject)";
+    const tenantId = this.state.tenantId ?? "marina_terrace";
+
+    // Audit the inbound event (guest channel — no owner data exposed).
+    try {
+      await logEmail(this.env.DB, {
+        tenantId,
+        direction: "inbound",
+        action: "receive",
+        recipient: to,
+        sender: from,
+        subject,
+        status: "received",
+        messageId: email.headers.get("message-id") ?? null,
+        metadata: { source: "onEmail" },
+      });
+    } catch (e) {
+      console.error(`[TallaAgent] email inbound audit failed:`, e);
+    }
+
+    // Reply with a safe, guest-scoped acknowledgement. Owner-only detail is
+    // deliberately omitted. Threading is preserved via In-Reply-To.
+    try {
+      await this.replyToEmail(email, {
+        fromName: RESORT_EMAIL_SENDER.name,
+        subject: `Re: ${subject}`,
+        body:
+          "Thank you for your message. We have received it and a member of our team will follow up shortly. " +
+          "For urgent matters, please contact the front desk directly.",
+        // Sign replies so they route back to this agent instance if the
+        // secure reply resolver is configured.
+        secret: this.env.EMAIL_SECRET ?? null,
+      });
+    } catch (e) {
+      console.error(`[TallaAgent] email reply failed:`, e);
     }
   }
 

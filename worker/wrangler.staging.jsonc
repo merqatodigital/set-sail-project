@@ -43,6 +43,16 @@
       "new_sqlite_classes": ["TallaAgent"]
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "destination_address": "tala@merqato.digital",
+      "forwarding_email": "forward@merqato.digital"
+    }
+  ],
+  "email_routes": [
+    "*@tala.merqato.digital"
+  ],
   "observability": {
     "enabled": true
   },

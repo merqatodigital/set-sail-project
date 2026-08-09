@@ -15,6 +15,7 @@ import { createFoodOrderTool } from "./orderTools.js";
 import { getInventoryTool } from "./inventoryTools.js";
 import { getTodayOperationsTool } from "./operationsTools.js";
 import { getResortOperationsTool } from "./operationsSupabaseTool.js";
+import { sendGuestEmailTool } from "./emailTools.js";
 
 // Computer tools (Phase 6)
 import { computerTools } from "../../computer/tools.js";
@@ -39,6 +40,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     createHousekeepingTaskTool,
     createMaintenanceRequestTool,
     createFoodOrderTool,
+    sendGuestEmailTool,
   ];
 
   // Owner-only tools

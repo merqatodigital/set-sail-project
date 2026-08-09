@@ -8,6 +8,8 @@
 // D1-backed tools, and proper authorization.
 
 import { routeAgentRequest } from "agents";
+import { routeAgentEmail } from "agents";
+import { createCatchAllEmailResolver } from "agents/email";
 import { resolveAuth } from "./auth/middleware.js";
 import { handleTours } from "./routes/tours.js";
 import { handleGuestRequests } from "./routes/requests.js";
@@ -193,4 +195,27 @@ export default {
 
     return newResponse;
   },
+
+  /**
+   * Inbound email handler — routes incoming mail to the correct TallaAgent
+   * Durable Object instance via the Agents Email API (routeAgentEmail).
+   *
+   * Routing: ALL inbound mail on the configured domain routes to this tenant's
+   * agent instance via createCatchAllEmailResolver. The tenant/agent id is
+   * fixed (not derived from inbound headers), so a sender cannot impersonate
+   * another tenant or gain owner privileges.
+   */
+  async email(
+    message: ForwardableEmailMessage,
+    env: Env,
+  ): Promise<void> {
+    const resolver = createCatchAllEmailResolver("talla-agent", "marina_terrace");
+    await routeAgentEmail(message, env, {
+      resolver,
+      onNoRoute: (email) => {
+        console.warn(`[email] No route for inbound email to ${email.to}`);
+      },
+    });
+  },
 };
+

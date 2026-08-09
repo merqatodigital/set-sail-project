@@ -26,6 +26,8 @@ import {
 } from "agents/workflows";
 import type { Env } from "../env.js";
 import { createHousekeepingTask, type CreateHousekeepingTaskInput } from "../db/repos/housekeepingRepo.js";
+import { sendGuestEmail, type SendGuestEmailParams } from "../agents/tools/emailTools.js";
+import { logEmail } from "../db/repos/emailLogRepo.js";
 
 export interface ApprovalPayload {
   tenantId: string;
@@ -87,6 +89,37 @@ export class TallaApprovalWorkflow extends AgentWorkflow<Agent, ApprovalPayload,
               p.tenantId,
               p.actionArgs as unknown as CreateHousekeepingTaskInput,
             );
+          case "sendGuestEmail": {
+            const emailBinding = (this.env as unknown as Env).EMAIL;
+            if (!emailBinding) throw new Error("EMAIL send_email binding is not configured");
+            const params = p.actionArgs as unknown as SendGuestEmailParams;
+            try {
+              const out = await sendGuestEmail(emailBinding, params);
+              await logEmail((this.env as unknown as Env).DB, {
+                tenantId: p.tenantId,
+                direction: "outbound",
+                action: "sendGuestEmail",
+                recipient: params.recipient,
+                subject: params.subject,
+                status: "sent",
+                messageId: out.messageId,
+                workflowId: this.workflowId,
+              });
+              return out;
+            } catch (sendErr) {
+              await logEmail((this.env as unknown as Env).DB, {
+                tenantId: p.tenantId,
+                direction: "outbound",
+                action: "sendGuestEmail",
+                recipient: params.recipient,
+                subject: params.subject,
+                status: "failed",
+                workflowId: this.workflowId,
+                error: (sendErr as Error).message,
+              });
+              throw sendErr;
+            }
+          }
           default:
             throw new Error(`Unsupported approval action: ${p.actionName}`);
         }
