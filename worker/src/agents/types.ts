@@ -1,5 +1,7 @@
 // TallaAgent types — shared types for the agent system.
 
+import type { Env } from "../env.js";
+
 export interface TallaTool {
   name: string;
   description: string;
@@ -12,6 +14,7 @@ export interface ToolContext {
   userId: string | null;
   role: string | null;
   db: D1Database;
+  env: Env;
 }
 
 export interface ToolResult {

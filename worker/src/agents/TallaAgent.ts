@@ -540,6 +540,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       userId: this.state.userId,
       role: this.state.role,
       db: this.env.DB,
+      env: this.env,
     };
 
     // Build system prompt with live D1 data
