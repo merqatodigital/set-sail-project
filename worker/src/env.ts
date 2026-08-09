@@ -40,6 +40,10 @@ export interface Env {
   EMAIL_SECRET?: string;
   // Webhook signature secret for event ingestion (HMAC-SHA256).
   WEBHOOK_SECRET?: string;
+  // Cloudflare AI Search config (values from env only — never hardcoded).
+  AI_SEARCH_ACCOUNT_ID?: string;
+  AI_SEARCH_INDEX?: string;
+  AI_SEARCH_TOKEN?: string;
   // Cloudflare Browser Run binding (Quick Actions: markdown/links/screenshot…).
   BROWSER?: { quickAction(action: string, options: unknown): Promise<Response> };
   // Secrets (set via `wrangler secret put`)

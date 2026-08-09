@@ -17,6 +17,7 @@ import { getTodayOperationsTool } from "./operationsTools.js";
 import { getResortOperationsTool } from "./operationsSupabaseTool.js";
 import { sendGuestEmailTool } from "./emailTools.js";
 import { browserInspectPageTool, browserReadPageTool } from "./browserTools.js";
+import { searchResortKnowledgeTool } from "./aiSearchTools.js";
 
 // Computer tools (Phase 6)
 import { computerTools } from "../../computer/tools.js";
@@ -35,6 +36,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     getToursTool,
     getMenuTool,
     getInventoryTool,
+    searchResortKnowledgeTool,
 
     // Write tools — available to authenticated users
     createGuestRequestTool,
