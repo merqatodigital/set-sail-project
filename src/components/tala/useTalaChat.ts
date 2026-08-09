@@ -23,6 +23,7 @@ import {
 import { detectSentiment, sentimentInstruction } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
+import { getTallaAgentUrl } from "@/lib/tallaFeatureFlag";
 
 interface ToolCallWire {
   id: string;
@@ -62,6 +63,27 @@ export function setDevApiKey(key: string) {
     else localStorage.removeItem(TALA_STORAGE.devApiKey);
   } catch {
     /* storage unavailable (private mode) — dev key just won't persist */
+  }
+}
+
+/**
+ * Stable per-browser guest session id. The public orb is unauthenticated, so
+ * we mint a random id stored in localStorage and reuse it for the chat
+ * session. This isolates each visitor's conversation in the Cloudflare
+ * TallaAgent Durable Object (keyed tenantId:userId) so two guests never share
+ * history or private context.
+ */
+export function getGuestSessionId(): string {
+  try {
+    const KEY = "tala.guestSessionId";
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = `guest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return `guest-anon-${Math.random().toString(36).slice(2, 10)}`;
   }
 }
 
@@ -171,6 +193,45 @@ async function askEdgeFunction(
   if (!content) {
     throw new Error("TALA returned an empty reply.");
   }
+  return { content, tool_calls: undefined };
+}
+
+/**
+ * Public guest path — routes through the SAME Cloudflare TallaAgent that
+ * powers Admin Ask TALA (one brain). The worker runs the full LLM + tool loop
+ * server-side and returns only the final text as { content }. Guest role is
+ * sent explicitly so the agent exposes only guest-safe tools (property, tours,
+ * menu, inventory, guest requests) and never owner ops / Computer / private
+ * data. A per-session guest id isolates each visitor's conversation.
+ */
+async function askCloudflareAgent(
+  messages: WireMessage[],
+  preferredModel?: string,
+): Promise<AssistantReply> {
+  const workerUrl = getTallaAgentUrl();
+  if (!workerUrl) throw new Error("TALA worker is not configured.");
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const text = lastUser?.content || "";
+  if (!text.trim()) throw new Error("Empty message.");
+  const res = await fetch(`${workerUrl}/api/talla/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: text,
+      tenantId: "marina_terrace",
+      role: "guest",
+      userId: getGuestSessionId(),
+      model: preferredModel || undefined,
+    }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
+  }
+  const content = typeof data?.content === "string" ? data.content.trim() : "";
+  if (!content) throw new Error("TALA returned an empty reply.");
+  // The worker runs its own tools server-side, so no tool_calls are returned
+  // to the client — the frontend tool loop below stays inert for guests.
   return { content, tool_calls: undefined };
 }
 
@@ -312,6 +373,11 @@ export function useTalaChat(): UseTalaChat {
               console.warn("[TALA] Direct OpenRouter call failed, using server proxy.", e);
               directDead = true;
             }
+          }
+          // Public guest path: use the same Cloudflare TallaAgent as Admin
+          // (one brain). Owner/dev-key paths keep their existing behavior.
+          if (!options?.owner) {
+            return askCloudflareAgent(msgs, preferredModel);
           }
           return askEdgeFunction(msgs, preferredModel);
         };

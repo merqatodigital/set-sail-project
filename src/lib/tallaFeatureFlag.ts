@@ -14,5 +14,8 @@ export function isCloudflareTallaEnabled(): boolean {
  * Get the Cloudflare Worker URL for the TallaAgent.
  */
 export function getTallaAgentUrl(): string {
-  return import.meta.env.VITE_WORKER_URL || "";
+  return (
+    import.meta.env.VITE_WORKER_URL ||
+    "https://talla-agent-staging.merqato-digital.workers.dev"
+  );
 }

@@ -30,8 +30,9 @@ export async function handleTallaChat(request: Request, env: Env): Promise<Respo
 
     // Try to resolve from auth header
     const auth = await resolveAuth(request, env);
-    if (auth.authenticated && auth.tenantId) {
-      tenantId = auth.tenantId;
+    const isOwner = auth.authenticated && (auth.role === "owner" || auth.role === "admin");
+    if (isOwner) {
+      tenantId = auth.tenantId ?? tenantId;
       userId = auth.userId;
       role = auth.role;
     }
@@ -40,8 +41,12 @@ export async function handleTallaChat(request: Request, env: Env): Promise<Respo
       return Response.json({ error: "Tenant ID is required" }, { status: 400 });
     }
 
-    // Get the TallaAgent Durable Object
-    const doId = env.TALLA_AGENT.idFromName(tenantId);
+    // Durable Object isolation:
+    // - Owner/admin share one conversation per tenant (current behavior).
+    // - Public guests are isolated per session (tenantId:userId) so two
+    //   visitors never share conversation history / private context.
+    const doKey = isOwner ? tenantId : `${tenantId}:${userId || "anon"}`;
+    const doId = env.TALLA_AGENT.idFromName(doKey);
     const stub = env.TALLA_AGENT.get(doId);
 
     // Send the chat message via HTTP
