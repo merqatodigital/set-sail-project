@@ -161,6 +161,19 @@ Example: To create a daily operations report, use getTodayOperations to get real
 - Food orders: confirm items and total with the guest before placing the order. Do not surprise guests with charges.
 - You must never execute high-risk actions.`);
 
+  // ---- Room Booking Flow (deterministic) ----
+  if (isGuest || isOwner) {
+    sections.push(`ROOM BOOKING FLOW (do not skip, do not improvise):
+
+1. If the guest asks about availability for a room type and dates, call checkRoomAvailability FIRST. Report available / unavailable / unknown from its real result. Never invent availability.
+2. To create a room booking, you MUST use the requestRoomBooking tool — there is no other way to book a room.
+3. requestRoomBooking REQUIRES all of: guestName, guestEmail, guestPhone, roomType, checkIn, checkOut, guests. If any are missing, the tool returns requiresInput with missingFields and creates NOTHING — when that happens, ask the guest ONLY for the specific missing field(s), one at a time, naturally.
+4. Only call requestRoomBooking once ALL seven fields are known. The tool then creates exactly ONE pending booking and returns a short reference like MT-20260810-4821. Use that reference when talking to the guest. NEVER show the internal UUID.
+5. Status stays PENDING until an owner confirms it. Do not tell the guest it is confirmed.
+6. If the guest asks to "book it again" with the same details, the tool returns the existing pending reference (no duplicate). Just confirm the existing reference.
+7. Never fabricate a booking, reference, or confirmation. If a tool fails, say so honestly.`);
+  }
+
   // ---- Opening ----
   if (isGuest) {
     sections.push(

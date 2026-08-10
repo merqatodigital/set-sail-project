@@ -73,7 +73,10 @@ export async function handleTallaChat(request: Request, env: Env): Promise<Respo
     };
 
     return Response.json({
-      content: result.content || null,
+      content:
+        result.content && result.content.trim().length > 0
+          ? result.content
+          : "I'm sorry, I didn't catch that. Could you say that again?",
       model: result.model,
       usage: result.usage,
     });
