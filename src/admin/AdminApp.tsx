@@ -33,6 +33,7 @@ import FoodOrdersManager from "./pages/FoodOrdersManager";
 import MessagesManager from "./pages/MessagesManager";
 import FinancialPage from "./pages/FinancialPage";
 import InventoryManager from "./pages/InventoryManager";
+import FolioManager from "./pages/FolioManager";
 
 export default function AdminApp() {
   const { isAuthed } = useAuth();
@@ -74,6 +75,7 @@ export default function AdminApp() {
         <Route path="food-orders" element={<FoodOrdersManager />} />
         <Route path="messages" element={<MessagesManager />} />
         <Route path="financial" element={<FinancialPage />} />
+        <Route path="folio" element={<FolioManager />} />
         <Route path="inventory" element={<InventoryManager />} />
       </Route>
     </Routes>

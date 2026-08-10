@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, Bike, CircleDollarSign, RotateCcw, Search } from "lucide-react";
+import { Plus, Trash2, Pencil, Bike, CircleDollarSign, RotateCcw, Search, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal, Switch } from "@/components/ui";
 import { PageHeader, EmptyState, TabBar } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
 import { useOperations } from "../ops/useOperations";
+import { usePortalOps } from "../ops/usePortalOps";
+import { updatePortalRentalStatus } from "@/lib/portalAdminRepo";
 import { upsertMotorbike, deleteMotorbike, upsertMotorbikeRental, deleteMotorbikeRental, upsertPayment } from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, nightsBetween, generateReference, textSearch, uid } from "../ops/opsUtils";
 import type { Motorbike, MotorbikeRental } from "@/types/cms";
+import type { PortalRentalRequestRow } from "@/lib/portalRepo";
 
 const emptyBike = (): Motorbike => ({
   id: uid("bike"), name: "", plate: "", model: "", dailyRate: 500,
@@ -24,8 +27,9 @@ const emptyRental = (bike?: Motorbike): MotorbikeRental => ({
 
 export default function RentalsManager() {
   const { data: ops, refresh } = useOperations();
+  const { rentals: portalRequests, refresh: refreshPortal } = usePortalOps();
   const { notify } = useToast();
-  const [tab, setTab] = useState<"rentals" | "fleet">("rentals");
+  const [tab, setTab] = useState<"rentals" | "fleet" | "requests">("rentals");
   const [editBike, setEditBike] = useState<Motorbike | null>(null);
   const [editRental, setEditRental] = useState<MotorbikeRental | null>(null);
   const [search, setSearch] = useState("");
@@ -36,10 +40,50 @@ export default function RentalsManager() {
 
   // KPIs
   const activeRentals = rentals.filter((r) => r.status === "active").length;
+  const pendingRequests = portalRequests.filter((r) => r.status === "requested").length;
   const revenue30 = rentals
     .filter((r) => new Date(r.createdAt) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, r) => s + r.paidAmount, 0);
   const utilization = bikes.length > 0 ? Math.round((bikes.filter((b) => b.status === "rented").length / bikes.length) * 100) : 0;
+
+  const setPortalStatus = async (id: string, status: string, label: string) => {
+    const ok = await updatePortalRentalStatus(id, status);
+    if (!ok) return notify("Could not update request", "info");
+    await refreshPortal();
+    notify(`Rental request ${label}`);
+  };
+
+  const promoteToRental = async (r: PortalRentalRequestRow) => {
+    const bike = bikes.find(
+      (b) => b.name.trim().toLowerCase() === (r.bike_name || "").trim().toLowerCase(),
+    );
+    const days = nightsBetween(r.start_date, r.end_date) || 1;
+    const amount = bike ? bike.dailyRate * days : r.amount;
+    const rental: MotorbikeRental = {
+      id: uid("rent"),
+      reference: generateReference("BK"),
+      bikeId: bike?.id || "",
+      bikeName: bike?.name || r.bike_name,
+      guestName: r.guest_name,
+      guestPhone: r.guest_phone,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      days,
+      amount,
+      paidAmount: 0,
+      deposit: 0,
+      status: "active",
+      notes: `From portal request ${r.reference || r.id}`,
+      createdAt: new Date().toISOString(),
+    };
+    const rentalOk = await upsertMotorbikeRental(rental);
+    let bikeOk = true;
+    if (bike) bikeOk = await upsertMotorbike({ ...bike, status: "rented" });
+    const reqOk = await updatePortalRentalStatus(r.id, "active");
+    if (!rentalOk || !bikeOk || !reqOk) return notify("Could not create rental", "info");
+    await Promise.all([refresh(), refreshPortal()]);
+    notify(`Rental ${rental.reference} created`);
+  };
 
   const saveBike = async (b: Motorbike) => {
     const exists = bikes.some((x) => x.id === b.id);
@@ -125,16 +169,16 @@ export default function RentalsManager() {
             <Button onClick={() => setEditRental(emptyRental(availableBikes[0]))} disabled={availableBikes.length === 0}>
               <Plus className="h-4 w-4" /> New Rental
             </Button>
-          ) : (
+          ) : tab === "fleet" ? (
             <Button onClick={() => setEditBike(emptyBike())}><Plus className="h-4 w-4" /> Add Bike</Button>
-          )
+          ) : undefined
         }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard label="Active rentals" value={String(activeRentals)} tone={activeRentals ? "positive" : "default"} />
-        <KpiCard label="Available bikes" value={String(availableBikes.length)} sub={`of ${bikes.length} total`} />
-        <KpiCard label="Utilization" value={`${utilization}%`} />
+        <KpiCard label="Available bikes" value={String(availableBikes.length)} sub={`${utilization}% utilized · of ${bikes.length}`} />
+        <KpiCard label="Pending requests" value={String(pendingRequests)} tone={pendingRequests > 0 ? "warning" : "default"} />
         <KpiCard label="Revenue (30d)" value={formatPHP(revenue30)} tone="positive" />
       </div>
 
@@ -143,6 +187,7 @@ export default function RentalsManager() {
         onChange={setTab}
         tabs={[
           { id: "rentals", label: "Rentals", count: rentals.length },
+          { id: "requests", label: "Portal Requests", count: pendingRequests },
           { id: "fleet", label: "Fleet", count: bikes.length },
         ]}
       />
@@ -216,6 +261,78 @@ export default function RentalsManager() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </OpsTable>
+          )}
+        </>
+      )}
+
+      {tab === "requests" && (
+        <>
+          {portalRequests.length === 0 ? (
+            <EmptyState title="No portal requests" description="Motorbike requests submitted by guests in the Guest Portal or via TALA appear here. Confirm, then create the operational rental." />
+          ) : (
+            <OpsTable>
+              <thead>
+                <tr>
+                  <OpsTH>Reference</OpsTH>
+                  <OpsTH>Guest</OpsTH>
+                  <OpsTH>Bike</OpsTH>
+                  <OpsTH>Dates</OpsTH>
+                  <OpsTH>Amount</OpsTH>
+                  <OpsTH>Status</OpsTH>
+                  <OpsTH className="text-right">Actions</OpsTH>
+                </tr>
+              </thead>
+              <tbody>
+                {portalRequests.map((r) => (
+                  <tr key={r.id} className="hover:bg-[#FAF6EF]/60">
+                    <OpsTD><span className="font-mono text-xs text-[#26221C]/60">{r.reference || "—"}</span></OpsTD>
+                    <OpsTD>
+                      <div className="font-medium">{r.guest_name}</div>
+                      <div className="text-xs text-[#26221C]/45">{r.guest_phone}</div>
+                    </OpsTD>
+                    <OpsTD className="max-w-[200px] truncate">{r.bike_name}</OpsTD>
+                    <OpsTD>
+                      <div className="text-xs">{formatDate(r.start_date)} → {formatDate(r.end_date)}</div>
+                      <div className="text-[10px] text-[#26221C]/45">{r.days} day{r.days !== 1 ? "s" : ""}</div>
+                    </OpsTD>
+                    <OpsTD>
+                      <div className="font-medium">{formatPHP(r.amount)}</div>
+                      <div className="text-xs text-[#26221C]/40">{formatDate(r.created_at)}</div>
+                    </OpsTD>
+                    <OpsTD><StatusPill value={r.status} /></OpsTD>
+                    <OpsTD className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {(r.status === "requested" || r.status === "confirmed") && (
+                          <button onClick={() => promoteToRental(r)} className="rounded-md p-1.5 text-[#C6A15B] hover:bg-[#C6A15B]/10" title="Confirm & create rental">
+                            <Bike className="h-4 w-4" />
+                          </button>
+                        )}
+                        {r.status === "requested" && (
+                          <button onClick={() => setPortalStatus(r.id, "confirmed", "confirmed")} className="rounded-md p-1.5 text-blue-500 hover:bg-blue-50" title="Confirm only">
+                            <CheckCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                        {r.status === "confirmed" && (
+                          <button onClick={() => setPortalStatus(r.id, "active", "started")} className="rounded-md p-1.5 text-green-600 hover:bg-green-50" title="Mark active">
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        )}
+                        {r.status === "active" && (
+                          <button onClick={() => setPortalStatus(r.id, "returned", "returned")} className="rounded-md p-1.5 text-green-600 hover:bg-green-50" title="Mark returned">
+                            <CheckCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                        {!["returned", "cancelled"].includes(r.status) && (
+                          <button onClick={() => setPortalStatus(r.id, "cancelled", "cancelled")} className="rounded-md p-1.5 text-red-400 hover:bg-red-50" title="Cancel">
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </OpsTD>
+                  </tr>
+                ))}
               </tbody>
             </OpsTable>
           )}

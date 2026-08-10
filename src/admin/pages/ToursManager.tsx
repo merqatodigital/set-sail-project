@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Plus, Trash2, Pencil, Ship, Users, Search, CircleDollarSign } from "lucide-react";
+import { Plus, Trash2, Pencil, Ship, Users, Search, CircleDollarSign, CheckCircle, PlayCircle, Flag, XCircle } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Select, Modal, Switch } from "@/components/ui";
 import { PageHeader, EmptyState, TabBar } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
 import { useOperations } from "../ops/useOperations";
+import { usePortalOps } from "../ops/usePortalOps";
+import { updatePortalTourStatus } from "@/lib/portalAdminRepo";
 import { upsertTour, deleteTour, upsertTourBooking, deleteTourBooking, upsertPayment } from "@/lib/opsRepo";
 import { formatPHP, formatDate, todayISO, generateReference, textSearch, uid } from "../ops/opsUtils";
 import type { Tour, TourBooking } from "@/types/cms";
@@ -21,8 +23,9 @@ const emptyTourBooking = (tourId = "", tourName = ""): TourBooking => ({
 
 export default function ToursManager() {
   const { data: ops, refresh } = useOperations();
+  const { tours: portalRequests, refresh: refreshPortal } = usePortalOps();
   const { notify } = useToast();
-  const [tab, setTab] = useState<"tours" | "bookings">("bookings");
+  const [tab, setTab] = useState<"tours" | "bookings" | "requests">("bookings");
   const [editTour, setEditTour] = useState<Tour | null>(null);
   const [editBooking, setEditBooking] = useState<TourBooking | null>(null);
   const [search, setSearch] = useState("");
@@ -33,12 +36,20 @@ export default function ToursManager() {
 
   // KPIs
   const upcoming = bookings.filter((b) => b.status === "confirmed" && b.date >= todayISO()).length;
+  const pendingRequests = portalRequests.filter((r) => r.status === "requested").length;
   const guests30 = bookings
     .filter((b) => new Date(b.date) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, b) => s + b.guests, 0);
   const revenue30 = bookings
     .filter((b) => new Date(b.date) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, b) => s + b.paidAmount, 0);
+
+  const setPortalStatus = async (id: string, status: string, label: string) => {
+    const ok = await updatePortalTourStatus(id, status);
+    if (!ok) return notify("Could not update request", "info");
+    await refreshPortal();
+    notify(`Tour request ${label}`);
+  };
 
   const saveTour = async (t: Tour) => {
     const exists = tours.some((x) => x.id === t.id);
@@ -105,17 +116,17 @@ export default function ToursManager() {
             <Button onClick={() => setEditBooking(emptyTourBooking(activeTours[0]?.id, activeTours[0]?.name))} disabled={activeTours.length === 0}>
               <Plus className="h-4 w-4" /> New Booking
             </Button>
-          ) : (
+          ) : tab === "tours" ? (
             <Button onClick={() => setEditTour(emptyTour(tours.length))}><Plus className="h-4 w-4" /> New Tour</Button>
-          )
+          ) : undefined
         }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard label="Upcoming tours" value={String(upcoming)} tone={upcoming ? "positive" : "default"} />
+        <KpiCard label="Pending requests" value={String(pendingRequests)} tone={pendingRequests > 0 ? "warning" : "default"} />
         <KpiCard label="Guests (30d)" value={String(guests30)} />
         <KpiCard label="Revenue (30d)" value={formatPHP(revenue30)} tone="positive" />
-        <KpiCard label="Active tours" value={String(activeTours.length)} sub={`of ${tours.length} total`} />
       </div>
 
       <TabBar
@@ -123,6 +134,7 @@ export default function ToursManager() {
         onChange={setTab}
         tabs={[
           { id: "bookings", label: "Bookings", count: bookings.length },
+          { id: "requests", label: "Portal Requests", count: pendingRequests },
           { id: "tours", label: "Tour Catalog", count: tours.length },
         ]}
       />
@@ -187,6 +199,72 @@ export default function ToursManager() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </OpsTable>
+          )}
+        </>
+      )}
+
+      {tab === "requests" && (
+        <>
+          {portalRequests.length === 0 ? (
+            <EmptyState title="No portal requests" description="Tour requests submitted by guests in the Guest Portal or via TALA appear here." />
+          ) : (
+            <OpsTable>
+              <thead>
+                <tr>
+                  <OpsTH>Reference</OpsTH>
+                  <OpsTH>Guest</OpsTH>
+                  <OpsTH>Tour</OpsTH>
+                  <OpsTH>Date</OpsTH>
+                  <OpsTH>Guests</OpsTH>
+                  <OpsTH>Amount</OpsTH>
+                  <OpsTH>Status</OpsTH>
+                  <OpsTH className="text-right">Actions</OpsTH>
+                </tr>
+              </thead>
+              <tbody>
+                {portalRequests.map((r) => (
+                  <tr key={r.id} className="hover:bg-[#FAF6EF]/60">
+                    <OpsTD><span className="font-mono text-xs text-[#26221C]/60">{r.reference || "—"}</span></OpsTD>
+                    <OpsTD>
+                      <div className="font-medium">{r.guest_name}</div>
+                      <div className="text-xs text-[#26221C]/45">{r.guest_phone}</div>
+                    </OpsTD>
+                    <OpsTD className="max-w-[220px] truncate">{r.tour_name}</OpsTD>
+                    <OpsTD>{formatDate(r.tour_date)}</OpsTD>
+                    <OpsTD>{r.guests}</OpsTD>
+                    <OpsTD>
+                      <div className="font-medium">{formatPHP(r.amount)}</div>
+                      <div className="text-xs text-[#26221C]/40">{formatDate(r.created_at)}</div>
+                    </OpsTD>
+                    <OpsTD><StatusPill value={r.status} /></OpsTD>
+                    <OpsTD className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {r.status === "requested" && (
+                          <button onClick={() => setPortalStatus(r.id, "confirmed", "confirmed")} className="rounded-md p-1.5 text-blue-500 hover:bg-blue-50" title="Confirm">
+                            <CheckCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                        {r.status === "confirmed" && (
+                          <button onClick={() => setPortalStatus(r.id, "in_progress", "started")} className="rounded-md p-1.5 text-amber-500 hover:bg-amber-50" title="Start">
+                            <PlayCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                        {r.status === "in_progress" && (
+                          <button onClick={() => setPortalStatus(r.id, "completed", "completed")} className="rounded-md p-1.5 text-green-600 hover:bg-green-50" title="Complete">
+                            <Flag className="h-4 w-4" />
+                          </button>
+                        )}
+                        {!["completed", "cancelled"].includes(r.status) && (
+                          <button onClick={() => setPortalStatus(r.id, "cancelled", "cancelled")} className="rounded-md p-1.5 text-red-400 hover:bg-red-50" title="Cancel">
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </OpsTD>
+                  </tr>
+                ))}
               </tbody>
             </OpsTable>
           )}
