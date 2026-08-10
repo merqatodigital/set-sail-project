@@ -18,6 +18,7 @@ import {
 } from "./guestStateTools.js";
 import { getMenuTool } from "./menuTools.js";
 import { createGuestRequestTool } from "./guestRequestTools.js";
+import { requestRoomBookingTool } from "./bookingTools.js";
 import { createHousekeepingTaskTool } from "./housekeepingTools.js";
 import { createMaintenanceRequestTool } from "./maintenanceTools.js";
 import { createFoodOrderTool } from "./orderTools.js";
@@ -59,6 +60,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     createHousekeepingTaskTool,
     createMaintenanceRequestTool,
     createFoodOrderTool,
+    requestRoomBookingTool,
     sendGuestEmailTool,
   ];
 

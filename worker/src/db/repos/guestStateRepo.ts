@@ -390,3 +390,85 @@ export async function writeGuestMessage(
   }
   return { ok: true, id };
 }
+
+// ---------------------------------------------------------------------------
+// BOOKING REQUEST — deterministic room-booking creation into tala_booking_requests
+// with explicit contact persistence + short human reference + duplicate guard.
+// ---------------------------------------------------------------------------
+export interface CreateBookingRequestInput {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  notes?: string;
+}
+export interface BookingRequestResult {
+  id: string;
+  reference: string;
+}
+
+function makeReference(checkIn: string): string {
+  // MT-YYYYMMDD-XXXX — short, human-readable; UUID stays the PK internally.
+  const ymd = (checkIn || "").replace(/-/g, "").slice(0, 8) || "00000000";
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `MT-${ymd}-${rand}`;
+}
+
+/** Find an existing PENDING booking for the same guest/room/dates/guests (dedupe). */
+export async function findPendingBooking(
+  env: Env,
+  opts: { guestName: string; roomType: string; checkIn: string; checkOut: string; guests: number },
+): Promise<BookingRequestResult | null> {
+  const rows = await sbSelect(
+    env,
+    "tala_booking_requests",
+    "id,reference,guest_name,room_type,check_in,check_out,guests,status",
+    {
+      and: `(guest_name.eq.${opts.guestName},room_type.eq.${opts.roomType},check_in.eq.${opts.checkIn},check_out.eq.${opts.checkOut},guests.eq.${opts.guests},status.eq.pending)`,
+    },
+  ).catch(() => []);
+  const r = rows[0];
+  return r ? { id: String(r.id), reference: String(r.reference ?? "") } : null;
+}
+
+export async function createBookingRequest(
+  env: Env,
+  input: CreateBookingRequestInput,
+): Promise<BookingRequestResult> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) throw new Error("Supabase not configured");
+  const id = `tala_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const reference = makeReference(input.checkIn);
+  const res = await fetch(`${base}/rest/v1/tala_booking_requests`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      id,
+      reference,
+      guest_name: input.guestName,
+      guest_email: input.guestEmail,
+      guest_phone: input.guestPhone,
+      room_type: input.roomType,
+      check_in: input.checkIn,
+      check_out: input.checkOut,
+      guests: input.guests,
+      notes: input.notes ?? "",
+      status: "pending",
+      source: "tala_chat",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Booking request failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
+  }
+  return { id, reference };
+}
