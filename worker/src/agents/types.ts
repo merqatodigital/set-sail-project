@@ -19,6 +19,8 @@ export interface ToolContext {
   // guest tools never trust an LLM-supplied name. Undefined for owner/admin.
   guestName?: string | null;
   guestPhone?: string | null;
+  guestEmail?: string | null;
+  bookingReference?: string | null;
 }
 
 export interface ToolResult {
@@ -51,6 +53,13 @@ export interface TallaAgentState {
   messages: ConversationMessage[];
   guestName: string | null;
   guestRoom: string | null;
+  // Persisted guest identity from a completed booking/request, so later turns
+  // reuse it (identity continuity) instead of re-asking. Never trust a raw
+  // guest-supplied name for read scope — these are captured only after a
+  // successful, server-validated write.
+  guestPhone: string | null;
+  guestEmail: string | null;
+  bookingReference: string | null;
 }
 
 export interface OpenRouterResponse {

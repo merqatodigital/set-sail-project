@@ -109,6 +109,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     messages: [],
     guestName: null,
     guestRoom: null,
+    guestPhone: null,
+    guestEmail: null,
+    bookingReference: null,
   };
 
   async onStart(): Promise<void> {
@@ -994,7 +997,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       db: this.env.DB,
       env: this.env,
       guestName: this.state.guestName,
-      guestPhone: (this.state as unknown as { guestPhone?: string | null }).guestPhone ?? null,
+      guestPhone: this.state.guestPhone,
+      guestEmail: this.state.guestEmail,
+      bookingReference: this.state.bookingReference,
     };
 
     // Build system prompt with live D1 data
@@ -1007,6 +1012,17 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     // Get tools for current role
     const tools = getTools(this.state.role, this.computerEnabled);
     const orTools = toOpenRouterTools(tools);
+
+    // Identity accumulator — captured from successfully executed guest writes
+    // (booking/request) so later turns reuse it (identity continuity). We only
+    // persist values the server has already validated; we never trust a raw
+    // guest-supplied name for read scoping.
+    const identityDelta: {
+      guestName?: string;
+      guestPhone?: string;
+      guestEmail?: string;
+      bookingReference?: string;
+    } = {};
 
     // Tool-calling loop
     let finalResponse: ChatResponse | null = null;
@@ -1132,6 +1148,29 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           }
         }
 
+        // Capture identity from a successful guest write so later turns reuse it.
+        // Only values the server validated are trusted. A name supplied to a
+        // read-only tool is NOT persisted (guests never set read scope).
+        try {
+          const ok = (toolResult && (toolResult as { success?: boolean }).success) ?? false;
+          if (ok) {
+            const a = args as Record<string, unknown>;
+            const r = (toolResult as { data?: Record<string, unknown> }).data ?? {};
+            const name = (a.guestName as string) || (r.guestName as string);
+            const phone = (a.guestPhone as string) || (r.guestPhone as string);
+            const email = (a.guestEmail as string) || (r.guestEmail as string);
+            if (name && typeof name === "string") identityDelta.guestName = name;
+            if (phone && typeof phone === "string") identityDelta.guestPhone = phone;
+            if (email && typeof email === "string") identityDelta.guestEmail = email;
+            if (tc.name === "requestRoomBooking") {
+              const ref = r.reference as string;
+              if (ref && typeof ref === "string") identityDelta.bookingReference = ref;
+            }
+          }
+        } catch {
+          /* ignore identity capture errors */
+        }
+
         // Add tool result to history
         const toolMsg: ConversationMessage = {
           role: "tool",
@@ -1140,6 +1179,23 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           name: tc.name,
         };
         messages.push(toolMsg);
+      }
+
+      // Persist any captured identity into durable session state so the NEXT
+      // turn (and later hops in this same turn) reuse it — identity continuity.
+      if (
+        identityDelta.guestName ||
+        identityDelta.guestPhone ||
+        identityDelta.guestEmail ||
+        identityDelta.bookingReference
+      ) {
+        this.setState({
+          ...this.state,
+          guestName: identityDelta.guestName ?? this.state.guestName,
+          guestPhone: identityDelta.guestPhone ?? this.state.guestPhone,
+          guestEmail: identityDelta.guestEmail ?? this.state.guestEmail,
+          bookingReference: identityDelta.bookingReference ?? this.state.bookingReference,
+        });
       }
 
       // Continue loop — LLM will process tool results
@@ -1169,6 +1225,21 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     // reasoning (mirrors runBriefing's sanitizer).
     if (finalResponse?.content) {
       finalResponse = { ...finalResponse, content: this.sanitizeOwnerReply(finalResponse.content) };
+    }
+
+    // Null/empty output guard: never surface a blank guest response. The model
+    // occasionally returns null content (free-model flakiness); answer gracefully
+    // instead of an empty bubble. Write tools are never re-executed here — a null
+    // response only triggers a retry of the LLM call, and server-side dedupe
+    // protects against any accidental replay of a prior successful write.
+    if (!finalResponse?.content || finalResponse.content.trim().length === 0) {
+      finalResponse = {
+        ...finalResponse,
+        content: "I'm sorry, I didn't catch that. Could you say that again?",
+        toolCalls: [],
+        finishReason: finalResponse?.finishReason ?? "null_content",
+        model: finalResponse?.model ?? "none",
+      };
     }
 
     return finalResponse;
@@ -1207,7 +1278,9 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       db: this.env.DB,
       env: this.env,
       guestName: this.state.guestName,
-      guestPhone: (this.state as unknown as { guestPhone?: string | null }).guestPhone ?? null,
+      guestPhone: this.state.guestPhone,
+      guestEmail: this.state.guestEmail,
+      bookingReference: this.state.bookingReference,
     };
 
     const systemPrompt = await this.buildLiveSystemPrompt(toolCtx);

@@ -538,3 +538,371 @@ export async function checkRoomAvailability(
     return fallback("Could not verify availability right now.");
   }
 }
+
+// ---------------------------------------------------------------------------
+// AUTHORITATIVE PRICING LOOKUPS (guest/model prices are NEVER financial truth)
+// ---------------------------------------------------------------------------
+import { listActiveTours } from "./toursRepo.js";
+
+/** Tour price from D1 tours_catalog. Returns null if the tour name is unknown. */
+export async function getTourPrice(
+  db: import("@cloudflare/workers-types").D1Database,
+  tenantId: string,
+  tourName: string,
+): Promise<number | null> {
+  const tours = await listActiveTours(db, tenantId).catch(() => []);
+  const t = tours.find((x) => x.name.toLowerCase() === tourName.toLowerCase());
+  return t ? Number(t.price ?? 0) : null;
+}
+
+/** Motorbike daily rate from Supabase `motorbikes` by name. Null if unknown. */
+export async function getBikeRate(
+  env: Env,
+  bikeName: string,
+): Promise<number | null> {
+  const rows = await sbSelect(env, "motorbikes", "name,daily_rate", {
+    name: `eq.${bikeName}`,
+  }).catch(() => []);
+  const b = rows[0];
+  return b ? Number(b.daily_rate ?? 0) : null;
+}
+
+// ---------------------------------------------------------------------------
+// WRITE — tour request (authoritative tala_tour_requests)
+// ---------------------------------------------------------------------------
+export interface TourRequestInput {
+  guestName: string;
+  guestPhone: string;
+  guestEmail?: string;
+  tourName: string;
+  tourDate: string;
+  guests: number;
+  amount: number;
+  notes?: string;
+}
+export interface LifecycleResult {
+  id: string;
+  reference: string;
+}
+
+function makeRef(prefix: string, anchor: string): string {
+  const ymd = (anchor || "").replace(/-/g, "").slice(0, 8) || "00000000";
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}-${ymd}-${rand}`;
+}
+
+/** Dedupe: same guest/tour/date/guests already requested (pending/requested). */
+export async function findPendingTour(
+  env: Env,
+  o: { guestName: string; tourName: string; tourDate: string; guests: number },
+): Promise<LifecycleResult | null> {
+  const rows = await sbSelect(
+    env,
+    "tala_tour_requests",
+    "id,reference,guest_name,tour_name,tour_date,guests,status",
+    {
+      and: `(guest_name.eq.${o.guestName},tour_name.eq.${o.tourName},tour_date.eq.${o.tourDate},guests.eq.${o.guests},status.in.(requested,pending,confirmed))`,
+    },
+  ).catch(() => []);
+  const r = rows[0];
+  return r ? { id: String(r.id), reference: String(r.reference ?? "") } : null;
+}
+
+export async function createTourRequest(
+  env: Env,
+  input: TourRequestInput,
+): Promise<LifecycleResult> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) throw new Error("Supabase not configured");
+  const reference = makeRef("TT", input.tourDate);
+  const res = await fetch(`${base}/rest/v1/tala_tour_requests`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({
+      reference,
+      guest_name: input.guestName,
+      guest_phone: input.guestPhone,
+      guest_email: input.guestEmail ?? "",
+      tour_name: input.tourName,
+      tour_date: input.tourDate,
+      guests: input.guests,
+      amount: input.amount,
+      notes: input.notes ?? "",
+      status: "requested",
+      source: "tala_chat",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Tour request failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
+  }
+  const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
+  const id = rows[0] ? String(rows[0].id) : "";
+  return { id, reference };
+}
+
+// ---------------------------------------------------------------------------
+// WRITE — motorbike rental request (authoritative tala_rental_requests)
+// ---------------------------------------------------------------------------
+export interface RentalRequestInput {
+  guestName: string;
+  guestPhone: string;
+  bikeName: string;
+  startDate: string;
+  endDate: string;
+  notes?: string;
+}
+export async function findPendingRental(
+  env: Env,
+  o: { guestName: string; bikeName: string; startDate: string; endDate: string },
+): Promise<LifecycleResult | null> {
+  const rows = await sbSelect(
+    env,
+    "tala_rental_requests",
+    "id,reference,guest_name,bike_name,start_date,end_date,status",
+    {
+      and: `(guest_name.eq.${o.guestName},bike_name.eq.${o.bikeName},start_date.eq.${o.startDate},end_date.eq.${o.endDate},status.in.(requested,pending,confirmed))`,
+    },
+  ).catch(() => []);
+  const r = rows[0];
+  return r ? { id: String(r.id), reference: String(r.reference ?? "") } : null;
+}
+
+export async function createRentalRequest(
+  env: Env,
+  input: RentalRequestInput,
+): Promise<LifecycleResult> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) throw new Error("Supabase not configured");
+  const reference = makeRef("MR", input.startDate);
+  const res = await fetch(`${base}/rest/v1/tala_rental_requests`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({
+      reference,
+      guest_name: input.guestName,
+      guest_phone: input.guestPhone,
+      bike_name: input.bikeName,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      notes: input.notes ?? "",
+      status: "requested",
+      source: "tala_chat",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Rental request failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
+  }
+  const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
+  const id = rows[0] ? String(rows[0].id) : "";
+  return { id, reference };
+}
+
+// ---------------------------------------------------------------------------
+// WRITE — housekeeping request (D1 guest_requests; no Supabase housekeeping table)
+// Deterministic: validation + dedupe + short reference, status pending.
+// ---------------------------------------------------------------------------
+import { createGuestRequest } from "./guestRequestRepo.js";
+
+export async function createHousekeepingRequest(
+  db: import("@cloudflare/workers-types").D1Database,
+  tenantId: string,
+  input: { guestName: string; room: string; taskType: string; priority: string; notes?: string },
+): Promise<LifecycleResult> {
+  const reference = makeRef("HK", new Date().toISOString().slice(0, 10));
+  // Reuse the existing D1 guest_requests row (housekeeping type) for persistence.
+  const rec = await createGuestRequest(db, tenantId, {
+    type: "housekeeping",
+    guestName: input.guestName,
+    roomType: input.room,
+    notes: `task:${input.taskType}|priority:${input.priority}|${input.notes ?? ""}`,
+    source: "tala_chat",
+  });
+  // Overwrite the auto-generated id reference by returning our short ref too.
+  return { id: rec.id, reference };
+}
+
+// ---------------------------------------------------------------------------
+// WRITE — record an explicit payment into tala_folio_lines (owner/admin only)
+// ---------------------------------------------------------------------------
+export interface PaymentInput {
+  guestName: string;
+  guestPhone: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  relatedType?: string;
+  relatedId?: string;
+}
+export async function recordPayment(
+  env: Env,
+  input: PaymentInput,
+): Promise<LifecycleResult> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) throw new Error("Supabase not configured");
+  const reference = input.reference || makeRef("PAY", new Date().toISOString().slice(0, 10));
+  const res = await fetch(`${base}/rest/v1/tala_folio_lines`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({
+      guest_name: input.guestName,
+      guest_phone: input.guestPhone,
+      kind: "payment",
+      category: "payment",
+      description: `Payment ${input.method}`,
+      amount: input.amount,
+      method: input.method,
+      reference,
+      related_type: input.relatedType ?? "",
+      related_id: input.relatedId ?? "",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Payment record failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
+  }
+  const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
+  const id = rows[0] ? String(rows[0].id) : "";
+  return { id, reference };
+}
+
+// ---------------------------------------------------------------------------
+// CHECK-IN / CHECK-OUT (owner/admin authenticated flow on Supabase `bookings`)
+// ---------------------------------------------------------------------------
+export type StayPhase =
+  | "before_arrival"
+  | "checked_in"
+  | "staying"
+  | "checkout_approaching"
+  | "checked_out";
+
+export function computeStayPhase(checkIn: string, checkOut: string, status: string, now = new Date()): StayPhase {
+  const ci = Date.parse(checkIn);
+  const co = Date.parse(checkOut);
+  const today = Date.parse(now.toISOString().slice(0, 10));
+  if (status === "checked_out" || status === "cancelled") return "checked_out";
+  if (status === "checked_in") {
+    // within stay window?
+    if (!isNaN(co) && today >= co) return "checkout_approaching";
+    return "staying";
+  }
+  if (isNaN(ci)) return "before_arrival";
+  if (today < ci) return "before_arrival";
+  if (today >= ci && (isNaN(co) || today < co)) return "checked_in";
+  return "staying";
+}
+
+async function updateBookingStatus(
+  env: Env,
+  opts: { guestName: string; roomType: string; checkIn: string; status: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) return { ok: false, error: "Supabase not configured" };
+  const res = await fetch(
+    `${base}/rest/v1/bookings?guest_name=eq.${encodeURIComponent(opts.guestName)}&room_type=eq.${encodeURIComponent(opts.roomType)}&check_in=eq.${opts.checkIn}`,
+    {
+      method: "PATCH",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify({ status: opts.status }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, error: `Check-in/out failed (HTTP ${res.status}): ${body.slice(0, 200)}` };
+  }
+  return { ok: true };
+}
+
+export async function checkInGuest(
+  env: Env,
+  o: { guestName: string; roomType: string; checkIn: string },
+): Promise<{ ok: boolean; error?: string }> {
+  return updateBookingStatus(env, { ...o, status: "checked_in" });
+}
+export async function checkOutGuest(
+  env: Env,
+  o: { guestName: string; roomType: string; checkIn: string },
+): Promise<{ ok: boolean; error?: string }> {
+  return updateBookingStatus(env, { ...o, status: "checked_out" });
+}
+
+// ---------------------------------------------------------------------------
+// UNIFIED GUEST STAY STATE — compose from authoritative tables (no duplicates)
+// ---------------------------------------------------------------------------
+export interface GuestStayState {
+  identity: { name?: string; phone?: string };
+  booking: GuestStay[];
+  phase: StayPhase | null;
+  tours: GuestTourRequest[];
+  rentals: GuestMotorbikeState[];
+  foodOrders: GuestFoodOrder[];
+  messages: GuestMessage[];
+  housekeeping: Array<{ id: string; room: string; taskType: string; status: string; notes: string }>;
+  folio: GuestFolio;
+  outstanding: string[];
+}
+
+export async function getGuestStayState(
+  env: Env,
+  db: import("@cloudflare/workers-types").D1Database,
+  tenantId: string,
+  opts: { name?: string; phone?: string },
+): Promise<GuestStayState> {
+  const name = opts.name;
+  const phone = opts.phone;
+  const booking = await getGuestStay(env, { name, phone });
+  const phase: StayPhase | null = booking[0]
+    ? computeStayPhase(booking[0].checkIn, booking[0].checkOut, booking[0].status)
+    : null;
+  const [tours, rentals, foodOrders, messages, folio] = await Promise.all([
+    getGuestTourRequests(env, { name, phone }),
+    getGuestMotorbikeState(env, { name, phone }),
+    getGuestFoodOrders(env, { name, phone }),
+    getGuestMessages(env, { name, phone }),
+    getGuestFolio(env, { name, phone }),
+  ]);
+
+  // Housekeeping from D1 guest_requests (type=housekeeping) — local only.
+  const hkRows = await (async () => {
+    try {
+      const { listGuestRequests } = await import("./guestRequestRepo.js");
+      const all = await listGuestRequests(db, tenantId, { type: "housekeeping" });
+      return all
+        .filter((r) => (name && r.guestName.toLowerCase() === name.toLowerCase()) || (phone && r.guestPhone === phone))
+        .map((r) => ({
+          id: r.id,
+          room: r.roomType,
+          taskType: (r.notes.split("|")[0] || "").replace("task:", "") || "cleaning",
+          status: r.status,
+          notes: r.notes,
+        }));
+    } catch {
+      return [];
+    }
+  })();
+
+  const outstanding: string[] = [];
+  for (const t of tours) if (t.status === "requested" || t.status === "pending") outstanding.push(`Tour ${t.tourName} (${t.status})`);
+  for (const r of rentals) if (r.status === "requested" || r.status === "pending") outstanding.push(`Rental ${r.bikeName} (${r.status})`);
+  for (const f of foodOrders) if (f.status !== "delivered" && f.status !== "cancelled") outstanding.push(`Food order ${f.reference} (${f.status})`);
+  if (folio.balance > 0) outstanding.push(`Outstanding balance ₱${folio.balance}`);
+
+  return {
+    identity: { name, phone },
+    booking,
+    phase,
+    tours,
+    rentals,
+    foodOrders,
+    messages,
+    housekeeping: hkRows,
+    folio,
+    outstanding,
+  };
+}
+

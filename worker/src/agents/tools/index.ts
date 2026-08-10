@@ -22,6 +22,15 @@ import { requestRoomBookingTool, checkRoomAvailabilityTool } from "./bookingTool
 import { createHousekeepingTaskTool } from "./housekeepingTools.js";
 import { createMaintenanceRequestTool } from "./maintenanceTools.js";
 import { createFoodOrderTool } from "./orderTools.js";
+import {
+  getGuestStayStateTool,
+  requestTourTool,
+  requestRentalTool,
+  requestHousekeepingTool,
+  recordPaymentTool,
+  checkInGuestTool,
+  checkOutGuestTool,
+} from "./guestLifecycleTools.js";
 import { getInventoryTool } from "./inventoryTools.js";
 import { getTodayOperationsTool } from "./operationsTools.js";
 import { getResortOperationsTool } from "./operationsSupabaseTool.js";
@@ -55,6 +64,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     getGuestMessagesTool,
     getGuestFolioTool,
     checkRoomAvailabilityTool,
+    getGuestStayStateTool,
 
     // Write tools — available to authenticated users
     createGuestRequestTool,
@@ -62,6 +72,9 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     createMaintenanceRequestTool,
     createFoodOrderTool,
     requestRoomBookingTool,
+    requestTourTool,
+    requestRentalTool,
+    requestHousekeepingTool,
     sendGuestEmailTool,
   ];
 
@@ -72,6 +85,9 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     tools.push(browserInspectPageTool);
     tools.push(browserReadPageTool);
     tools.push(writeGuestMessageTool);
+    tools.push(recordPaymentTool);
+    tools.push(checkInGuestTool);
+    tools.push(checkOutGuestTool);
     tools.push(sandboxWriteFileTool);
     tools.push(sandboxReadFileTool);
     tools.push(sandboxListFilesTool);
