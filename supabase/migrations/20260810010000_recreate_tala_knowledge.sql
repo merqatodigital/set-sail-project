@@ -24,7 +24,13 @@ ALTER TABLE public.tala_knowledge ENABLE ROW LEVEL SECURITY;
 
 -- Admin panel uses a local passkey, not Supabase Auth: anon can only append
 -- and read (mirrors tala_goals / tala_tasks policy).
-CREATE POLICY IF NOT EXISTS "Anyone can add knowledge"
-  ON public.tala_knowledge FOR INSERT TO anon, authenticated WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "Anyone can read knowledge"
-  ON public.tala_knowledge FOR SELECT TO anon, authenticated USING (true);
+-- NOTE: Postgres has no CREATE POLICY IF NOT EXISTS — recreate idempotently.
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Anyone can add knowledge" ON public.tala_knowledge;
+  CREATE POLICY "Anyone can add knowledge"
+    ON public.tala_knowledge FOR INSERT TO anon, authenticated WITH CHECK (true);
+  DROP POLICY IF EXISTS "Anyone can read knowledge" ON public.tala_knowledge;
+  CREATE POLICY "Anyone can read knowledge"
+    ON public.tala_knowledge FOR SELECT TO anon, authenticated USING (true);
+END $$;

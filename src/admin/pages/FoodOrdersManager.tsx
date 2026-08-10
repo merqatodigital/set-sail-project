@@ -5,8 +5,10 @@ import { useToast } from "@/context/ToastContext";
 import { Button, Card, Field, Input, Textarea, Modal } from "@/components/ui";
 import { PageHeader, EmptyState } from "../shared/PageHeader";
 import { OpsTable, OpsTH, OpsTD, StatusPill, KpiCard } from "../ops/OpsPrimitives";
+import { usePortalOps } from "../ops/usePortalOps";
+import { updatePortalFoodStatus, deletePortalFoodOrder } from "@/lib/portalAdminRepo";
 import { formatPHP, formatDate, textSearch, uid, generateReference } from "../ops/opsUtils";
-import type { FoodOrder, MenuItem, FoodOrderStatus, MenuCategory } from "@/types/cms";
+import type { MenuItem, FoodOrderStatus, MenuCategory } from "@/types/cms";
 
 const ORDER_STATUSES: FoodOrderStatus[] = ["pending", "confirmed", "preparing", "ready", "delivered", "cancelled"];
 const MENU_CATEGORIES: MenuCategory[] = ["breakfast", "lunch", "dinner", "drinks"];
@@ -27,6 +29,7 @@ const statusLabel = (s: FoodOrderStatus) => s.charAt(0).toUpperCase() + s.slice(
 
 export default function FoodOrdersManager() {
   const { data, update } = useCms();
+  const { food: orders, refresh } = usePortalOps();
   const { notify } = useToast();
   const [tab, setTab] = useState<"orders" | "menu">("orders");
   const [search, setSearch] = useState("");
@@ -35,13 +38,12 @@ export default function FoodOrdersManager() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
 
-  const orders = data.operations.foodOrders;
   const menuItems = data.operations.menuItems;
 
   const filteredOrders = useMemo(() => {
-    let list = textSearch(orders, search, ["guestName", "reference", "guestPhone"]);
+    let list = textSearch(orders, search, ["guest_name", "reference", "guest_phone"]);
     if (statusFilter !== "all") list = list.filter((o) => o.status === statusFilter);
-    return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [orders, search, statusFilter]);
 
   const filteredMenu = useMemo(() => {
@@ -51,41 +53,26 @@ export default function FoodOrdersManager() {
   }, [menuItems, search, catFilter]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const ordersToday = orders.filter((o) => o.createdAt.slice(0, 10) === today);
+  const ordersToday = orders.filter((o) => o.created_at.slice(0, 10) === today);
   const revenueToday = ordersToday.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total, 0);
-  const costToday = ordersToday.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.totalCost, 0);
+  const costToday = ordersToday.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total_cost, 0);
   const profitToday = revenueToday - costToday;
   const pendingCount = orders.filter((o) => o.status === "pending").length;
   const lowStockItems = menuItems.filter((m) => m.active && m.inventoryCount > 0 && m.inventoryCount < 5);
   const soldOutItems = menuItems.filter((m) => m.active && m.inventoryCount === 0);
 
-  const updateOrderStatus = (id: string, status: FoodOrderStatus) => {
-    const now = new Date().toISOString();
-    update((d) => ({
-      ...d,
-      operations: {
-        ...d.operations,
-        foodOrders: d.operations.foodOrders.map((o) => {
-          if (o.id !== id) return o;
-          const patch: Partial<FoodOrder> = { status };
-          if (status === "confirmed") patch.confirmedAt = now;
-          if (status === "preparing") patch.preparingAt = now;
-          if (status === "ready") patch.readyAt = now;
-          if (status === "delivered") patch.deliveredAt = now;
-          if (status === "cancelled") patch.cancelledAt = now;
-          return { ...o, ...patch };
-        }),
-      },
-    }));
+  const updateOrderStatus = async (id: string, status: FoodOrderStatus) => {
+    const ok = await updatePortalFoodStatus(id, status);
+    if (!ok) return notify("Could not update order", "info");
+    await refresh();
     notify(`Order ${statusLabel(status)}`);
   };
 
-  const removeOrder = (o: FoodOrder) => {
-    if (!window.confirm(`Delete order ${o.reference}?`)) return;
-    update((d) => ({
-      ...d,
-      operations: { ...d.operations, foodOrders: d.operations.foodOrders.filter((x) => x.id !== o.id) },
-    }));
+  const removeOrder = async (id: string, reference: string) => {
+    if (!window.confirm(`Delete order ${reference}?`)) return;
+    const ok = await deletePortalFoodOrder(id);
+    if (!ok) return notify("Could not delete order", "info");
+    await refresh();
     notify("Order deleted");
   };
 
@@ -228,8 +215,8 @@ export default function FoodOrdersManager() {
                 <tr key={order.id} className="border-t border-[#26221C]/5">
                   <OpsTD className="font-mono text-xs">{order.reference}</OpsTD>
                   <OpsTD>
-                    <p className="font-medium">{order.guestName}</p>
-                    <p className="text-xs text-[#26221C]/40">{order.guestPhone}</p>
+                    <p className="font-medium">{order.guest_name}</p>
+                    <p className="text-xs text-[#26221C]/40">{order.guest_phone}</p>
                   </OpsTD>
                   <OpsTD>
                     <p className="text-xs">{order.items.map((i) => `${i.name} x${i.quantity}`).join(", ")}</p>
@@ -238,12 +225,12 @@ export default function FoodOrdersManager() {
                     <span className="font-semibold" style={{ color: "#C6A15B" }}>{formatPHP(order.total)}</span>
                   </OpsTD>
                   <OpsTD>
-                    <span className="text-xs text-[#26221C]/50">{formatPHP(order.totalCost)}</span>
+                    <span className="text-xs text-[#26221C]/50">{formatPHP(order.total_cost)}</span>
                   </OpsTD>
                   <OpsTD>
                     <StatusPill value={order.status} />
                   </OpsTD>
-                  <OpsTD className="text-xs text-[#26221C]/50">{formatDate(order.createdAt)}</OpsTD>
+                  <OpsTD className="text-xs text-[#26221C]/50">{formatDate(order.created_at)}</OpsTD>
                   <OpsTD>
                     <div className="flex items-center gap-1">
                       {order.status === "pending" && (
@@ -271,7 +258,7 @@ export default function FoodOrdersManager() {
                           <XCircle className="h-4 w-4" />
                         </button>
                       )}
-                      <button onClick={() => removeOrder(order)} className="rounded p-1 text-[#26221C]/30 hover:text-red-500" title="Delete">
+                      <button onClick={() => removeOrder(order.id, order.reference)} className="rounded p-1 text-[#26221C]/30 hover:text-red-500" title="Delete">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

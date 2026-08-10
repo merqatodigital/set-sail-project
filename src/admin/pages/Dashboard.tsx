@@ -22,6 +22,7 @@ import { useCms } from "@/context/CmsContext";
 import { PageHeader } from "../shared/PageHeader";
 import { formatPHP } from "../ops/opsUtils";
 import { useOperations } from "../ops/useOperations";
+import { usePortalOps } from "../ops/usePortalOps";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 import { useTallaStatus } from "@/hooks/useTallaStatus";
 import { fetchLatestBriefing, TALLA_TENANT } from "@/lib/tallaCloud";
@@ -88,6 +89,7 @@ type AuditRow = {
 export default function Dashboard() {
   const { data } = useCms();
   const { data: ops, loading: opsLoading } = useOperations();
+  const portal = usePortalOps();
   const brief = computeBriefing(ops, data.homepage.rooms);
   const { status: tallaStatus, loading: tallaLoading } = useTallaStatus();
 
@@ -161,6 +163,13 @@ export default function Dashboard() {
     (o) => o.status !== "delivered" && o.status !== "cancelled",
   );
 
+  // ---- Guest Portal operational tables (same rows the Portal creates and
+  // TALA reads). Resolves to [] until David runs the schema migration.
+  const pendingPortalTours = portal.tours.filter((t) => t.status === "requested").length;
+  const pendingPortalRentals = portal.rentals.filter((r) => r.status === "requested").length;
+  const pendingPortalBookings = portal.bookings.filter((b) => b.status === "requested").length;
+  const unreadPortalMessages = portal.messages.filter((m) => m.status === "unread").length;
+
   // Booking-derived attention (real resort state, not hard-coded names).
   const activeBookings = active;
   const tomorrowArrivals = activeBookings.filter((b) => b.checkIn === tomorrow);
@@ -212,6 +221,14 @@ export default function Dashboard() {
     attention.push({ label: "Housekeeping tasks pending", to: "/admin/tala/ops", count: String(openHousekeeping.length) });
   if (openOrders.length)
     attention.push({ label: "Food orders in progress", to: "/admin/food-orders", count: String(openOrders.length) });
+  if (pendingPortalTours)
+    attention.push({ label: "New tour requests", to: "/admin/tours", count: String(pendingPortalTours) });
+  if (pendingPortalRentals)
+    attention.push({ label: "New motorbike requests", to: "/admin/rentals", count: String(pendingPortalRentals) });
+  if (pendingPortalBookings)
+    attention.push({ label: "New stay requests", to: "/admin/bookings", count: String(pendingPortalBookings) });
+  if (unreadPortalMessages)
+    attention.push({ label: "Unread guest messages", to: "/admin/messages", count: String(unreadPortalMessages) });
   if (brief.lowStockItems.length)
     attention.push({ label: `Low stock: ${brief.lowStockItems.slice(0, 3).join(", ")}`, to: "/admin/inventory", count: String(brief.lowStockItems.length) });
   if (brief.unpaidPayroll > 0)
