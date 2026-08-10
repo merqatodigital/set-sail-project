@@ -512,7 +512,7 @@ export async function checkRoomAvailability(
       {
         room_type: `eq.${opts.roomType}`,
         status: "in.(confirmed,checked_in)",
-        and: `(check_in.lte.${opts.checkOut},check_out.gte.${opts.checkIn})`,
+        and: `(check_in.lt.${opts.checkOut},check_out.gt.${opts.checkIn})`,
       },
     );
     const conflicts = rows.filter((r) => String(r.room_type) === opts.roomType).length;
@@ -523,7 +523,7 @@ export async function checkRoomAvailability(
         checkIn: opts.checkIn,
         checkOut: opts.checkOut,
         conflictingBookings: conflicts,
-        message: `Superior Room UNO is not available for ${opts.checkIn} to ${opts.checkOut} (${conflicts} conflicting reservation(s)).`,
+        message: `${opts.roomType} is not available for ${opts.checkIn} to ${opts.checkOut} (${conflicts} conflicting reservation(s)).`,
       };
     }
     return {

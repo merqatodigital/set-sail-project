@@ -147,6 +147,46 @@ describe("checkRoomAvailability (read-only, real data)", () => {
     const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
     expect((res as any).status).toBe("unknown");
   });
+
+  it("uses strict overlap (check_in.lt. / check_out.gt.) in the PostgREST query", async () => {
+    fetchMock.mockResolvedValueOnce(sbJson([]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    await checkRoomAvailabilityTool.execute!({ roomType: "Deluxe Room", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("check_in.lt.2026-08-12");
+    expect(url).toContain("check_out.gt.2026-08-10");
+    expect(url).not.toContain("check_in.lte.");
+    expect(url).not.toContain("check_out.gte.");
+  });
+
+  it("BACK-TO-BACK: existing Aug 8-10 vs requested Aug 10-12 is AVAILABLE", async () => {
+    // Strict overlap: existing.check_in(08) < req.check_out(12) TRUE,
+    // existing.check_out(10) > req.check_in(10) FALSE -> Supabase query
+    // filters this row OUT (back-to-back, not overlapping). Mock returns [].
+    fetchMock.mockResolvedValueOnce(sbJson([]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).status).toBe("available");
+    expect((res as any).conflictingBookings).toBe(0);
+  });
+
+  it("REAL OVERLAP: existing Aug 9-11 vs requested Aug 10-12 is UNAVAILABLE", async () => {
+    // existing.check_in(09) < req.check_out(12) TRUE,
+    // existing.check_out(11) > req.check_in(10) TRUE -> overlapping.
+    fetchMock.mockResolvedValueOnce(sbJson([{ id: "b2", room_type: "Superior Room UNO", check_in: "2026-08-09", check_out: "2026-08-11", status: "confirmed", guests: 2 }]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).status).toBe("unavailable");
+    expect((res as any).conflictingBookings).toBe(1);
+  });
+
+  it("unavailable message uses the requested roomType (no hardcoded name)", async () => {
+    fetchMock.mockResolvedValueOnce(sbJson([{ id: "b3", room_type: "Deluxe Suite", check_in: "2026-08-09", check_out: "2026-08-11", status: "confirmed", guests: 2 }]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Deluxe Suite", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).message).toContain("Deluxe Suite");
+    expect((res as any).message).not.toContain("Superior Room UNO");
+  });
 });
 
 describe("generic createGuestRequest no longer supports room booking", () => {
