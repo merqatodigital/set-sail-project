@@ -21,29 +21,13 @@
       {
         "name": "TALLA_AGENT",
         "class_name": "TallaAgent"
-      },
-      {
-        "name": "Sandbox",
-        "class_name": "Sandbox"
       }
     ]
   },
-  "containers": [
-    {
-      "name": "Sandbox",
-      "class_name": "Sandbox",
-      "max_instances": 2,
-      "image": "ghcr.io/cloudflare/sandbox:latest"
-    }
-  ],
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["TallaAgent"]
-    },
-    {
-      "tag": "v2-sandbox",
-      "new_classes": ["Sandbox"]
     }
   ],
   "workflows": [
@@ -57,12 +41,6 @@
       "name": "talla-approval",
       "binding": "TALLA_APPROVAL",
       "class_name": "TallaApprovalWorkflow"
-    }
-  ],
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["TallaAgent"]
     }
   ],
   "send_email": [
