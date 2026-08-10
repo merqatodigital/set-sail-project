@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { AppLoader } from "@/components/AppLoader";
 import AdminLogin from "./AdminLogin";
 import AdminLayout from "./AdminLayout";
 import Dashboard from "./pages/Dashboard";
@@ -36,8 +37,12 @@ import InventoryManager from "./pages/InventoryManager";
 import FolioManager from "./pages/FolioManager";
 
 export default function AdminApp() {
-  const { isAuthed } = useAuth();
+  const { isAuthed, loading } = useAuth();
 
+  // While AuthProvider is restoring a persisted session (supabase.auth.getSession),
+  // isAuthed is still false. Gate on loading so a valid session never flashes the
+  // login screen on a hard refresh of /admin.
+  if (loading) return <AppLoader label="Checking admin session…" />;
   if (!isAuthed) return <AdminLogin />;
 
   return (

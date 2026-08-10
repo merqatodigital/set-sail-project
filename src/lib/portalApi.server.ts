@@ -22,7 +22,7 @@
 //     an anonymous caller (no valid token) gets 401.
 //   * Submissions (anon INSERT) continue to use the anon role RLS policies —
 //     INSERT-only, no anon SELECT. See supabase/migrations/
-//     20260810_guest_portal_persistence.sql.
+//     20260810000000_guest_portal_persistence.sql.
 // ---------------------------------------------------------------------------
 
 import { createClient } from "@supabase/supabase-js";
