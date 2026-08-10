@@ -6,6 +6,7 @@ import {
   normalizePhone,
   issueGuestSession,
   verifyGuestSession,
+  verifyGuestIdentity,
   fetchScopedGuestRecords,
 } from "./lib/portalApi.server";
 
@@ -170,10 +171,13 @@ function isH3SwallowedErrorBody(body: string): boolean {
 }
 
 // --- Guest Portal session + scoped read API (server-side, service role) ------
-// Secure contract: the guest logs in with phone + name, the server issues an
-// HMAC-signed session token, and all private reads are filtered strictly by
-// the verified phone number. anon RLS is INSERT-only; anon can never SELECT
-// other guests' data directly from the database.
+// Secure contract: the guest logs in with phone + name, the server verifies
+// the pair against an existing trustworthy Marina Terrace guest/stay/request
+// record (verifyGuestIdentity), and ONLY then issues an HMAC-signed session
+// token. All private reads are filtered strictly by the verified phone number.
+// anon RLS is INSERT-only; anon can never SELECT other guests' data directly
+// from the database. Any failed/missing verification returns the same generic
+// 401 so a caller cannot tell which inputs exist (no enumeration leak).
 
 async function portalSessionHandler(request: Request, env: unknown): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -190,6 +194,9 @@ async function portalSessionHandler(request: Request, env: unknown): Promise<Res
 
   if (!/^[0-9]{11,14}$/.test(phone)) return json({ error: "invalid phone number" }, 400);
   if (!name) return json({ error: "name is required" }, 400);
+
+  const verified = await verifyGuestIdentity(env, phone, name);
+  if (!verified) return json({ error: "Unable to verify guest." }, 401);
 
   const token = await issueGuestSession(env, phone, name);
   if (!token) return json({ error: "portal sessions are temporarily unavailable" }, 503);

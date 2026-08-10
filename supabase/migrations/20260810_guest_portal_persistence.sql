@@ -194,13 +194,22 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "Allow public read on %I" ON public.%I', t, t);
     EXECUTE format('DROP POLICY IF EXISTS "Allow anonymous insert on %I" ON public.%I', t, t);
 
-    -- anon: INSERT only.
+    -- anon: INSERT only, and only into guest-created statuses ('pending' for
+    -- booking requests, 'requested' for tour/rental requests). The portal uses
+    -- status = 'confirmed' rows as guest-identity proof at login, so a guest
+    -- must NEVER be able to self-insert a 'confirmed' row (which would let
+    -- anyone forge access to another guest's phone). Only the owner (the
+    -- authenticated role, below) can insert into any status.
     EXECUTE format(
-      'CREATE POLICY "Anonymous can insert %s requests" ON public.%I FOR INSERT TO anon, authenticated WITH CHECK (true)',
+      'CREATE POLICY "Anonymous can insert %s requests" ON public.%I FOR INSERT TO anon WITH CHECK (status IN (''pending'', ''requested''))',
       label, t
     );
 
-    -- authenticated (owner/admin): read + update.
+    -- authenticated (owner/admin): read + update, plus any-status insert.
+    EXECUTE format(
+      'CREATE POLICY "Authenticated can insert %s requests" ON public.%I FOR INSERT TO authenticated WITH CHECK (true)',
+      label, t
+    );
     EXECUTE format(
       'CREATE POLICY "Authenticated can read %s requests" ON public.%I FOR SELECT TO authenticated USING (true)',
       label, t
@@ -224,6 +233,14 @@ END $$;
 -- select has_table_privilege('anon', 'public.tala_tour_requests',  'INSERT'); -- expect: true
 -- select has_table_privilege('anon', 'public.tala_tour_requests',  'SELECT'); -- expect: false
 -- select has_table_privilege('anon', 'public.tala_booking_requests','SELECT'); -- expect: false
+-- -- Confirm the WITH CHECK clamp: as anon, INSERT with status 'confirmed'
+-- -- must FAIL, INSERT with status 'pending'/'requested' must succeed:
+-- begin; set role anon;
+--   insert into public.tala_tour_requests (guest_name, guest_phone, tour_name, status)
+--   values ('Test','+639170000000','X','confirmed');  -- expect: RLS violation (denied)
+--   insert into public.tala_tour_requests (guest_name, guest_phone, tour_name, status)
+--   values ('Test','+639170000000','X','requested');  -- expect: 1 row
+-- rollback; reset role;
 -- select polname, polroles::regrole[] from pg_policy
 --   where polrelid = 'public.tala_guest_messages'::regclass;
 --   -- expect: only the INSERT policy + authenticated manage (no anon SELECT)
