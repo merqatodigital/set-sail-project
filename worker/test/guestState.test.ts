@@ -144,8 +144,8 @@ describe("provider null-content retry", () => {
     });
     expect(res.toolCalls.length).toBe(1);
     expect(res.toolCalls[0].name).toBe("getGuestStay");
-    // Second call must force tool_choice: required
+    // Second call must retry with normal tool_choice: auto (no forced tool)
     const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body);
-    expect(secondBody.tool_choice).toBe("required");
+    expect(secondBody.tool_choice).toBe("auto");
   });
 });

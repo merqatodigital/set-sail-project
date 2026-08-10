@@ -128,9 +128,10 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
       const data = (await response.json()) as OpenRouterResponse;
 
       // Reliability fix: some free models return null content with no tool call
-      // even when tools were offered. Retry ONCE forcing tool_choice:"required"
-      // so the turn that expected tool execution actually invokes a tool.
-      // Bounded: one forced retry per model; never loops on conversational turns.
+      // even when tools were offered. Retry ONCE with normal tool choice (auto) so
+      // the model gets a second chance to invoke a tool. We do NOT force a specific
+      // tool_choice (which could coerce an unrelated tool). Bounded: one retry per
+      // model; if still null, fall through to the next fallback model. Never loops.
       const offeredTools = request.tools?.length ? request.tools : undefined;
       const choice = data.choices?.[0];
       const noUsefulOutput =
@@ -139,7 +140,7 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
         choice.message.content === null &&
         (!choice.message.tool_calls || choice.message.tool_calls.length === 0);
       if (noUsefulOutput) {
-        const forced = await fetch(OPENROUTER_ENDPOINT, {
+        const retry = await fetch(OPENROUTER_ENDPOINT, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -153,14 +154,22 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
             temperature: config.temperature,
             max_tokens: config.maxTokens,
             tools: offeredTools,
-            tool_choice: "required",
+            tool_choice: "auto",
           }),
         });
-        if (forced.ok) {
-          const forcedData = (await forced.json()) as OpenRouterResponse;
-          return parseResponse(forcedData);
+        if (retry.ok) {
+          const retryData = (await retry.json()) as OpenRouterResponse;
+          const retryChoice = retryData.choices?.[0];
+          // Only use the retry if it actually produced content or a tool call.
+          if (
+            retryChoice &&
+            (retryChoice.message.content !== null ||
+              (retryChoice.message.tool_calls && retryChoice.message.tool_calls.length > 0))
+          ) {
+            return parseResponse(retryData);
+          }
         }
-        // If forced retry failed, fall through to normal parse (returns null).
+        // Still no useful output -> fall through to next fallback model.
       }
 
       return parseResponse(data);
