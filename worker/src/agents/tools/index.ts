@@ -7,6 +7,15 @@ import type { TallaTool, ToolContext, ToolResult } from "../types.js";
 // Import tools
 import { getPropertyInfoTool } from "./propertyTools.js";
 import { getToursTool } from "./tourTools.js";
+import {
+  getGuestStayTool,
+  getGuestTourRequestsTool,
+  getGuestMotorbikeStateTool,
+  getGuestFoodOrdersTool,
+  getGuestMessagesTool,
+  getGuestFolioTool,
+  writeGuestMessageTool,
+} from "./guestStateTools.js";
 import { getMenuTool } from "./menuTools.js";
 import { createGuestRequestTool } from "./guestRequestTools.js";
 import { createHousekeepingTaskTool } from "./housekeepingTools.js";
@@ -38,6 +47,12 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     getMenuTool,
     getInventoryTool,
     searchResortKnowledgeTool,
+    getGuestStayTool,
+    getGuestTourRequestsTool,
+    getGuestMotorbikeStateTool,
+    getGuestFoodOrdersTool,
+    getGuestMessagesTool,
+    getGuestFolioTool,
 
     // Write tools — available to authenticated users
     createGuestRequestTool,
@@ -53,6 +68,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     tools.push(getResortOperationsTool);
     tools.push(browserInspectPageTool);
     tools.push(browserReadPageTool);
+    tools.push(writeGuestMessageTool);
     tools.push(sandboxWriteFileTool);
     tools.push(sandboxReadFileTool);
     tools.push(sandboxListFilesTool);

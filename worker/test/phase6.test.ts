@@ -193,13 +193,13 @@ describe("Phase 6.1 — Tool Registration", () => {
   it("getTools returns D1 tools only when Computer disabled", () => {
     const tools = getTools("owner", false);
     expect(tools.filter((t) => t.name.startsWith("workspace"))).toHaveLength(0);
-    expect(tools.length).toBe(18);
+    expect(tools.length).toBe(25);
   });
 
   it("getTools adds 4 Computer tools when enabled for owner", () => {
     const tools = getTools("owner", true);
     expect(tools.filter((t) => t.name.startsWith("workspace"))).toHaveLength(4);
-    expect(tools.length).toBe(22);
+    expect(tools.length).toBe(29);
   });
 
   it("no Computer tools for guest or staff", () => {
@@ -244,8 +244,8 @@ describe("Phase 6.1 — System Prompt", () => {
 
 describe("Phase 6.1 — Failure Isolation", () => {
   it("D1 tools work regardless of Computer state", () => {
-    expect(getTools("owner", false).length).toBe(18);
-    expect(getTools("owner", true).length).toBe(22);
+    expect(getTools("owner", false).length).toBe(25);
+    expect(getTools("owner", true).length).toBe(29);
   });
 });
 

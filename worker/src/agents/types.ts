@@ -15,6 +15,10 @@ export interface ToolContext {
   role: string | null;
   db: D1Database;
   env: Env;
+  // Session guest identity (from agent state) — used for secure self-scope so
+  // guest tools never trust an LLM-supplied name. Undefined for owner/admin.
+  guestName?: string | null;
+  guestPhone?: string | null;
 }
 
 export interface ToolResult {

@@ -993,6 +993,8 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       role: this.state.role,
       db: this.env.DB,
       env: this.env,
+      guestName: this.state.guestName,
+      guestPhone: (this.state as unknown as { guestPhone?: string | null }).guestPhone ?? null,
     };
 
     // Build system prompt with live D1 data
@@ -1204,6 +1206,8 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       role: this.state.role,
       db: this.env.DB,
       env: this.env,
+      guestName: this.state.guestName,
+      guestPhone: (this.state as unknown as { guestPhone?: string | null }).guestPhone ?? null,
     };
 
     const systemPrompt = await this.buildLiveSystemPrompt(toolCtx);

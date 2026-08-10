@@ -126,6 +126,43 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
       }
 
       const data = (await response.json()) as OpenRouterResponse;
+
+      // Reliability fix: some free models return null content with no tool call
+      // even when tools were offered. Retry ONCE forcing tool_choice:"required"
+      // so the turn that expected tool execution actually invokes a tool.
+      // Bounded: one forced retry per model; never loops on conversational turns.
+      const offeredTools = request.tools?.length ? request.tools : undefined;
+      const choice = data.choices?.[0];
+      const noUsefulOutput =
+        offeredTools &&
+        choice &&
+        choice.message.content === null &&
+        (!choice.message.tool_calls || choice.message.tool_calls.length === 0);
+      if (noUsefulOutput) {
+        const forced = await fetch(OPENROUTER_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://marinaterrace.ph",
+            "X-Title": "TALA - Marina Terrace",
+          },
+          body: JSON.stringify({
+            model,
+            messages: request.messages,
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
+            tools: offeredTools,
+            tool_choice: "required",
+          }),
+        });
+        if (forced.ok) {
+          const forcedData = (await forced.json()) as OpenRouterResponse;
+          return parseResponse(forcedData);
+        }
+        // If forced retry failed, fall through to normal parse (returns null).
+      }
+
       return parseResponse(data);
     } catch (err) {
       lastError = err as Error;
