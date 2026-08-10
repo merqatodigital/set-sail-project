@@ -6,13 +6,13 @@ import { createGuestRequest } from "../../db/repos/guestRequestRepo.js";
 export const createGuestRequestTool: TallaTool = {
   name: "createGuestRequest",
   description:
-    "Submit a guest request for bookings, tours, rentals, housekeeping, maintenance, or general requests. Use this when a guest wants to request something that should be handled by resort staff. The server will generate the request ID and set initial status to pending.",
+    "Submit a guest request for tours, rentals, housekeeping, maintenance, or general requests. Use this when a guest wants to request something that should be handled by resort staff. The server will generate the request ID and set initial status to pending. ROOM BOOKINGS are NOT handled here — use requestRoomBooking for those.",
   parameters: {
     type: "object",
     properties: {
       type: {
         type: "string",
-        enum: ["booking", "tour", "rental", "housekeeping", "maintenance", "general"],
+        enum: ["tour", "rental", "housekeeping", "maintenance", "general"],
         description: "The type of request",
       },
       guestName: {

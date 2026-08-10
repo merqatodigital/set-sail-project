@@ -122,3 +122,37 @@ describe("requestRoomBooking duplicate protection", () => {
     expect((res as any).reference).toMatch(/^MT-/);
   });
 });
+
+describe("checkRoomAvailability (read-only, real data)", () => {
+  it("returns unavailable when an overlapping active booking exists", async () => {
+    fetchMock.mockResolvedValueOnce(sbJson([{ id: "b1", room_type: "Superior Room UNO", check_in: "2026-08-10", check_out: "2026-08-12", status: "confirmed", guests: 2 }]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).status).toBe("unavailable");
+    expect((res as any).conflictingBookings).toBe(1);
+    // ensure it was a GET, no write
+    expect(fetchMock.mock.calls[0][1]?.method).not.toBe("POST");
+  });
+
+  it("returns available when no overlapping booking", async () => {
+    fetchMock.mockResolvedValueOnce(sbJson([]));
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).status).toBe("available");
+  });
+
+  it("returns unknown when the availability read fails", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => [], text: async () => "err" });
+    const { checkRoomAvailabilityTool } = await import("../src/agents/tools/bookingTools.js");
+    const res = await checkRoomAvailabilityTool.execute!({ roomType: "Superior Room UNO", checkIn: "2026-08-10", checkOut: "2026-08-12" }, makeCtx("guest"));
+    expect((res as any).status).toBe("unknown");
+  });
+});
+
+describe("generic createGuestRequest no longer supports room booking", () => {
+  it("booking is not in the tool enum", async () => {
+    const { createGuestRequestTool } = await import("../src/agents/tools/guestRequestTools.js");
+    const typeEnum = (createGuestRequestTool.parameters as any).properties.type.enum as string[];
+    expect(typeEnum).not.toContain("booking");
+  });
+});

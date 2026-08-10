@@ -441,7 +441,7 @@ export async function createBookingRequest(
   const base = supabaseBase(env);
   const key = supabaseKey(env);
   if (!base || !key) throw new Error("Supabase not configured");
-  const id = `tala_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Do NOT generate an id — let Supabase DEFAULT gen_random_uuid() create the UUID PK.
   const reference = makeReference(input.checkIn);
   const res = await fetch(`${base}/rest/v1/tala_booking_requests`, {
     method: "POST",
@@ -452,7 +452,6 @@ export async function createBookingRequest(
       Prefer: "return=representation",
     },
     body: JSON.stringify({
-      id,
       reference,
       guest_name: input.guestName,
       guest_email: input.guestEmail,
@@ -470,5 +469,72 @@ export async function createBookingRequest(
     const body = await res.text().catch(() => "");
     throw new Error(`Booking request failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
   }
+  // Read the server-generated UUID from the representation (never exposed to guest).
+  const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
+  const id = rows[0] ? String(rows[0].id) : "";
   return { id, reference };
+}
+
+// ---------------------------------------------------------------------------
+// ROOM AVAILABILITY — read-only conflict check against authoritative `bookings`.
+// Returns real overlap data only; performs NO write and never invents capacity.
+// ---------------------------------------------------------------------------
+export type AvailabilityStatus = "available" | "unavailable" | "unknown";
+export interface RoomAvailability {
+  status: AvailabilityStatus;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  conflictingBookings: number;
+  message: string;
+}
+
+export async function checkRoomAvailability(
+  env: Env,
+  opts: { roomType: string; checkIn: string; checkOut: string; guests?: number },
+): Promise<RoomAvailability> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  const fallback = (msg: string): RoomAvailability => ({
+    status: "unknown",
+    roomType: opts.roomType,
+    checkIn: opts.checkIn,
+    checkOut: opts.checkOut,
+    conflictingBookings: 0,
+    message: msg,
+  });
+  if (!base || !key) return fallback("Availability service not configured.");
+  try {
+    const rows = await sbSelect(
+      env,
+      "bookings",
+      "id,room_type,check_in,check_out,status,guests",
+      {
+        room_type: `eq.${opts.roomType}`,
+        status: "in.(confirmed,checked_in)",
+        and: `(check_in.lte.${opts.checkOut},check_out.gte.${opts.checkIn})`,
+      },
+    );
+    const conflicts = rows.filter((r) => String(r.room_type) === opts.roomType).length;
+    if (conflicts > 0) {
+      return {
+        status: "unavailable",
+        roomType: opts.roomType,
+        checkIn: opts.checkIn,
+        checkOut: opts.checkOut,
+        conflictingBookings: conflicts,
+        message: `Superior Room UNO is not available for ${opts.checkIn} to ${opts.checkOut} (${conflicts} conflicting reservation(s)).`,
+      };
+    }
+    return {
+      status: "available",
+      roomType: opts.roomType,
+      checkIn: opts.checkIn,
+      checkOut: opts.checkOut,
+      conflictingBookings: 0,
+      message: `No reservation conflicts for ${opts.roomType} ${opts.checkIn} to ${opts.checkOut}. We'll confirm capacity when you request the booking.`,
+    };
+  } catch {
+    return fallback("Could not verify availability right now.");
+  }
 }

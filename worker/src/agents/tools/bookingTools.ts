@@ -9,7 +9,7 @@
 // in the same conversation return the existing pending reference instead.
 
 import type { TallaTool, ToolResult } from "../types.js";
-import { createBookingRequest, findPendingBooking, type BookingRequestResult } from "../../db/repos/guestStateRepo.js";
+import { createBookingRequest, findPendingBooking, checkRoomAvailability, type BookingRequestResult } from "../../db/repos/guestStateRepo.js";
 import { logGuestState } from "../../db/repos/guestStateLogRepo.js";
 
 const REQUIRED = ["guestName", "guestEmail", "guestPhone", "roomType", "checkIn", "checkOut", "guests"] as const;
@@ -146,6 +146,43 @@ export const requestRoomBookingTool: TallaTool = {
         error: String(e),
       });
       return { success: false, error: "Could not create booking request." };
+    }
+  },
+};
+
+export const checkRoomAvailabilityTool: TallaTool = {
+  name: "checkRoomAvailability",
+  description:
+    "Check whether a room type is available for a requested date range BEFORE booking. Reads the authoritative bookings ledger and reports conflicting reservations only. Returns status: available (no conflicting reservation), unavailable (overlap found), or unknown (could not verify). Performs NO write and never invents capacity. Use this when a guest asks 'is X available Aug 10-12?'. Room bookings themselves are created only via requestRoomBooking.",
+  parameters: {
+    type: "object",
+    properties: {
+      roomType: { type: "string", description: "Room type, e.g. Superior Room UNO" },
+      checkIn: { type: "string", description: "ISO check-in date YYYY-MM-DD" },
+      checkOut: { type: "string", description: "ISO check-out date YYYY-MM-DD" },
+      guests: { type: "number", description: "Number of guests (optional)" },
+    },
+    required: ["roomType", "checkIn", "checkOut"],
+  },
+  execute: async (args, ctx) => {
+    try {
+      const res = await checkRoomAvailability(ctx.env as never, {
+        roomType: String(args.roomType),
+        checkIn: String(args.checkIn),
+        checkOut: String(args.checkOut),
+        guests: typeof args.guests === "number" ? args.guests : undefined,
+      });
+      return {
+        success: true,
+        status: res.status,
+        roomType: res.roomType,
+        checkIn: res.checkIn,
+        checkOut: res.checkOut,
+        conflictingBookings: res.conflictingBookings,
+        message: res.message,
+      } as unknown as ToolResult;
+    } catch {
+      return { success: true, status: "unknown", message: "Could not verify availability right now." };
     }
   },
 };
