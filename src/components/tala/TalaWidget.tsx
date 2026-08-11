@@ -21,7 +21,7 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
-import { normalizeIntent, type TalaIntentPayload } from "./talaIntent";
+import { normalizeIntent, intentMessage, type TalaIntentPayload } from "./talaIntent";
 import { DayPassForm } from "./DayPassForm";
 import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
