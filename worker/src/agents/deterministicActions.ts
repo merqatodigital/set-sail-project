@@ -11,7 +11,7 @@ import type { ToolContext } from "./types.js";
 import type { ChatResponse } from "./provider.js";
 import { createFoodOrder } from "../db/repos/foodOrderRepo.js";
 import { listMenuItems } from "../db/repos/menuRepo.js";
-import { writeGuestMessage } from "../db/repos/guestStateRepo.js";
+import { writeGuestMessage, getDayPassPrice, findPendingDayPass, createDayPassRequest } from "../db/repos/guestStateRepo.js";
 
 export interface DeterministicResult {
   response: ChatResponse;
@@ -36,6 +36,14 @@ export async function tryDeterministicActions(
   pendingFoodOrder: { menuItemId: string; quantity: number; specialInstructions?: string }[] | null,
 ): Promise<DeterministicResult | null> {
   const text = userMessage.trim();
+
+  // 0) Workspace Day Pass — deterministic product booking (no LLM dependency).
+  // The Lovable Day Pass form sends a structured natural-language request;
+  // resolve it server-side and write exactly ONE pending operational record.
+  if (isDayPassRequest(text)) {
+    const res = await executeDayPass(toolCtx, text);
+    if (res) return { response: res };
+  }
 
   // 1) Confirm a previously-quoted food order ("yes", "place it", ...)
   if (pendingFoodOrder && pendingFoodOrder.length > 0 && isAffirmative(text)) {
@@ -84,6 +92,115 @@ export async function tryDeterministicActions(
   }
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// WORKSPACE DAY PASS — deterministic handler (no LLM, no free-model dependency).
+// The Lovable form sends a structured message; we parse the required fields,
+// read the authoritative Admin price, dedupe, and write ONE pending record.
+// Returns null only when the message isn't a Day Pass request or is missing
+// required fields (so the LLM can ask for the missing pieces).
+// ---------------------------------------------------------------------------
+export function isDayPassRequest(text: string): boolean {
+  const t = text.toLowerCase();
+  return t.includes("workspace day pass") && (t.includes("book") || t.includes("pass on"));
+}
+
+interface ParsedDayPass {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  day: string;
+  guests: number;
+  arrivalTime: string;
+  notes: string;
+}
+
+function parseDayPass(text: string): ParsedDayPass | null {
+  const name = text.match(/my name is\s+([^.]+)/i);
+  const email = text.match(/my email is\s+([^.]+(?:\.[^.\s]+)*)/i);
+  const phone = text.match(/my whatsapp\/mobile number is\s+([^.]+)/i);
+  const day = text.match(/(?:on|check-in)\s+(\d{4}-\d{2}-\d{2})/i);
+  const guests = text.match(/for\s+(\d+)\s+guest/i);
+  const notes = text.match(/additional requests?:\s*([^.]*)/i);
+  const arrival = notes?.[1]?.match(/arrival around\s+([^.·]+)/i);
+
+  if (!name || !email || !phone || !day || !guests) return null;
+  const clean = (s: string) => s.replace(/[.!]?\s*$/, "").trim();
+  return {
+    guestName: clean(name[1]),
+    guestEmail: clean(email[1]),
+    guestPhone: clean(phone[1]),
+    day: day[1],
+    guests: Math.max(1, parseInt(guests[1], 10) || 1),
+    arrivalTime: arrival ? clean(arrival[1]) : "",
+    notes: notes ? clean(notes[1]) : "",
+  };
+}
+
+async function executeDayPass(
+  toolCtx: ToolContext,
+  text: string,
+): Promise<ChatResponse | null> {
+  const parsed = parseDayPass(text);
+  if (!parsed) return null; // missing required fields -> let LLM ask
+
+  try {
+    // Authoritative price from Admin Financial settings (cms_data). Never trust
+    // a guest-supplied amount; never hardcode.
+    const unitPrice = await getDayPassPrice(toolCtx.env, toolCtx.tenantId || "");
+    if (unitPrice === null) {
+      return {
+        content:
+          "I can take your Workspace Day Pass request, but I need to confirm today's rate with reception first. Could you share your name, email, and WhatsApp number, and I'll have the team follow up with pricing and availability?",
+        toolCalls: [],
+        finishReason: "stop",
+        model: "deterministic",
+      };
+    }
+
+    // Dedupe: same guest/day/guests already pending -> return existing ref.
+    const dup = await findPendingDayPass(toolCtx.env, {
+      guestName: parsed.guestName,
+      day: parsed.day,
+      guests: parsed.guests,
+    }).catch(() => null);
+    if (dup && dup.reference) {
+      return {
+        content: `You already have a pending Workspace Day Pass request (reference ${dup.reference}). We'll confirm shortly.`,
+        toolCalls: [],
+        finishReason: "stop",
+        model: "deterministic",
+      };
+    }
+
+    const amount = unitPrice * parsed.guests;
+    const res = await createDayPassRequest(toolCtx.env, {
+      guestName: parsed.guestName,
+      guestEmail: parsed.guestEmail,
+      guestPhone: parsed.guestPhone,
+      day: parsed.day,
+      guests: parsed.guests,
+      arrivalTime: parsed.arrivalTime,
+      notes: parsed.notes,
+      amount,
+      reference: "",
+    });
+    const arrivalNote = parsed.arrivalTime ? ` Arriving around ${parsed.arrivalTime}.` : "";
+    return {
+      content: `Workspace Day Pass request received (pending). Reference ${res.reference}. ${parsed.guests} guest${parsed.guests > 1 ? "s" : ""} on ${parsed.day} — ₱${amount} total (₱${unitPrice}/guest).${arrivalNote} We'll confirm shortly.`,
+      toolCalls: [],
+      finishReason: "stop",
+      model: "deterministic",
+    };
+  } catch (err) {
+    return {
+      content: `I couldn't save your Day Pass request just now: ${(err as Error).message}`,
+      toolCalls: [],
+      finishReason: "stop",
+      model: "deterministic",
+    };
+  }
 }
 
 async function executeFoodOrder(

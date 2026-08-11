@@ -484,6 +484,101 @@ export async function createBookingRequest(
 }
 
 // ---------------------------------------------------------------------------
+// WORKSPACE DAY PASS — first-class bookable PRODUCT (not room inventory).
+// Persisted in tala_booking_requests with room_type = "Workspace Day Pass" as
+// the explicit product discriminator. It never consumes Superior/Standard/Basic
+// room stock (checkRoomAvailability only matches real room types). The
+// authoritative price is read from the worker's own D1 property_settings
+// (key "dayPassPrice", category "financial") — the SAME store the Admin writes
+// via /api/settings — never trusted from the guest message and never hardcoded.
+// ---------------------------------------------------------------------------
+export const DAY_PASS_ROOM_TYPE = "Workspace Day Pass";
+
+/** Authoritative Day Pass price (PHP/guest/day) from D1 property_settings. */
+export async function getDayPassPrice(
+  env: Env,
+  tenantId = "",
+): Promise<number | null> {
+  try {
+    const db = (env as unknown as { DB?: import("@cloudflare/workers-types").D1Database }).DB;
+    if (!db) return null;
+    const { getSettingValue } = await import("./propertySettingsRepo.js");
+    const raw = await getSettingValue(db, tenantId, "dayPassPrice").catch(() => null);
+    const price = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface DayPassRequestInput {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  day: string; // ISO YYYY-MM-DD (single day)
+  guests: number;
+  arrivalTime?: string;
+  notes?: string;
+}
+
+/** Dedupe: same guest/day/guests already pending as a Day Pass. */
+export async function findPendingDayPass(
+  env: Env,
+  o: { guestName: string; day: string; guests: number },
+): Promise<{ id: string; reference: string } | null> {
+  const rows = await sbSelect(
+    env,
+    "tala_booking_requests",
+    "id,reference",
+    {
+      and: `(room_type.eq.${DAY_PASS_ROOM_TYPE},guest_name.eq.${o.guestName},check_in.eq.${o.day},guests.eq.${o.guests},status.eq.pending)`,
+    },
+  ).catch(() => []);
+  const r = rows[0];
+  return r ? { id: String(r.id), reference: String(r.reference ?? "") } : null;
+}
+
+export async function createDayPassRequest(
+  env: Env,
+  input: DayPassRequestInput & { amount: number; reference: string },
+): Promise<{ id: string; reference: string }> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) throw new Error("Supabase not configured");
+  const reference = input.reference || makeRef("MT", input.day);
+  const res = await fetch(`${base}/rest/v1/tala_booking_requests`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      reference,
+      guest_name: input.guestName,
+      guest_email: input.guestEmail,
+      guest_phone: input.guestPhone,
+      room_type: DAY_PASS_ROOM_TYPE,
+      check_in: input.day,
+      check_out: input.day, // single-day product
+      guests: input.guests,
+      amount: input.amount, // authoritative: price x guests, server-computed
+      notes: input.notes ?? "",
+      status: "pending",
+      source: "tala_chat",
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Day pass request failed (HTTP ${res.status}): ${body.slice(0, 200)}`);
+  }
+  const rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
+  const id = rows[0] ? String(rows[0].id) : "";
+  return { id, reference };
+}
+
+// ---------------------------------------------------------------------------
 // ROOM AVAILABILITY — read-only conflict check against authoritative `bookings`.
 // Returns real overlap data only; performs NO write and never invents capacity.
 // ---------------------------------------------------------------------------
