@@ -1,21 +1,15 @@
-// Feature flag for Cloudflare Talla agent.
-// Controls whether to use the new Cloudflare TallaAgent or legacy Talla.
+// Cloudflare TallaAgent is now the ONLY TALA runtime. This file is kept as a
+// thin re-export of the single URL resolver in src/lib/talaClient.ts so older
+// imports keep working; there is no second brain and no hardcoded fallback.
 
-/**
- * Check if the Cloudflare Talla agent is enabled.
- * Uses VITE_TALLA_CLOUDFLARE_AGENT env var.
- * Defaults to false (legacy Talla) for safe rollback.
- */
+import { talaWorkerBase } from "./talaClient";
+
+/** Cloudflare TallaAgent is always the runtime now. */
 export function isCloudflareTallaEnabled(): boolean {
-  return import.meta.env.VITE_TALLA_CLOUDFLARE_AGENT === "true";
+  return true;
 }
 
-/**
- * Get the Cloudflare Worker URL for the TallaAgent.
- */
+/** Configured Cloudflare Worker URL (throws when VITE_TALA_WORKER_URL is unset). */
 export function getTallaAgentUrl(): string {
-  return (
-    import.meta.env.VITE_WORKER_URL ||
-    "https://talla-agent-staging.merqato-digital.workers.dev"
-  );
+  return talaWorkerBase();
 }
