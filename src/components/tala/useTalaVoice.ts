@@ -359,11 +359,6 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     generationRef.current += 1;
     queueRef.current = [];
     speakingRef.current = false;
-    pendingSpeakRef.current = false;
-    if (waitTimerRef.current) {
-      clearTimeout(waitTimerRef.current);
-      waitTimerRef.current = null;
-    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -428,14 +423,10 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
         } finally {
           setLoadProgress(null);
           kokoroLoading.current = false;
-          if (pendingSpeakRef.current) {
-            pendingSpeakRef.current = false;
-            if (waitTimerRef.current) {
-              clearTimeout(waitTimerRef.current);
-              waitTimerRef.current = null;
-            }
-            void playQueueRef.current?.();
-          }
+          // Nothing is ever held waiting for Kokoro any more — the first reply
+          // already spoke with the browser voice. From here on, replies use
+          // Kokoro automatically because kokoroRef.current is now set.
+          void playQueueRef.current;
         }
       })();
     };
@@ -655,28 +646,10 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       speakStartRef.current = performance.now();
       firstPlayedRef.current = false;
       queueRef.current = chunks;
-      // On mobile, skip Kokoro wait logic entirely — go straight to browser TTS.
-      // The Kokoro model never loads on mobile (see effect above), so there's
-      // nothing to wait for. Browser TTS is robotic but instant and reliable.
-      if (isMobile) {
-        void playQueue();
-        return;
-      }
-      // Natural voice still downloading? Hold the reply instead of speaking
-      // it robotically — the wait cap keeps a slow connection from muting
-      // TALA forever. Once cached (second visit onward) this never waits.
-      // Irrelevant for the OpenRouter provider: there's no local download.
-      if (providerRef.current === "kokoro" && !kokoroRef.current && kokoroLoading.current) {
-        pendingSpeakRef.current = true;
-        setStatus("loading");
-        waitTimerRef.current = setTimeout(() => {
-          if (pendingSpeakRef.current) {
-            pendingSpeakRef.current = false;
-            void playQueue();
-          }
-        }, KOKORO_WAIT_CAP_MS);
-        return;
-      }
+      // NEVER wait for Kokoro. playQueue() uses Kokoro when the model is
+      // already loaded and otherwise speaks immediately with the best
+      // available browser voice; once the background download finishes, later
+      // replies pick Kokoro up automatically. Mobile never loads Kokoro at all.
       void playQueue();
     },
     [enabled, stop, playQueue],
