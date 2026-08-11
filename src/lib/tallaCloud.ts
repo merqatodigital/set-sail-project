@@ -12,12 +12,10 @@
 // Supabase-backed flows (useTalaChat, talaOps) are untouched — this is additive.
 // ---------------------------------------------------------------------------
 
-const WORKER_BASE =
-  (import.meta.env.VITE_TALLA_WORKER_URL as string | undefined) ||
-  "https://talla-agent-staging.merqato-digital.workers.dev";
+import { talaChat, talaOwnerToken, talaOwnerUserId, talaWorkerBase, TALA_TENANT } from "./talaClient";
 
-/** Default resort tenant used by the staging backend. */
-export const TALLA_TENANT = "marina_terrace";
+/** Default resort tenant used by the backend. */
+export const TALLA_TENANT = TALA_TENANT;
 
 export interface TallaBackendHealth {
   service: string;
@@ -52,7 +50,7 @@ export interface TallaChatResult {
 
 /** Raw health payload from the Worker. */
 export async function fetchTallaHealth(signal?: AbortSignal): Promise<TallaBackendHealth> {
-  const res = await fetch(`${WORKER_BASE}/api/health`, { signal });
+  const res = await fetch(`${talaWorkerBase()}/api/health`, { signal });
   if (!res.ok) throw new Error(`TALA backend returned ${res.status}`);
   return (await res.json()) as TallaBackendHealth;
 }
@@ -63,7 +61,7 @@ export async function fetchLatestBriefing(
   signal?: AbortSignal,
 ): Promise<{ artifacts: TallaBriefingArtifact[] }> {
   const res = await fetch(
-    `${WORKER_BASE}/api/workflows/daily-briefing/artifacts?tenant=${encodeURIComponent(tenantId)}&full=1`,
+    `${talaWorkerBase()}/api/workflows/daily-briefing/artifacts?tenant=${encodeURIComponent(tenantId)}&full=1`,
     { headers: { "X-Dev-Tenant": tenantId }, signal },
   );
   if (!res.ok) throw new Error(`Briefing fetch returned ${res.status}`);
@@ -79,7 +77,7 @@ export async function triggerBriefing(
   tenantId: string = TALLA_TENANT,
   signal?: AbortSignal,
 ): Promise<{ instanceId: string; date: string }> {
-  const res = await fetch(`${WORKER_BASE}/api/workflows/daily-briefing`, {
+  const res = await fetch(`${talaWorkerBase()}/api/workflows/daily-briefing`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Dev-Tenant": tenantId },
     body: JSON.stringify({}),
@@ -104,19 +102,17 @@ export async function askTalla(
   opts: { tenantId?: string; role?: string; userId?: string } = {},
   signal?: AbortSignal,
 ): Promise<TallaChatResult> {
-  const res = await fetch(`${WORKER_BASE}/api/talla/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      tenantId: opts.tenantId ?? TALLA_TENANT,
-      role: opts.role ?? "owner",
-      userId: opts.userId ?? "admin",
-    }),
+  // Owner authorization is decided by the Worker from this bearer token —
+  // the `role` field is context only.
+  const [authToken, ownerId] = await Promise.all([talaOwnerToken(), talaOwnerUserId()]);
+  return talaChat({
+    message,
+    tenantId: opts.tenantId ?? TALLA_TENANT,
+    role: (opts.role as "guest" | "owner") ?? "owner",
+    userId: opts.userId ?? ownerId ?? "owner-session",
+    authToken: authToken || undefined,
     signal,
   });
-  if (!res.ok) throw new Error(`TALA chat returned ${res.status}`);
-  return (await res.json()) as TallaChatResult;
 }
 
 export interface TallaStatusView {

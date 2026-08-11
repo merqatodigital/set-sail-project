@@ -21,7 +21,7 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
-import { normalizeIntent, type TalaIntentPayload } from "./talaIntent";
+import { normalizeIntent, intentMessage, type TalaIntentPayload } from "./talaIntent";
 import { DayPassForm } from "./DayPassForm";
 import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
@@ -99,9 +99,12 @@ export function TalaWidget() {
         return;
       }
       setIntent(null);
-      if (message && message.trim()) {
-        // Seed the input and send immediately so TALA responds to the intent.
-        void submit(message);
+      // A CTA with a known goal always sends a concrete message so TALA (on
+      // Cloudflare) routes the guest instead of opening a vague chat.
+      const text = normalized ? intentMessage({ ...normalized, message: message ?? normalized.message }) : message;
+      if (text && text.trim()) {
+        // Send immediately so TALA responds to the intent.
+        void submit(text);
       }
     },
     [submit],

@@ -3,8 +3,7 @@
 // Replaces direct Supabase calls in React components.
 
 import { supabase } from "./supabase";
-
-const WORKER_BASE = import.meta.env.VITE_WORKER_URL || "";
+import { talaWorkerBase } from "./talaClient";
 
 /**
  * Resolve the owner's Supabase session JWT. Supabase JS v2 persists the
@@ -35,7 +34,7 @@ async function apiFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${WORKER_BASE}${path}`, {
+  const res = await fetch(`${talaWorkerBase()}${path}`, {
     method: options?.method ?? "GET",
     headers,
     body: options?.body ? JSON.stringify(options.body) : undefined,
