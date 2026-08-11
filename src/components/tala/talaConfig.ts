@@ -1,24 +1,13 @@
 // ---------------------------------------------------------------------------
 // TALA — central configuration.
 //
-// TALA is the site's AI concierge, ported from the KAPWA Resort OS agent
-// (github.com/merqatodigital/working-AI-agent). The Python backend's
-// LangGraph pipeline is replaced here by a single chat completion against
-// OpenRouter, proxied through the `tala-chat` Supabase Edge Function so the
-// API key stays server-side. Voice is fully in-browser and free:
-// Kokoro-82M (open source) for speech out, Web Speech API for speech in.
+// TALA is the site's AI concierge. Its brain runs on the Cloudflare
+// TallaAgent Durable Object — the browser only ever calls
+// ${VITE_TALA_WORKER_URL}/api/talla/chat through src/lib/talaClient.ts.
+// Supabase stays the operational database / auth, not the conversational
+// brain. Voice is fully in-browser and free: Kokoro-82M (open source) for
+// speech out, Web Speech API for speech in.
 // ---------------------------------------------------------------------------
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-/** Supabase Edge Function endpoint that proxies OpenRouter (keeps the key secret). */
-export const TALA_CHAT_ENDPOINT = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/tala-chat` : null;
-
-export const TALA_SUPABASE_ANON_KEY = SUPABASE_KEY ?? null;
-
-/** Direct OpenRouter endpoint — used only in dev mode with a locally stored key. */
-export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
  * OpenRouter's hosted text-to-speech endpoint — same key/billing as the chat
@@ -29,9 +18,8 @@ export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completion
 export const OPENROUTER_TTS_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech";
 
 /**
- * Free OpenRouter models, tried in order until one answers. Free-tier IDs
- * churn over time — keep this list fresh from https://openrouter.ai/models?q=free
- * The edge function shares this list; update both together.
+ * Free model ids surfaced in Admin → TALA as the preferred-model picker.
+ * Model selection is executed server-side by the Cloudflare TallaAgent.
  */
 export const TALA_FREE_MODELS = [
   "openai/gpt-oss-20b:free",
