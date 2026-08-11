@@ -806,37 +806,135 @@ export function computeStayPhase(checkIn: string, checkOut: string, status: stri
 
 async function updateBookingStatus(
   env: Env,
-  opts: { guestName: string; roomType: string; checkIn: string; status: string },
-): Promise<{ ok: boolean; error?: string }> {
+  opts: { guestName?: string; roomType?: string; checkIn?: string; reference?: string; status: string },
+): Promise<{ ok: boolean; error?: string; changed?: number }> {
   const base = supabaseBase(env);
   const key = supabaseKey(env);
   if (!base || !key) return { ok: false, error: "Supabase not configured" };
-  const res = await fetch(
-    `${base}/rest/v1/bookings?guest_name=eq.${encodeURIComponent(opts.guestName)}&room_type=eq.${encodeURIComponent(opts.roomType)}&check_in=eq.${opts.checkIn}`,
-    {
-      method: "PATCH",
-      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
-      body: JSON.stringify({ status: opts.status }),
-    },
-  );
+  // Prefer an exact, stable reference when available; fall back to the
+  // composite guest_name + room_type + check_in key otherwise.
+  let url = `${base}/rest/v1/bookings?`;
+  if (opts.reference) {
+    url += `reference=eq.${encodeURIComponent(opts.reference)}`;
+  } else {
+    url += `guest_name=eq.${encodeURIComponent(opts.guestName ?? "")}&room_type=eq.${encodeURIComponent(opts.roomType ?? "")}&check_in=eq.${encodeURIComponent(opts.checkIn ?? "")}`;
+  }
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({ status: opts.status }),
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     return { ok: false, error: `Check-in/out failed (HTTP ${res.status}): ${body.slice(0, 200)}` };
   }
-  return { ok: true };
+  // A 200 from PostgREST on a PATCH can mean ZERO rows matched. That is NOT a
+  // success — verify the mutation actually changed a row.
+  try {
+    const updated = (await res.json()) as unknown[];
+    const changed = Array.isArray(updated) ? updated.length : 0;
+    if (changed === 0) {
+      return { ok: false, error: `No matching booking found to update (status=${opts.status}).`, changed: 0 };
+    }
+    return { ok: true, changed };
+  } catch {
+    return { ok: false, error: "Booking update returned no confirmation row." };
+  }
 }
 
 export async function checkInGuest(
   env: Env,
-  o: { guestName: string; roomType: string; checkIn: string },
-): Promise<{ ok: boolean; error?: string }> {
+  o: { guestName?: string; roomType?: string; checkIn?: string; reference?: string },
+): Promise<{ ok: boolean; error?: string; changed?: number }> {
   return updateBookingStatus(env, { ...o, status: "checked_in" });
 }
 export async function checkOutGuest(
   env: Env,
-  o: { guestName: string; roomType: string; checkIn: string },
-): Promise<{ ok: boolean; error?: string }> {
+  o: { guestName?: string; roomType?: string; checkIn?: string; reference?: string },
+): Promise<{ ok: boolean; error?: string; changed?: number }> {
   return updateBookingStatus(env, { ...o, status: "checked_out" });
+}
+
+// ---------------------------------------------------------------------------
+// BOOKING CONFIRMATION — promote a pending tala_booking_requests row into the
+// operational `bookings` table. Idempotent: calling confirm twice (or after a
+// restart) must NOT create a second bookings row. The same MT- reference and
+// guest identity/room/dates/guests are preserved; the operational amount comes
+// from the request (authoritative), never a guest-supplied price.
+// ---------------------------------------------------------------------------
+export interface ConfirmBookingResult {
+  ok: boolean;
+  error?: string;
+  bookingId?: string;
+  reference?: string;
+}
+export async function confirmBookingRequest(
+  env: Env,
+  opts: { reference: string },
+): Promise<ConfirmBookingResult> {
+  const base = supabaseBase(env);
+  const key = supabaseKey(env);
+  if (!base || !key) return { ok: false, error: "Supabase not configured" };
+
+  // 1) Read the pending request by exact reference.
+  const reqRes = await fetch(`${base}/rest/v1/tala_booking_requests?reference=eq.${encodeURIComponent(opts.reference)}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!reqRes.ok) return { ok: false, error: `Booking request lookup failed (HTTP ${reqRes.status})` };
+  const reqRows = (await reqRes.json().catch(() => [])) as Array<Record<string, unknown>>;
+  if (!reqRows.length) return { ok: false, error: `No booking request with reference ${opts.reference}` };
+  const r = reqRows[0];
+
+  // 2) Idempotency: if a bookings row with this reference already exists, just
+  //    ensure both sides read confirmed and return (no second insert).
+  const bRes = await fetch(`${base}/rest/v1/bookings?reference=eq.${encodeURIComponent(opts.reference)}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  const bRows = (await bRes.json().catch(() => [])) as Array<Record<string, unknown>>;
+  if (!bRows.length) {
+    if (r.status !== "pending") {
+      return { ok: false, error: `Request ${opts.reference} is '${String(r.status)}' (not pending) and has no bookings row.` };
+    }
+    // 3) Create the operational bookings row, keyed by the request UUID so the
+    //    upsert is stable/idempotent. Preserve reference + identity + stay.
+    const amount = Number(r.amount ?? 0);
+    const upsert = await fetch(`${base}/rest/v1/bookings`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      body: JSON.stringify({
+        id: String(r.id),
+        reference: opts.reference,
+        guest_id: "",
+        guest_name: String(r.guest_name ?? ""),
+        room_type: String(r.room_type ?? ""),
+        check_in: String(r.check_in ?? ""),
+        check_out: String(r.check_out ?? ""),
+        guests: Number(r.guests ?? 1),
+        amount,
+        paid_amount: 0,
+        status: "confirmed",
+        source: "tala_chat",
+      }),
+    });
+    if (!upsert.ok) {
+      const body = await upsert.text().catch(() => "");
+      return { ok: false, error: `Booking creation failed (HTTP ${upsert.status}): ${body.slice(0, 200)}` };
+    }
+  }
+
+  // 4) Mark the request confirmed (idempotent — safe if already confirmed).
+  await fetch(`${base}/rest/v1/tala_booking_requests?id=eq.${encodeURIComponent(String(r.id))}`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "confirmed" }),
+  });
+
+  return { ok: true, bookingId: String(r.id), reference: opts.reference };
 }
 
 // ---------------------------------------------------------------------------
@@ -864,8 +962,46 @@ export async function getGuestStayState(
   const name = opts.name;
   const phone = opts.phone;
   const booking = await getGuestStay(env, { name, phone });
-  const phase: StayPhase | null = booking[0]
-    ? computeStayPhase(booking[0].checkIn, booking[0].checkOut, booking[0].status)
+
+  // Coherent lifecycle: a guest may have a PENDING request in
+  // tala_booking_requests but no operational bookings row yet. Surface it as a
+  // 'pending' booking so TALA understands the transition (request -> confirmed
+  // -> checked_in -> checked_out). The confirmed bookings row is authoritative;
+  // we do NOT duplicate when both exist.
+  let pendingRequests: GuestStay[] = [];
+  if (booking.length === 0) {
+    try {
+      const base = supabaseBase(env);
+      const key = supabaseKey(env);
+      if (base && key) {
+        const filter = name
+          ? `guest_name=eq.${encodeURIComponent(name)}&status=eq.pending`
+          : `guest_phone=eq.${encodeURIComponent(phone ?? "")}&status=eq.pending`;
+        const pres = await fetch(`${base}/rest/v1/tala_booking_requests?${filter}`, {
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        });
+        const prows = (await pres.json().catch(() => [])) as Array<Record<string, unknown>>;
+        pendingRequests = prows.map((r) => ({
+          id: String(r.id),
+          reference: String(r.reference ?? ""),
+          roomType: String(r.room_type ?? ""),
+          guests: Number(r.guests ?? 1),
+          checkIn: String(r.check_in ?? ""),
+          checkOut: String(r.check_out ?? ""),
+          status: "pending",
+          amount: Number(r.amount ?? 0),
+          paidAmount: 0,
+          notes: String(r.notes ?? ""),
+        }));
+      }
+    } catch {
+      pendingRequests = [];
+    }
+  }
+  const effectiveBooking = booking.length > 0 ? booking : pendingRequests;
+
+  const phase: StayPhase | null = effectiveBooking[0]
+    ? computeStayPhase(effectiveBooking[0].checkIn, effectiveBooking[0].checkOut, effectiveBooking[0].status)
     : null;
   const [tours, rentals, foodOrders, messages, folio] = await Promise.all([
     getGuestTourRequests(env, { name, phone }),
@@ -902,7 +1038,7 @@ export async function getGuestStayState(
 
   return {
     identity: { name, phone },
-    booking,
+    booking: effectiveBooking,
     phase,
     tours,
     rentals,

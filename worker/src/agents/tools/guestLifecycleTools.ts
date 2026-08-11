@@ -23,6 +23,7 @@ import {
   recordPayment,
   checkInGuest,
   checkOutGuest,
+  confirmBookingRequest,
 } from "../../db/repos/guestStateRepo.js";
 
 function selfIdentity(ctx: ToolContext): { name?: string; phone?: string } {
@@ -306,25 +307,29 @@ export const recordPaymentTool: TallaTool = {
 export const checkInGuestTool: TallaTool = {
   name: "checkInGuest",
   description:
-    "OWNER/ADMIN ONLY. Mark a confirmed booking as checked_in on the authoritative bookings table. Required: guestName, roomType, checkIn.",
+    "OWNER/ADMIN ONLY. Mark a confirmed booking as checked_in on the authoritative bookings table. Prefer the exact booking reference; otherwise guestName + roomType + checkIn. Required: reference OR (guestName + roomType + checkIn).",
   parameters: {
     type: "object",
     properties: {
+      reference: { type: "string", description: "Exact booking reference (MT-YYYYMMDD-XXXX). Preferred." },
       guestName: { type: "string", description: "Guest name" },
       roomType: { type: "string", description: "Room type" },
       checkIn: { type: "string", description: "Check-in date YYYY-MM-DD" },
     },
-    required: ["guestName", "roomType", "checkIn"],
+    required: [],
   },
   execute: async (args, ctx) => {
     if (!ownerOnly(ctx)) return { success: false, error: "Only staff can check a guest in." };
-    const a = args as { guestName?: string; roomType?: string; checkIn?: string };
-    if (!a.guestName || !a.roomType || !a.checkIn) {
-      return { success: false, error: "guestName, roomType and checkIn are required." };
+    const a = args as { reference?: string; guestName?: string; roomType?: string; checkIn?: string };
+    if (!a.reference && (!a.guestName || !a.roomType || !a.checkIn)) {
+      return { success: false, error: "reference, or guestName + roomType + checkIn, are required." };
     }
     try {
-      const r = await checkInGuest(ctx.env as never, { guestName: a.guestName, roomType: a.roomType, checkIn: a.checkIn });
-      return r.ok ? { success: true, data: { message: `${a.guestName} checked in.` } } : { success: false, error: r.error };
+      const r = await checkInGuest(ctx.env as never, { reference: a.reference, guestName: a.guestName, roomType: a.roomType, checkIn: a.checkIn });
+      if (!r.ok) return { success: false, error: r.error };
+      // Zero-row guard: a successful HTTP with no matched row is a failure.
+      if (!r.changed || r.changed < 1) return { success: false, error: "No matching booking found to check in." };
+      return { success: true, data: { message: `${a.guestName ?? a.reference} checked in (${r.changed} row).` } };
     } catch (e) {
       return { success: false, error: (e as Error).message };
     }
@@ -334,33 +339,67 @@ export const checkInGuestTool: TallaTool = {
 export const checkOutGuestTool: TallaTool = {
   name: "checkOutGuest",
   description:
-    "OWNER/ADMIN ONLY. Mark a stay as checked_out and report any unresolved services / outstanding balance via getGuestStayState first. Required: guestName, roomType, checkIn. Guests can NEVER self-checkout or self-settle.",
+    "OWNER/ADMIN ONLY. Mark a stay as checked_out and report any unresolved services / outstanding balance via getGuestStayState first. Prefer the exact booking reference; otherwise guestName + roomType + checkIn. Guests can NEVER self-checkout or self-settle.",
   parameters: {
     type: "object",
     properties: {
+      reference: { type: "string", description: "Exact booking reference (MT-YYYYMMDD-XXXX). Preferred." },
       guestName: { type: "string", description: "Guest name" },
       roomType: { type: "string", description: "Room type" },
       checkIn: { type: "string", description: "Check-in date YYYY-MM-DD" },
     },
-    required: ["guestName", "roomType", "checkIn"],
+    required: [],
   },
   execute: async (args, ctx) => {
     if (!ownerOnly(ctx)) return { success: false, error: "Only staff can check a guest out." };
-    const a = args as { guestName?: string; roomType?: string; checkIn?: string };
-    if (!a.guestName || !a.roomType || !a.checkIn) {
-      return { success: false, error: "guestName, roomType and checkIn are required." };
+    const a = args as { reference?: string; guestName?: string; roomType?: string; checkIn?: string };
+    if (!a.reference && (!a.guestName || !a.roomType || !a.checkIn)) {
+      return { success: false, error: "reference, or guestName + roomType + checkIn, are required." };
     }
     try {
       // Surface outstanding items before closing the stay.
       const state = await getGuestStayState(ctx.env as never, ctx.db as D1Database, ctx.tenantId, { name: a.guestName });
-      const r = await checkOutGuest(ctx.env as never, { guestName: a.guestName, roomType: a.roomType, checkIn: a.checkIn });
+      const r = await checkOutGuest(ctx.env as never, { reference: a.reference, guestName: a.guestName, roomType: a.roomType, checkIn: a.checkIn });
+      if (!r.ok) return { success: false, error: r.error };
+      if (!r.changed || r.changed < 1) return { success: false, error: "No matching booking found to check out." };
+      return {
+        success: true,
+        data: {
+          message: `${a.guestName ?? a.reference} checked out (${r.changed} row).`,
+          outstanding: state.outstanding,
+          balance: state.folio.balance,
+        },
+      };
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  },
+};
+
+export const confirmBookingTool: TallaTool = {
+  name: "confirmBooking",
+  description:
+    "OWNER/ADMIN ONLY. Confirm a pending room booking request and promote it into the operational bookings table. Identifies the request by its exact reference (MT-YYYYMMDD-XXXX). Idempotent: confirming twice never creates a duplicate bookings row. After this, the guest's stay is 'confirmed' and can be checked in/out.",
+  parameters: {
+    type: "object",
+    properties: {
+      reference: { type: "string", description: "Exact booking request reference (MT-YYYYMMDD-XXXX) to confirm" },
+    },
+    required: ["reference"],
+  },
+  execute: async (args, ctx) => {
+    if (!ownerOnly(ctx)) return { success: false, error: "Only staff can confirm a booking." };
+    const a = args as { reference?: string };
+    if (!a.reference) return { success: false, error: "reference is required." };
+    try {
+      const r = await confirmBookingRequest(ctx.env as never, { reference: a.reference });
       if (!r.ok) return { success: false, error: r.error };
       return {
         success: true,
         data: {
-          message: `${a.guestName} checked out.`,
-          outstanding: state.outstanding,
-          balance: state.folio.balance,
+          message: `Booking ${r.reference} confirmed. Operational booking created (id ${r.bookingId}).`,
+          reference: r.reference,
+          bookingId: r.bookingId,
         },
       };
     } catch (e) {

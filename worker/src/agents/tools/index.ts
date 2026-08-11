@@ -30,6 +30,7 @@ import {
   recordPaymentTool,
   checkInGuestTool,
   checkOutGuestTool,
+  confirmBookingTool,
 } from "./guestLifecycleTools.js";
 import { getInventoryTool } from "./inventoryTools.js";
 import { getTodayOperationsTool } from "./operationsTools.js";
@@ -88,6 +89,7 @@ export function getTools(role: string | null, computerEnabled = false): TallaToo
     tools.push(recordPaymentTool);
     tools.push(checkInGuestTool);
     tools.push(checkOutGuestTool);
+    tools.push(confirmBookingTool);
     tools.push(sandboxWriteFileTool);
     tools.push(sandboxReadFileTool);
     tools.push(sandboxListFilesTool);
