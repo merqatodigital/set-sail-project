@@ -323,7 +323,13 @@ export function useTalaChat(): UseTalaChat {
         });
 
         const turnMs = Math.round(performance.now() - turnStart);
-        console.debug(`[TALA] reply round-trip ${turnMs}ms`, finalText.slice(0, 60));
+        // Latency telemetry — no internal reasoning, only timings.
+        console.debug(
+          `[TALA] first token ${firstTokenMs ?? "n/a"}ms · complete ${turnMs}ms`,
+          reply.timing
+            ? `worker prompt ${reply.timing.promptMs ?? "?"}ms · llm ${reply.timing.llmMs ?? "?"}ms · tools ${reply.timing.toolMs ?? "?"}ms · total ${reply.timing.totalMs ?? "?"}ms`
+            : "",
+        );
         setLastTurn({ ms: turnMs, text: finalText.slice(0, 80) });
 
         return finalText;
