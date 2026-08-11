@@ -1,33 +1,79 @@
 // OpenRouter LLM provider — calls OpenRouter API for chat completions.
-// Supports model fallback and tool calling.
+// Supports env-driven model routing, OpenRouter provider latency-sorting, and a
+// SHORT bounded fallback chain (long fallback chains turned 3s failures into
+// 40s turns, so they are intentionally kept small).
 
 import type { ConversationMessage, OpenRouterResponse } from "./types.js";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
-// Model configuration — abstracted for future per-tenant BYO-key support.
+// Model configuration — abstracted so it can be overridden per-tenant / per-env
+// without code changes.
 export interface ModelConfig {
   provider: string;
   model: string;
+  // Ordered fallback chain (excluding the primary). Kept SHORT on purpose.
+  models: string[];
   temperature: number;
   maxTokens: number;
+  // OpenRouter provider-routing block (latency-sorted routing). Emitted only
+  // when present; lets OpenRouter pick the fastest qualifying endpoint.
+  providerRouting?: Record<string, unknown>;
 }
 
-export const DEFAULT_MODEL_CONFIG: ModelConfig = {
-  provider: "openrouter",
-  model: "openai/gpt-oss-20b:free",
-  temperature: 0.5,
-  maxTokens: 600,
-};
+/**
+ * Resolve the model config from env. Defaults are optimized for INTERACTIVE,
+ * low-latency, tool-capable voice/concierge turns.
+ *
+ * Env overrides (all optional):
+ *   TALA_PRIMARY_MODEL      primary model id
+ *   TALA_FALLBACK_MODELS    comma-separated fallback model ids (max 3)
+ *   TALA_MAX_TOKENS         completion token cap (smaller = snappier)
+ *   TALA_TEMPERATURE
+ *   TALA_PROVIDER_ROUTING   "true" to enable OpenRouter latency-sorted routing
+ *                           on the primary (ignores TALA_PRIMARY_MODEL and lets
+ *                           OpenRouter pick the fastest parameter-supporting EP)
+ *   TALA_PREFERRED_MAX_LATENCY  ms ceiling for provider routing (default 4000)
+ */
+export function resolveModelConfig(env: Record<string, any> | undefined): ModelConfig {
+  const e = env ?? {};
+  const fallbackRaw = typeof e.TALA_FALLBACK_MODELS === "string" ? e.TALA_FALLBACK_MODELS : "";
+  const fallbacks = fallbackRaw
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3);
 
-// Free model fallback chain — matches existing talaConfig.ts
-const FREE_MODELS = [
-  "openai/gpt-oss-20b:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "google/gemma-4-31b-it:free",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "nvidia/nemotron-nano-12b-v2-vl:free",
-];
+  const useRouting = String(e.TALA_PROVIDER_ROUTING ?? "true").toLowerCase() === "true";
+  const preferredMaxLatency = Number(e.TALA_PREFERRED_MAX_LATENCY ?? 4000) || 4000;
+
+  // Fast interactive default. OpenRouter auto-routing (require_parameters +
+  // latency sort) picks the quickest parameter-supporting endpoint, which is
+  // exactly what a tool-calling voice concierge needs.
+  const primary = typeof e.TALA_PRIMARY_MODEL === "string" && e.TALA_PRIMARY_MODEL
+    ? e.TALA_PRIMARY_MODEL
+    : "openrouter/auto";
+
+  const providerRouting = useRouting
+    ? {
+        require_parameters: true,
+        sort: { by: "latency", partition: "none" },
+        ...(preferredMaxLatency > 0 ? { preferred_max_latency: preferredMaxLatency } : {}),
+      }
+    : undefined;
+
+  return {
+    provider: "openrouter",
+    model: primary,
+    // Keep fallbacks SHORT. If none configured, a single reliable fast option.
+    models: fallbacks.length
+      ? fallbacks
+      : ["google/gemini-2.0-flash-001", "anthropic/claude-3.5-haiku"],
+    temperature: Number(e.TALA_TEMPERATURE ?? 0.4) || 0.4,
+    maxTokens: Number(e.TALA_MAX_TOKENS ?? 400) || 400,
+    providerRouting,
+  };
+}
 
 export interface ChatRequest {
   messages: ConversationMessage[];
@@ -60,16 +106,35 @@ export interface ChatResponse {
 
 /**
  * Call OpenRouter for a chat completion.
- * Tries the preferred model first, then falls back through FREE_MODELS.
+ * Tries the primary model first, then falls back through a SHORT chain.
+ * Provider latency-routing (if configured) lets OpenRouter pick the fastest
+ * qualifying endpoint for the primary. A bounded null-content retry protects
+ * against models that return empty output; it never loops.
  */
-export async function chatCompletion(apiKey: string, request: ChatRequest): Promise<ChatResponse> {
-  const config = { ...DEFAULT_MODEL_CONFIG, ...request.modelConfig };
-  const models = [config.model, ...FREE_MODELS.filter((m) => m !== config.model)];
+export async function chatCompletion(
+  apiKey: string,
+  request: ChatRequest,
+): Promise<ChatResponse> {
+  const config = { ...resolveModelConfig(undefined), ...request.modelConfig };
+  const models = [config.model, ...config.models.filter((m) => m !== config.model)].slice(0, 4);
 
   let lastError: Error | null = null;
 
   for (const model of models) {
     try {
+      const body: Record<string, unknown> = {
+        model,
+        messages: request.messages,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        tools: request.tools?.length ? request.tools : undefined,
+        tool_choice: request.tools?.length ? "auto" : undefined,
+      };
+      // Provider routing only on the primary slot (model === config.model).
+      if (config.providerRouting && model === config.model) {
+        body.provider = config.providerRouting;
+      }
+
       const response = await fetch(OPENROUTER_ENDPOINT, {
         method: "POST",
         headers: {
@@ -78,19 +143,12 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
           "HTTP-Referer": "https://marinaterrace.ph",
           "X-Title": "TALA - Marina Terrace",
         },
-        body: JSON.stringify({
-          model,
-          messages: request.messages,
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
-          tools: request.tools?.length ? request.tools : undefined,
-          tool_choice: request.tools?.length ? "auto" : undefined,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
-        // On tool/function error, retry without tools
+        // On tool/function error, retry once without tools.
         if (response.status === 400 && errorText.includes("tool")) {
           const retryResponse = await fetch(OPENROUTER_ENDPOINT, {
             method: "POST",
@@ -107,31 +165,24 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
               max_tokens: config.maxTokens,
             }),
           });
-
           if (!retryResponse.ok) {
             throw new Error(`OpenRouter ${retryResponse.status}: ${errorText}`);
           }
-
           const retryData = (await retryResponse.json()) as OpenRouterResponse;
           return parseResponse(retryData);
         }
-
-        // On rate limit or server error, try next model
+        // Rate limit / server error -> next model.
         if (response.status === 429 || response.status >= 500) {
           lastError = new Error(`OpenRouter ${response.status} for ${model}`);
           continue;
         }
-
         throw new Error(`OpenRouter ${response.status}: ${errorText}`);
       }
 
       const data = (await response.json()) as OpenRouterResponse;
 
-      // Reliability fix: some free models return null content with no tool call
-      // even when tools were offered. Retry ONCE with normal tool choice (auto) so
-      // the model gets a second chance to invoke a tool. We do NOT force a specific
-      // tool_choice (which could coerce an unrelated tool). Bounded: one retry per
-      // model; if still null, fall through to the next fallback model. Never loops.
+      // Reliability: some models return null content with no tool call even when
+      // tools were offered. Retry ONCE with auto tool choice, then fall through.
       const offeredTools = request.tools?.length ? request.tools : undefined;
       const choice = data.choices?.[0];
       const noUsefulOutput =
@@ -160,7 +211,6 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
         if (retry.ok) {
           const retryData = (await retry.json()) as OpenRouterResponse;
           const retryChoice = retryData.choices?.[0];
-          // Only use the retry if it actually produced content or a tool call.
           if (
             retryChoice &&
             (retryChoice.message.content !== null ||
@@ -169,17 +219,16 @@ export async function chatCompletion(apiKey: string, request: ChatRequest): Prom
             return parseResponse(retryData);
           }
         }
-        // Still no useful output -> fall through to next fallback model.
+        // Still nothing -> next model.
       }
 
       return parseResponse(data);
     } catch (err) {
       lastError = err as Error;
-      // Only continue to next model on specific errors
-      if (err instanceof Error && (err.message.includes("429") || err.message.includes("500"))) {
-        continue;
-      }
-      throw err;
+      // Continue to the next model on ANY failure (bounded short chain). Long
+      // free-model fallback chains used to turn a 3s failure into a 40s turn; the
+      // chain is now short, so walking it is cheap. Throw only after exhaustion.
+      continue;
     }
   }
 

@@ -18,7 +18,7 @@
 import { Agent, callable } from "agents";
 import type { AgentEmail } from "agents/email";
 import type { Env } from "../env.js";
-import { chatCompletion, type ChatResponse } from "./provider.js";
+import { chatCompletion, resolveModelConfig, type ChatResponse } from "./provider.js";
 import { buildSystemPrompt, type SystemPromptContext } from "./systemPrompt.js";
 import { getTools, toOpenRouterTools, executeTool } from "./tools/index.js";
 import { createAuditWrapper } from "./toolAudit.js";
@@ -1065,6 +1065,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       const response = await chatCompletion(apiKey, {
         messages: wire,
         tools: orTools,
+        modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>),
       });
 
       // If no tool calls, we're done
@@ -1344,7 +1345,11 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         ...messages.slice(-MAX_HISTORY),
       ];
 
-      const response = await chatCompletion(apiKey, { messages: wire, tools: orTools });
+      const response = await chatCompletion(apiKey, {
+        messages: wire,
+        tools: orTools,
+        modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>),
+      });
 
       if (response.toolCalls.length === 0) {
         finalResponse = response;

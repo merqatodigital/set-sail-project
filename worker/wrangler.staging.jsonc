@@ -63,6 +63,10 @@
     "TALLA_COMPUTER_ENABLED": "true",
     "ENVIRONMENT": "staging",
     "AI_SEARCH_ACCOUNT_ID": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
-    "AI_SEARCH_INDEX": "marina-terrace-knowledge"
+    "AI_SEARCH_INDEX": "marina-terrace-knowledge",
+    "TALA_PROVIDER_ROUTING": "true",
+    "TALA_PREFERRED_MAX_LATENCY": "4000",
+    "TALA_MAX_TOKENS": "400",
+    "TALA_TEMPERATURE": "0.4"
   }
 }
