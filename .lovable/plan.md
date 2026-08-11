@@ -36,10 +36,10 @@ browser -> Cloudflare Worker `/api/talla/chat` -> TallaAgent Durable Object -> O
 - `stop()` already cancels queued chunks, audio element and `speechSynthesis`. Extend barge-in so it also fires on the first interim speech result (not just the mic press) and when the user starts typing, so TALA goes quiet the instant the guest speaks.
 - One-press mic UX stays exactly as it is.
 
-### 5. Stable knowledge without a per-turn DB fetch (Worker)
-- Add `worker/src/agents/staticKnowledge.ts` holding the stable Marina Terrace / San Vicente facts already present in the persona (property, workspace, Starlink + backup internet, power/generator, rooms, long stays, digital nomads, San Vicente, Poblacion, Port Barton, Alimanguan, Long Beach, transport, San Vicente Airport, Puerto Princesa and El Nido travel, island hopping, surfing, waterfalls, culture, coworking, kitchen, general policies).
-- `systemPrompt.ts` prepends this static block, and database knowledge is merged on top as additive overrides — so a slow or failed DB read can no longer stall or shrink a turn. Nothing is deleted from the existing prompt.
-- Volatile truth (availability, room status, bookings, guests, menu/inventory, orders, payments, maintenance, housekeeping, live status, authoritative prices) stays tool/D1/database-only. No prices in the static block.
+### 5. Knowledge — keep the one existing Worker implementation
+- No new `staticKnowledge.ts`. Stable Marina Terrace / San Vicente knowledge stays exactly where it already lives on the Worker knowledge path feeding `ctx.knowledge` in `worker/src/agents/systemPrompt.ts`.
+- Only change here: confirm a slow or failed knowledge read cannot stall a turn, and leave the prompt content untouched. Nothing added, nothing shortened, no second implementation.
+- Volatile truth (availability, room status, bookings, guests, menu/inventory, orders, payments, maintenance, housekeeping, live status, authoritative prices) stays tool/D1/database-only.
 
 ### 6. Telemetry
 - Surface, in the existing debug/console channel: send -> first streamed token, send -> complete reply, reply -> first audio, and the Worker `promptMs / llmMs / toolMs / totalMs`. No internal reasoning exposed.
@@ -49,7 +49,7 @@ Run the dev server and exercise, in the browser: "What is Marina Terrace?", "How
 
 ## Known external blocker
 
-The static-knowledge and any Worker-side change only take effect after a Cloudflare deploy (`npx wrangler deploy --config worker/wrangler.jsonc`), which needs your Cloudflare credentials. All frontend streaming/voice fixes take effect immediately. Frontend streaming works against the already-deployed Worker because SSE support is already live there.
+Any Worker-side memory/prompt change only takes effect after a Cloudflare deploy (`npx wrangler deploy --config worker/wrangler.jsonc`), which needs your Cloudflare credentials. All frontend streaming/voice fixes take effect immediately, and streaming works against the already-deployed Worker because SSE support is already live there.
 
 ## Out of scope
 
