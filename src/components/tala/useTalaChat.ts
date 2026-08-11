@@ -346,6 +346,8 @@ export function useTalaChat(): UseTalaChat {
   );
 
   const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     messagesRef.current = [];
     setMessages([]);
     setError(null);
