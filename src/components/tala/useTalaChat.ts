@@ -1,44 +1,15 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  TALA_MAX_HISTORY,
-  TALA_STORAGE,
-  type TalaMessage,
-} from "./talaConfig";
-import {
-  executeTalaTool,
-  captureGuestLead,
-  confirmBookingDraft,
-  type TalaToolContext,
-} from "./talaTools";
+import { TALA_STORAGE, type TalaMessage } from "./talaConfig";
+import { captureGuestLead, confirmBookingDraft } from "./talaTools";
 import {
   classifyHeuristically,
   writeAuditEntry,
   type TalaClassification,
 } from "./talaGraph";
-import { detectSentiment, sentimentInstruction } from "./talaSentiment";
+import { detectSentiment } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
 import { talaChat, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
-
-interface ToolCallWire {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-}
-
-interface WireMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-  tool_call_id?: string;
-}
-
-interface AssistantReply {
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-}
-
-const MAX_TOOL_HOPS = 3;
 
 function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -63,10 +34,9 @@ export function setDevApiKey(key: string) {
 
 /**
  * Stable per-browser guest session id. The public orb is unauthenticated, so
- * we mint a random id stored in localStorage and reuse it for the chat
- * session. This isolates each visitor's conversation in the Cloudflare
- * TallaAgent Durable Object (keyed tenantId:userId) so two guests never share
- * history or private context.
+ * we mint a random id stored in localStorage and reuse it for the chat session.
+ * This isolates each visitor's Durable Object conversation from every other
+ * visitor while still giving TALA memory across turns in this browser.
  */
 export function getGuestSessionId(): string {
   try {
@@ -83,25 +53,26 @@ export function getGuestSessionId(): string {
 }
 
 /**
- * THE single TALA path — every surface (guest text, voice transcript, CTA
- * intent, Day Pass, owner Ask TALA) goes through the centralized Cloudflare
- * client in src/lib/talaClient.ts:
+ * THE single TALA path.
  *
- *   browser -> ${VITE_TALA_WORKER_URL}/api/talla/chat -> TallaAgent DO -> tools
+ * The browser sends only the guest's newest utterance plus identity. The
+ * Cloudflare TallaAgent owns conversation history, the authoritative system
+ * prompt, hard-coded Marina Terrace memory, live D1 context and all tools.
  *
- * The Worker runs the full LLM + tool loop server-side and returns only the
- * final text, so no tool_calls come back to the browser. For owner mode we
- * forward the existing Supabase access token; the Worker — not the `role`
- * field — decides whether the caller actually gets owner privileges.
+ * This is intentionally different from the old frontend path: we do NOT build
+ * a second system prompt, inject weather/sentiment instructions, replay browser
+ * history or execute a second tool loop. That duplicated work was discarded by
+ * the Worker anyway and added avoidable latency.
  */
 async function askCloudflareAgent(
-  messages: WireMessage[],
+  text: string,
   preferredModel?: string,
   owner?: boolean,
-): Promise<AssistantReply> {
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const text = lastUser?.content || "";
-  if (!text.trim()) throw new Error("Empty message.");
+  onDelta?: (delta: string, accumulated: string) => void,
+): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Empty message.");
+
   let authToken: string | undefined;
   let userId = getGuestSessionId();
   if (owner) {
@@ -109,36 +80,34 @@ async function askCloudflareAgent(
     authToken = token || undefined;
     if (ownerId) userId = ownerId;
   }
+
   const result = await talaChat({
-    message: text,
+    message: trimmed,
     role: owner ? "owner" : "guest",
     userId,
     model: preferredModel,
     authToken,
+    onDelta,
   });
   const content = result.content?.trim() || "";
   if (!content) throw new Error("TALA returned an empty reply.");
-  return { content, tool_calls: undefined };
+  return content;
 }
-
 
 /**
  * Workspace Day Pass — a structured, single-purpose request sent to the SAME
  * Cloudflare TallaAgent used by chat. The worker resolves it through
  * requestRoomBooking (roomType "Day Pass", checkIn = the chosen day, checkOut =
- * the next day, guests 1), which hard-enforces all required fields server-side,
- * dedupes a pending request, and persists ONE row to tala_booking_requests
- * (status pending, MT- reference). We never craft pricing client-side — the
- * day pass price shown in the form comes from cms_data.pricing, and the worker
- * ignores any guest-supplied amount.
+ * the next day, guests 1), hard-enforces required fields server-side, dedupes
+ * a pending request and persists one authoritative booking-request row.
  */
 export interface RequestDayPassInput {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
   day: string; // ISO YYYY-MM-DD
-  guests?: number; // people on the pass (>= 1)
-  notes?: string; // arrival time, allergies, dietary needs, food add-on fallback
+  guests?: number;
+  notes?: string;
 }
 
 export async function requestDayPass(
@@ -160,15 +129,13 @@ export async function requestDayPass(
   ]
     .filter(Boolean)
     .join(" ");
-  const reply = await askCloudflareAgent([{ role: "user", content: text }], preferredModel);
-  const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
-  return { content: reply.content || "", reference: match ? match[0] : null };
+
+  const content = await askCloudflareAgent(text, preferredModel);
+  const match = content.match(/\bMT-\d{8}-\d{4}\b/);
+  return { content, reference: match ? match[0] : null };
 }
 
-/**
- * Classify node of the agent graph — uses deterministic keyword rules only.
- * No extra LLM call needed. Fast, free, and reliable.
- */
+/** Deterministic local telemetry only — never adds another LLM call. */
 export interface TalaRunInfo {
   classification: TalaClassification;
   toolsUsed: string[];
@@ -178,11 +145,9 @@ export interface UseTalaChat {
   messages: TalaMessage[];
   thinking: boolean;
   error: string | null;
-  /** Booking draft returned by request_booking (guest mode) awaiting confirm. */
   pendingDraft: BookingDraft | null;
-  /** Classification + tools from the most recent completed turn (agent-graph telemetry). */
   lastRun: TalaRunInfo | null;
-  /** Device-measured round-trip of the most recent turn (send → final reply), in ms. */
+  /** Device-measured send → completed reply latency. */
   lastTurn: { ms: number; text: string } | null;
   send: (
     text: string,
@@ -191,15 +156,12 @@ export interface UseTalaChat {
       model?: string;
       adminApiKey?: string;
       cms?: CmsData;
-      /** Operator face only — allows TALA to write bookings/tours/rentals. */
       owner?: boolean;
     },
   ) => Promise<string | null>;
-  /** Persists a guest-confirmed booking draft (the human Confirm action). */
   confirmDraft: (
     extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
   ) => void;
-  /** Dismisses the pending draft card without confirming. */
   clearDraft: () => void;
   reset: () => void;
 }
@@ -225,129 +187,95 @@ export function useTalaChat(): UseTalaChat {
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const [lastTurn, setLastTurn] = useState<{ ms: number; text: string } | null>(null);
   const inFlight = useRef(false);
-  // Use the shared CMS store so owner-mode writes persist exactly like the
-  // admin managers do (through CmsContext -> cms_data).
   const { update: persistCms } = useCms();
-  // Authoritative copy of the conversation. React state updaters are NOT
-  // guaranteed to run synchronously at the setMessages() call site, so
-  // building the outgoing request from inside one silently dropped the
-  // user's newest message whenever React deferred the updater — the model
-  // then answered a conversation containing only the system prompt.
   const messagesRef = useRef<TalaMessage[]>([]);
 
   const send = useCallback(
     async (
       text: string,
-      systemPrompt: string,
+      _systemPrompt: string,
       options?: { model?: string; adminApiKey?: string; cms?: CmsData; owner?: boolean },
     ): Promise<string | null> => {
       const trimmed = text.trim();
       if (!trimmed || inFlight.current) return null;
+
       inFlight.current = true;
       setError(null);
       setThinking(true);
       const turnStart = performance.now();
-
       const preferredModel = options?.model;
-      const userMsg: TalaMessage = { id: newId(), role: "user", content: trimmed };
-      const history: TalaMessage[] = [...messagesRef.current, userMsg];
-      messagesRef.current = history;
-      setMessages(history);
+      const sentiment = detectSentiment(trimmed);
 
-      // Auto-capture a lead whenever a guest shares a contact/name — even if
-      // the chat never reaches a booking. Skipped for the operator face.
+      const userMsg: TalaMessage = { id: newId(), role: "user", content: trimmed };
+      messagesRef.current = [...messagesRef.current, userMsg];
+      setMessages([...messagesRef.current]);
+
+      // Lead capture is intentionally fire-and-forget and never blocks TALA.
       if (!options?.owner) {
         void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
       }
 
-      let wire: WireMessage[] = [
-        { role: "system", content: systemPrompt },
-        ...history.slice(-TALA_MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
-      ];
+      // Reserve one assistant message and update it in-place as SSE deltas land.
+      // The guest sees TALA typing immediately instead of waiting for the full
+      // completion. Durable Object history remains the authoritative memory.
+      const assistantId = newId();
+      let streamed = false;
+      let rafId: number | null = null;
+      let pendingAccumulated = "";
 
-      // Sentiment analysis — inject context-aware instructions into the prompt
-      const sentiment = detectSentiment(trimmed);
-      const sentimentNote = sentimentInstruction(sentiment);
-      if (sentimentNote) {
-        wire.splice(1, 0, { role: "system", content: `[Guest sentiment: ${sentiment.sentiment} (${Math.round(sentiment.confidence * 100)}% confidence). ${sentimentNote}]` });
-      }
+      const flushStream = () => {
+        rafId = null;
+        if (!pendingAccumulated) return;
+        streamed = true;
+        const nextAssistant: TalaMessage = {
+          id: assistantId,
+          role: "assistant",
+          content: pendingAccumulated,
+        };
+        const withoutPartial = messagesRef.current.filter((m) => m.id !== assistantId);
+        messagesRef.current = [...withoutPartial, nextAssistant];
+        setMessages([...messagesRef.current]);
+      };
 
-      // Time-of-day context injection for proactive behavior
-      const hour = new Date().getHours();
-      if (hour >= 16 && hour <= 17) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's late afternoon — sunset session is happening now. Mention it if relevant.]" });
-      } else if (hour >= 7 && hour <= 10) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's morning — breakfast is being served. Mention it if relevant.]" });
-      } else if (hour >= 12 && hour <= 14) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
-      }
-
-      // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
-      // Runs in PARALLEL with the LLM call to save 200-500ms
-      const weatherPromise = import("./talaWeather")
-        .then(({ buildWeatherContext }) => buildWeatherContext())
-        .catch(() => null);
+      const onDelta = (_delta: string, accumulated: string) => {
+        pendingAccumulated = accumulated;
+        if (rafId !== null) return;
+        if (typeof requestAnimationFrame === "function") {
+          rafId = requestAnimationFrame(flushStream);
+        } else {
+          flushStream();
+        }
+      };
 
       try {
-        // ONE brain: guest and owner turns both go to the Cloudflare
-        // TallaAgent. No direct browser->OpenRouter call, no Supabase
-        // tala-chat edge function. Owner privileges are verified by the
-        // Worker from the forwarded Supabase bearer token.
-        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> =>
-          askCloudflareAgent(msgs, preferredModel, options?.owner);
+        const finalText = await askCloudflareAgent(
+          trimmed,
+          preferredModel,
+          options?.owner,
+          onDelta,
+        );
 
-        // Graph node 2 — agent: the tool-calling loop.
-        const toolsUsed: string[] = [];
-        let reply = await requestReply(wire);
-
-        // Inject weather context into wire after LLM call returns (parallel)
-        const weatherCtx = await weatherPromise;
-        if (weatherCtx?.suggestion) {
-          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
+        if (rafId !== null && typeof cancelAnimationFrame === "function") {
+          cancelAnimationFrame(rafId);
+          rafId = null;
         }
-        let hops = 0;
-        while (reply.tool_calls?.length && hops < MAX_TOOL_HOPS) {
-          hops++;
-          wire = [
-            ...wire,
-            { role: "assistant", content: reply.content, tool_calls: reply.tool_calls },
-          ];
-          // Execute ALL tool calls in parallel (saves 50-200ms per extra tool)
-          const toolCtx: TalaToolContext = {
-            cms: options?.cms!,
-            update: options?.owner ? persistCms : undefined,
-            owner: !!options?.owner,
+        pendingAccumulated = finalText;
+        flushStream();
+
+        // Guarantee exactly one final assistant message even if the server or
+        // browser did not expose incremental chunks for this particular turn.
+        if (!streamed) {
+          const nextAssistant: TalaMessage = {
+            id: assistantId,
+            role: "assistant",
+            content: finalText,
           };
-          const toolResults = await Promise.all(
-            reply.tool_calls.map(async (call) => {
-              toolsUsed.push(call.function.name);
-              const result = options?.cms
-                ? await executeTalaTool(
-                    { id: call.id, name: call.function.name, arguments: call.function.arguments },
-                    toolCtx,
-                  )
-                : { error: "Tool unavailable — no site data loaded." };
-              const draft = (result as { draft?: BookingDraft }).draft;
-              if (draft) setPendingDraft(draft);
-              return { role: "tool" as const, tool_call_id: call.id, content: JSON.stringify(result) };
-            }),
-          );
-          wire = [...wire, ...toolResults];
-          reply = await requestReply(wire);
+          messagesRef.current = [...messagesRef.current, nextAssistant];
+          setMessages([...messagesRef.current]);
         }
 
-        const finalText = reply.content?.trim();
-        if (!finalText) throw new Error("TALA didn't have a reply.");
-
-        messagesRef.current = [
-          ...messagesRef.current,
-          { id: newId(), role: "assistant", content: finalText },
-        ];
-        setMessages(messagesRef.current);
-
-        // Graph node 3 — audit. Never blocks or breaks the reply.
-        // Use deterministic heuristics only — no extra LLM call needed.
         const classification = classifyHeuristically(trimmed);
+        const toolsUsed: string[] = []; // authoritative tools execute server-side
         setLastRun({ classification, toolsUsed });
         writeAuditEntry({
           classification,
@@ -358,11 +286,16 @@ export function useTalaChat(): UseTalaChat {
         });
 
         const turnMs = Math.round(performance.now() - turnStart);
-        console.debug(`[TALA] reply round-trip ${turnMs}ms`, finalText.slice(0, 60));
+        console.debug(`[TALA] completed reply in ${turnMs}ms`, finalText.slice(0, 60));
         setLastTurn({ ms: turnMs, text: finalText.slice(0, 80) });
-
         return finalText;
       } catch (e) {
+        if (rafId !== null && typeof cancelAnimationFrame === "function") {
+          cancelAnimationFrame(rafId);
+        }
+        // Do not leave a half answer in history after a failed/aborted stream.
+        messagesRef.current = messagesRef.current.filter((m) => m.id !== assistantId);
+        setMessages([...messagesRef.current]);
         const msg = e instanceof Error ? e.message : "Something went wrong.";
         setError(msg);
         return null;
@@ -371,7 +304,7 @@ export function useTalaChat(): UseTalaChat {
         setThinking(false);
       }
     },
-    [persistCms],
+    [],
   );
 
   const reset = useCallback(() => {
@@ -409,5 +342,16 @@ export function useTalaChat(): UseTalaChat {
     [pendingDraft, persistCms],
   );
 
-  return { messages, thinking, error, lastRun, lastTurn, send, reset, clearDraft, pendingDraft, confirmDraft };
+  return {
+    messages,
+    thinking,
+    error,
+    lastRun,
+    lastTurn,
+    send,
+    reset,
+    clearDraft,
+    pendingDraft,
+    confirmDraft,
+  };
 }
