@@ -289,32 +289,12 @@ export function useTalaChat(): UseTalaChat {
         .catch(() => null);
 
       try {
-        // Priority: key entered in Admin → TALA (works instantly, no deploy
-        // needed) → device-local dev key (building on this browser only) →
-        // Supabase edge function (production path, key stays server-side).
-        const key = options?.adminApiKey || getDevApiKey();
-        // A direct browser->OpenRouter call can fail for reasons that have
-        // nothing to do with the visitor (key revoked, out of credits, 401
-        // "User not found"). That used to surface as "TALA hit a snag" for
-        // everyone, so always fall back to the server-side edge function,
-        // which holds its own key.
-        let directDead = false;
-        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> => {
-          if (key && !directDead) {
-            try {
-              return await askOpenRouterDirect(msgs, key, preferredModel);
-            } catch (e) {
-              console.warn("[TALA] Direct OpenRouter call failed, using server proxy.", e);
-              directDead = true;
-            }
-          }
-          // Public guest path: use the same Cloudflare TallaAgent as Admin
-          // (one brain). Owner/dev-key paths keep their existing behavior.
-          if (!options?.owner) {
-            return askCloudflareAgent(msgs, preferredModel);
-          }
-          return askEdgeFunction(msgs, preferredModel);
-        };
+        // ONE brain: guest and owner turns both go to the Cloudflare
+        // TallaAgent. No direct browser->OpenRouter call, no Supabase
+        // tala-chat edge function. Owner privileges are verified by the
+        // Worker from the forwarded Supabase bearer token.
+        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> =>
+          askCloudflareAgent(msgs, preferredModel, options?.owner);
 
         // Graph node 2 — agent: the tool-calling loop.
         const toolsUsed: string[] = [];
