@@ -1,15 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import {
-  OPENROUTER_ENDPOINT,
-  TALA_CHAT_ENDPOINT,
-  TALA_FREE_MODELS,
   TALA_MAX_HISTORY,
   TALA_STORAGE,
-  TALA_SUPABASE_ANON_KEY,
   type TalaMessage,
 } from "./talaConfig";
 import {
-  TALA_TOOL_SCHEMAS,
   executeTalaTool,
   captureGuestLead,
   confirmBookingDraft,
@@ -23,7 +18,7 @@ import {
 import { detectSentiment, sentimentInstruction } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
-import { getTallaAgentUrl } from "@/lib/tallaFeatureFlag";
+import { talaChat, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
 
 interface ToolCallWire {
   id: string;
