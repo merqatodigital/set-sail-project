@@ -535,11 +535,17 @@ export type Database = {
           amount: number
           check_in: string
           check_out: string
+          confirmed_at: string | null
           created_at: string
+          guest_email: string
           guest_name: string
+          guest_phone: string
           guests: number
           id: string
           notes: string
+          paid_amount: number
+          paid_at: string | null
+          reference: string
           room_type: string
           source: string
           status: string
@@ -548,11 +554,17 @@ export type Database = {
           amount?: number
           check_in?: string
           check_out?: string
+          confirmed_at?: string | null
           created_at?: string
+          guest_email?: string
           guest_name?: string
+          guest_phone?: string
           guests?: number
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           room_type?: string
           source?: string
           status?: string
@@ -561,11 +573,17 @@ export type Database = {
           amount?: number
           check_in?: string
           check_out?: string
+          confirmed_at?: string | null
           created_at?: string
+          guest_email?: string
           guest_name?: string
+          guest_phone?: string
           guests?: number
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           room_type?: string
           source?: string
           status?: string
@@ -596,6 +614,114 @@ export type Database = {
           id?: string
           summary?: string
           whatsapp_sent?: boolean
+        }
+        Relationships: []
+      }
+      tala_folio_lines: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          description: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          kind: string
+          method: string
+          reference: string
+          related_id: string
+          related_type: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          kind?: string
+          method?: string
+          reference?: string
+          related_id?: string
+          related_type?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          kind?: string
+          method?: string
+          reference?: string
+          related_id?: string
+          related_type?: string
+        }
+        Relationships: []
+      }
+      tala_food_orders: {
+        Row: {
+          cancelled_at: string | null
+          confirmed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          guest_name: string
+          guest_phone: string
+          id: string
+          items: Json
+          notes: string
+          paid_amount: number
+          paid_at: string | null
+          preparing_at: string | null
+          ready_at: string | null
+          reference: string
+          source: string
+          status: string
+          total: number
+          total_cost: number
+        }
+        Insert: {
+          cancelled_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          items?: Json
+          notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          reference?: string
+          source?: string
+          status?: string
+          total?: number
+          total_cost?: number
+        }
+        Update: {
+          cancelled_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          items?: Json
+          notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          reference?: string
+          source?: string
+          status?: string
+          total?: number
+          total_cost?: number
         }
         Relationships: []
       }
@@ -641,6 +767,42 @@ export type Database = {
           fact?: string
           guest_key?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      tala_guest_messages: {
+        Row: {
+          created_at: string
+          guest_name: string
+          guest_phone: string
+          id: string
+          message: string
+          replied_at: string | null
+          reply: string
+          source: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          message?: string
+          replied_at?: string | null
+          reply?: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          message?: string
+          replied_at?: string | null
+          reply?: string
+          source?: string
+          status?: string
         }
         Relationships: []
       }
@@ -748,37 +910,58 @@ export type Database = {
       }
       tala_rental_requests: {
         Row: {
+          amount: number
           bike_name: string
+          confirmed_at: string | null
           created_at: string
+          days: number
           end_date: string
+          guest_email: string
           guest_name: string
           guest_phone: string
           id: string
           notes: string
+          paid_amount: number
+          paid_at: string | null
+          reference: string
           source: string
           start_date: string
           status: string
         }
         Insert: {
+          amount?: number
           bike_name?: string
+          confirmed_at?: string | null
           created_at?: string
+          days?: number
           end_date?: string
+          guest_email?: string
           guest_name?: string
           guest_phone?: string
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           source?: string
           start_date?: string
           status?: string
         }
         Update: {
+          amount?: number
           bike_name?: string
+          confirmed_at?: string | null
           created_at?: string
+          days?: number
           end_date?: string
+          guest_email?: string
           guest_name?: string
           guest_phone?: string
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           source?: string
           start_date?: string
           status?: string
@@ -815,12 +998,17 @@ export type Database = {
       tala_tour_requests: {
         Row: {
           amount: number
+          confirmed_at: string | null
           created_at: string
+          guest_email: string
           guest_name: string
           guest_phone: string
           guests: number
           id: string
           notes: string
+          paid_amount: number
+          paid_at: string | null
+          reference: string
           source: string
           status: string
           tour_date: string
@@ -828,12 +1016,17 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          confirmed_at?: string | null
           created_at?: string
+          guest_email?: string
           guest_name?: string
           guest_phone?: string
           guests?: number
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           source?: string
           status?: string
           tour_date?: string
@@ -841,12 +1034,17 @@ export type Database = {
         }
         Update: {
           amount?: number
+          confirmed_at?: string | null
           created_at?: string
+          guest_email?: string
           guest_name?: string
           guest_phone?: string
           guests?: number
           id?: string
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          reference?: string
           source?: string
           status?: string
           tour_date?: string
