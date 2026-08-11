@@ -253,90 +253,59 @@ export function useTalaChat(): UseTalaChat {
         void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
       }
 
-      let wire: WireMessage[] = [
-        { role: "system", content: systemPrompt },
-        ...history.slice(-TALA_MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
-      ];
-
-      // Sentiment analysis — inject context-aware instructions into the prompt
+      // Local (network-free) sentiment — kept ONLY for the audit entry below.
+      // It is never injected into a prompt: the Worker owns the prompt.
       const sentiment = detectSentiment(trimmed);
-      const sentimentNote = sentimentInstruction(sentiment);
-      if (sentimentNote) {
-        wire.splice(1, 0, { role: "system", content: `[Guest sentiment: ${sentiment.sentiment} (${Math.round(sentiment.confidence * 100)}% confidence). ${sentimentNote}]` });
-      }
 
-      // Time-of-day context injection for proactive behavior
-      const hour = new Date().getHours();
-      if (hour >= 16 && hour <= 17) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's late afternoon — sunset session is happening now. Mention it if relevant.]" });
-      } else if (hour >= 7 && hour <= 10) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's morning — breakfast is being served. Mention it if relevant.]" });
-      } else if (hour >= 12 && hour <= 14) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
-      }
-
-      // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
-      // Runs in PARALLEL with the LLM call to save 200-500ms
-      const weatherPromise = import("./talaWeather")
-        .then(({ buildWeatherContext }) => buildWeatherContext())
-        .catch(() => null);
+      // Cancel any still-open stream from a previous turn.
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
-        // ONE brain: guest and owner turns both go to the Cloudflare
-        // TallaAgent. No direct browser->OpenRouter call, no Supabase
-        // tala-chat edge function. Owner privileges are verified by the
-        // Worker from the forwarded Supabase bearer token.
-        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> =>
-          askCloudflareAgent(msgs, preferredModel, options?.owner);
+        // ONE brain: guest and owner turns both stream from the Cloudflare
+        // TallaAgent. No browser prompt build, no browser tool loop, no
+        // weather/time/sentiment injection, no direct browser->OpenRouter call
+        // and no Supabase tala-chat edge function. Owner privileges are
+        // verified by the Worker from the forwarded Supabase bearer token.
+        const assistantId = newId();
+        let streamed = "";
+        let firstTokenMs: number | null = null;
 
-        // Graph node 2 — agent: the tool-calling loop.
-        const toolsUsed: string[] = [];
-        let reply = await requestReply(wire);
-
-        // Inject weather context into wire after LLM call returns (parallel)
-        const weatherCtx = await weatherPromise;
-        if (weatherCtx?.suggestion) {
-          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
-        }
-        let hops = 0;
-        while (reply.tool_calls?.length && hops < MAX_TOOL_HOPS) {
-          hops++;
-          wire = [
-            ...wire,
-            { role: "assistant", content: reply.content, tool_calls: reply.tool_calls },
-          ];
-          // Execute ALL tool calls in parallel (saves 50-200ms per extra tool)
-          const toolCtx: TalaToolContext = {
-            cms: options?.cms!,
-            update: options?.owner ? persistCms : undefined,
-            owner: !!options?.owner,
-          };
-          const toolResults = await Promise.all(
-            reply.tool_calls.map(async (call) => {
-              toolsUsed.push(call.function.name);
-              const result = options?.cms
-                ? await executeTalaTool(
-                    { id: call.id, name: call.function.name, arguments: call.function.arguments },
-                    toolCtx,
-                  )
-                : { error: "Tool unavailable — no site data loaded." };
-              const draft = (result as { draft?: BookingDraft }).draft;
-              if (draft) setPendingDraft(draft);
-              return { role: "tool" as const, tool_call_id: call.id, content: JSON.stringify(result) };
-            }),
-          );
-          wire = [...wire, ...toolResults];
-          reply = await requestReply(wire);
-        }
+        const reply = await askCloudflareAgent(trimmed, {
+          model: preferredModel,
+          owner: options?.owner,
+          signal: controller.signal,
+          onDelta: (delta) => {
+            if (firstTokenMs === null) {
+              firstTokenMs = Math.round(performance.now() - turnStart);
+              // First visible token — drop the thinking indicator immediately.
+              setThinking(false);
+              messagesRef.current = [
+                ...messagesRef.current,
+                { id: assistantId, role: "assistant", content: "" },
+              ];
+            }
+            streamed += delta;
+            messagesRef.current = messagesRef.current.map((m) =>
+              m.id === assistantId ? { ...m, content: streamed } : m,
+            );
+            setMessages(messagesRef.current);
+          },
+        });
 
         const finalText = reply.content?.trim();
         if (!finalText) throw new Error("TALA didn't have a reply.");
 
-        messagesRef.current = [
-          ...messagesRef.current,
-          { id: newId(), role: "assistant", content: finalText },
-        ];
+        // Reconcile the streamed placeholder with the Worker's final text
+        // (identical in the normal case; the Worker sanitizes the final copy).
+        const hasPlaceholder = messagesRef.current.some((m) => m.id === assistantId);
+        messagesRef.current = hasPlaceholder
+          ? messagesRef.current.map((m) => (m.id === assistantId ? { ...m, content: finalText } : m))
+          : [...messagesRef.current, { id: newId(), role: "assistant", content: finalText }];
         setMessages(messagesRef.current);
+
+        const toolsUsed: string[] = [];
 
         // Graph node 3 — audit. Never blocks or breaks the reply.
         // Use deterministic heuristics only — no extra LLM call needed.
