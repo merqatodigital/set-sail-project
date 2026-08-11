@@ -20,6 +20,16 @@ export interface ResortKnowledgeEntry {
   tags: string;
 }
 
+// Per-isolate cache. The knowledge rows are stable content (they change only
+// when the owner edits them in Admin), but they were being re-fetched on EVERY
+// conversation turn — a slow or unreachable Supabase added its full latency to
+// each reply. Cache them for a few minutes and never let a single read block a
+// turn for more than KNOWLEDGE_TIMEOUT_MS; stale-but-present knowledge is
+// always preferable to a stalled or knowledge-less reply.
+const KNOWLEDGE_TTL_MS = 5 * 60 * 1000;
+const KNOWLEDGE_TIMEOUT_MS = 2500;
+const knowledgeCache = new Map<string, { at: number; rows: ResortKnowledgeEntry[] }>();
+
 /**
  * Retrieve enabled knowledge for a single resort, ordered by sort_order.
  *
@@ -30,6 +40,9 @@ export async function getResortKnowledge(
   env: Env,
   resortId: string,
 ): Promise<ResortKnowledgeEntry[]> {
+  const cached = knowledgeCache.get(resortId);
+  if (cached && Date.now() - cached.at < KNOWLEDGE_TTL_MS) return cached.rows;
+
   const baseRaw = env.SUPABASE_URL;
   // Knowledge read is a scoped, read-only query (resort_id + enabled) that runs
   // only inside the Worker. The anon key has no Data API grant on
@@ -60,21 +73,26 @@ export async function getResortKnowledge(
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
+      // A knowledge read must never hold a guest reply hostage.
+      signal: AbortSignal.timeout(KNOWLEDGE_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.error(`[knowledge] Supabase responded ${res.status}`);
-      return [];
+      return cached?.rows ?? [];
     }
     const rows = (await res.json()) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
+    const mapped = rows.map((r) => ({
       id: String(r.id ?? ""),
       topic: String(r.topic ?? ""),
       label: String(r.label ?? ""),
       body: String(r.body ?? ""),
       tags: String(r.tags ?? ""),
     }));
+    knowledgeCache.set(resortId, { at: Date.now(), rows: mapped });
+    return mapped;
   } catch (err) {
     console.error("[knowledge] fetch failed:", err);
-    return [];
+    // Serve the last known-good copy rather than dropping TALA's memory.
+    return cached?.rows ?? [];
   }
 }
