@@ -46,6 +46,8 @@ export interface TalaChatResult {
   content: string | null;
   model?: string;
   usage?: unknown;
+  /** Worker-side latency breakdown (promptMs / llmMs / toolMs / totalMs …). */
+  timing?: Record<string, number | string>;
 }
 
 export interface TalaChatInput {
@@ -83,10 +85,102 @@ export async function talaChat(input: TalaChatInput): Promise<TalaChatResult> {
     signal: input.signal,
   });
   const data = (await res.json().catch(() => null)) as
-    | { content?: string; error?: string; model?: string; usage?: unknown }
+    | { content?: string; error?: string; model?: string; usage?: unknown; timing?: Record<string, number | string> }
     | null;
   if (!res.ok) throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
-  return { content: data?.content ?? null, model: data?.model, usage: data?.usage };
+  return { content: data?.content ?? null, model: data?.model, usage: data?.usage, timing: data?.timing };
+}
+
+/**
+ * Streaming variant — consumes the Worker's existing SSE endpoint so text
+ * appears as TALA generates it instead of after the whole reply is buffered.
+ * The Worker emits `data: {type:"text"|"done"|"aborted"|"error", …}` frames.
+ * Falls back to the buffered JSON call when the response isn't SSE (older
+ * Worker deployments), so behaviour never regresses.
+ */
+export async function talaChatStream(
+  input: TalaChatInput,
+  onDelta: (text: string) => void,
+): Promise<TalaChatResult> {
+  const base = talaWorkerBase();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  if (input.authToken) headers.Authorization = `Bearer ${input.authToken}`;
+  const res = await fetch(`${base}/api/talla/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      message: input.message,
+      tenantId: input.tenantId ?? TALA_TENANT,
+      role: input.role ?? "guest",
+      userId: input.userId,
+      model: input.model || undefined,
+      guestName: input.guestName,
+      guestRoom: input.guestRoom,
+      stream: true,
+    }),
+    signal: input.signal,
+  });
+
+  const ctype = res.headers.get("Content-Type") || "";
+  if (!res.ok || !res.body || !ctype.includes("text/event-stream")) {
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(data?.error || `TALA service error (HTTP ${res.status})`);
+    }
+    // Non-SSE response — fall back to the buffered path.
+    return talaChat(input);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let acc = "";
+  let result: TalaChatResult = { content: null };
+
+  const handleFrame = (raw: string) => {
+    const line = raw.split("\n").find((l) => l.startsWith("data:"));
+    if (!line) return;
+    const payload = line.slice(5).trim();
+    if (!payload) return;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(payload) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (evt.type === "text" && typeof evt.text === "string") {
+      acc += evt.text;
+      onDelta(evt.text);
+    } else if (evt.type === "done") {
+      result = {
+        content: (typeof evt.content === "string" && evt.content) || acc || null,
+        model: typeof evt.model === "string" ? evt.model : undefined,
+        usage: evt.usage ?? undefined,
+        timing: (evt.timing as Record<string, number | string>) ?? undefined,
+      };
+    } else if (evt.type === "error") {
+      throw new Error(typeof evt.error === "string" ? evt.error : "TALA stream failed.");
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      handleFrame(frame);
+    }
+  }
+  if (buffer.trim()) handleFrame(buffer);
+
+  if (!result.content && acc) result = { ...result, content: acc };
+  return result;
 }
 
 /** Current Supabase access token, or "" when nobody is signed in. */
