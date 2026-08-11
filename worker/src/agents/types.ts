@@ -60,6 +60,9 @@ export interface TallaAgentState {
   guestPhone: string | null;
   guestEmail: string | null;
   bookingReference: string | null;
+  // Stashed food order items quoted but not yet confirmed, so a later
+  // affirmative ("yes") completes the write deterministically (no model loop).
+  pendingFoodOrder: { menuItemId: string; quantity: number; specialInstructions?: string }[] | null;
 }
 
 export interface OpenRouterResponse {

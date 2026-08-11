@@ -39,6 +39,7 @@ import { insertApproval, getApprovals, getApprovalByWorkflowId, decideApproval }
 import { logEmail } from "../db/repos/emailLogRepo.js";
 import { markEventProcessed } from "../db/repos/eventLogRepo.js";
 import { logBrowser } from "../db/repos/browserLogRepo.js";
+import { tryDeterministicActions, isFoodQuoteWithoutOrder, resolveFoodItems } from "./deterministicActions.js";
 import { inspectPage } from "./tools/browserTools.js";
 import { RESORT_EMAIL_SENDER } from "./tools/emailTools.js";
 
@@ -112,6 +113,7 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     guestPhone: null,
     guestEmail: null,
     bookingReference: null,
+    pendingFoodOrder: null,
   };
 
   async onStart(): Promise<void> {
@@ -1009,6 +1011,25 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
     const userMsg: ConversationMessage = { role: "user", content: userMessage };
     const messages = [...this.state.messages, userMsg];
 
+    // Deterministic pre-execution: complete unambiguous, self-contained guest
+    // actions (food order, reception message, confirm-a-quoted-order) WITHOUT
+    // relying on the model's personality. This guarantees clear workflows
+    // persist even when the free model hesitates or returns null.
+    const deterministic = await tryDeterministicActions(userMessage, toolCtx, this.state.pendingFoodOrder);
+    if (deterministic) {
+      // Persist/reset any stashed food quote.
+      if (deterministic.pendingFoodOrder !== undefined) {
+        this.setState({ ...this.state, pendingFoodOrder: deterministic.pendingFoodOrder ?? null });
+      }
+      // Keep the user message in history, but do NOT loop the LLM.
+      const resp = deterministic.response;
+      if (resp.content) {
+        const trimmed = messages.slice(-MAX_HISTORY);
+        this.setState({ ...this.state, messages: [...trimmed, { role: "assistant", content: resp.content }] });
+      }
+      return resp;
+    }
+
     // Get tools for current role
     const tools = getTools(this.state.role, this.computerEnabled);
     const orTools = toOpenRouterTools(tools);
@@ -1219,6 +1240,23 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
 
     // Trim and save history
     const trimmedMessages = messages.slice(-MAX_HISTORY);
+
+    // If the LLM quoted a food total but did NOT actually place the order
+    // (free-model hesitation), stash the resolved items so a later "yes/confirm"
+    // completes the write deterministically instead of looping on model mood.
+    if (finalResponse?.content && isFoodQuoteWithoutOrder(finalResponse.content)) {
+      const resolved = await resolveFoodItems(userMessage, toolCtx);
+      if (resolved && resolved.length > 0) {
+        this.setState({ ...this.state, messages: trimmedMessages, pendingFoodOrder: resolved });
+        return finalResponse;
+      }
+    }
+    // If an order was actually placed this turn, clear any stashed quote.
+    if (finalResponse?.content && /order\s+(tt|mt|fk|fo|fd|ff)-/i.test(finalResponse.content)) {
+      this.setState({ ...this.state, messages: trimmedMessages, pendingFoodOrder: null });
+      return finalResponse;
+    }
+
     this.setState({ ...this.state, messages: trimmedMessages });
 
     // Strip any model chain-of-thought so the owner never sees internal

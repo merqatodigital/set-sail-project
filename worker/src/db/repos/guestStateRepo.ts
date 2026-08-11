@@ -365,17 +365,18 @@ export async function writeGuestMessage(
   const base = supabaseBase(env);
   const key = supabaseKey(env);
   if (!base || !key) return { ok: false, error: "Supabase not configured" };
-  const id = `tala_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // NOTE: tala_guest_messages.id is UUID with DEFAULT gen_random_uuid(), so we
+  // must NOT send a text id (it would fail with "invalid input syntax for type
+  // uuid"). Omit id and let Postgres generate it; read the real UUID back.
   const res = await fetch(`${base}/rest/v1/tala_guest_messages`, {
     method: "POST",
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
     body: JSON.stringify({
-      id,
       guest_name: input.guestName,
       guest_phone: input.guestPhone,
       message: input.message,
@@ -387,6 +388,13 @@ export async function writeGuestMessage(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     return { ok: false, error: `Message persist failed (HTTP ${res.status}): ${body.slice(0, 200)}` };
+  }
+  let id: string | undefined;
+  try {
+    const rows = (await res.json()) as Array<{ id?: string }>;
+    id = rows[0]?.id;
+  } catch {
+    /* ignore parse */
   }
   return { ok: true, id };
 }
