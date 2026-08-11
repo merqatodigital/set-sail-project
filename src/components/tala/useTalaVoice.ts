@@ -7,21 +7,13 @@ import {
 } from "./talaConfig";
 
 // ---------------------------------------------------------------------------
-// TALA's voice.
+// TALA voice policy
 //
-// Default engine: Kokoro-82M (Apache-2.0) running fully in the browser via
-// kokoro-js — a genuinely humanlike female voice with zero API cost. The
-// ~80 MB model downloads once and is cached by the browser afterwards, but
-// that first download is real, felt latency before she can speak at all.
-//
-// Optional engine: OpenRouter's hosted TTS API (/api/v1/audio/speech) — the
-// same key/billing already used for TALA's chat brain, no separate voice
-// provider needed. No local model to download, so no first-load lag; real
-// per-character cost, but genuinely humanlike hosted voices (MiniMax,
-// GPT-4o Mini TTS, Voxtral, etc.), admin-selectable in Admin -> TALA.
-//
-// Universal fallback: the built-in Web Speech synthesis voices, used only
-// if the chosen engine fails or (for Kokoro) is still downloading.
+// The public site must never sit silent waiting for an 80 MB model download.
+// Kokoro remains the preferred natural, open-source desktop voice and loads in
+// the background after the widget opens. Until it is ready, browser speech is
+// used immediately. Mobile always uses browser speech unless a hosted provider
+// is explicitly configured, avoiding the large WASM/model download and CPU hit.
 // ---------------------------------------------------------------------------
 
 async function synthesizeOpenRouterTts(
@@ -46,23 +38,16 @@ async function synthesizeOpenRouterTts(
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
-      const errBody = await res.json();
+      const errBody = (await res.json()) as { error?: { message?: string } };
       message = errBody?.error?.message || message;
     } catch {
-      /* error responses are JSON per the API's own docs; ignore parse failures */
+      /* ignore malformed provider errors */
     }
     throw new Error(message);
   }
-  const bytes = await res.arrayBuffer();
-  return new Blob([bytes], { type: "audio/mpeg" });
+  return new Blob([await res.arrayBuffer()], { type: "audio/mpeg" });
 }
 
-// Kokoro's generate() resolves a RawAudio: raw Float32 PCM samples + sample
-// rate, not an encoded file. Its own .toBlob() helper wraps that as 32-bit
-// float WAV (format code 3), which some browsers' <audio> pipeline decodes
-// incorrectly — heard as static/garbled "underwater" audio. We encode our
-// own standard 16-bit integer PCM WAV (format code 1) instead, which every
-// browser plays back correctly.
 type KokoroRawAudio = { audio: Float32Array; sampling_rate: number };
 type KokoroInstance = {
   generate: (text: string, options: { voice: string }) => Promise<KokoroRawAudio>;
@@ -73,7 +58,6 @@ function encodePCM16Wav(samples: Float32Array, sampleRate: number): Blob {
   const dataSize = samples.length * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
-
   const writeString = (offset: number, text: string) => {
     for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
   };
@@ -82,13 +66,13 @@ function encodePCM16Wav(samples: Float32Array, sampleRate: number): Blob {
   view.setUint32(4, 36 + dataSize, true);
   writeString(8, "WAVE");
   writeString(12, "fmt ");
-  view.setUint32(16, 16, true); // fmt chunk size
-  view.setUint16(20, 1, true); // format 1 = integer PCM
-  view.setUint16(22, 1, true); // mono
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPerSample, true); // byte rate
-  view.setUint16(32, bytesPerSample, true); // block align
-  view.setUint16(34, 16, true); // bits per sample
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
   writeString(36, "data");
   view.setUint32(40, dataSize, true);
 
@@ -97,72 +81,56 @@ function encodePCM16Wav(samples: Float32Array, sampleRate: number): Blob {
     const clamped = Math.max(-1, Math.min(1, samples[i]));
     view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
   }
-
   return new Blob([buffer], { type: "audio/wav" });
 }
 
 export type TalaVoiceEngine = "kokoro" | "openrouter" | "browser" | "none";
 export type TalaVoiceStatus = "idle" | "loading" | "speaking";
 
-/** Detect mobile devices — skip Kokoro on mobile to avoid 80MB download + CPU freeze. */
 function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-/**
- * Rewrite text the way a person would say it out loud. The TTS phonemizer
- * reads "PHP 3,500", "Mbps" and raw URLs literally, which is most of what
- * made TALA's pronunciation sound off — normalize those before synthesis.
- */
 function normalizeForSpeech(text: string): string {
-  return (
-    text
-      // currency: "PHP 3,500" / "₱3,500" → "3,500 pesos"; stray "PHP" → "pesos"
-      .replace(/(?:PHP|₱)\s?([\d,]+(?:\.\d+)?)/gi, "$1 pesos")
-      .replace(/\bPHP\b/g, "pesos")
-      .replace(/\$\s?([\d,]+(?:\.\d+)?)/g, "$1 dollars")
-      // units & tech shorthand
-      .replace(/\b(\d+)\s?Mbps\b/gi, "$1 megabits per second")
-      .replace(/\b(\d+)\s?Gbps\b/gi, "$1 gigabits per second")
-      .replace(/\b(\d+)\s?(?:sqm|m²)\b/gi, "$1 square meters")
-      .replace(/\b24\/7\b/g, "twenty-four seven")
-      // links & handles: never read a URL character by character
-      .replace(/https?:\/\/wa\.me\/\S+/gi, "our WhatsApp")
-      .replace(/https?:\/\/\S+/gi, "our website")
-      .replace(/\bwww\.\S+/gi, "our website")
-      // common abbreviations
-      .replace(/\be\.g\.\s?/gi, "for example, ")
-      .replace(/\betc\.?\b/gi, "and so on")
-      .replace(/\bvs\.?\b/gi, "versus")
-      // punctuation the phonemizer mangles → natural pauses
-      .replace(/\s[—–]\s?/g, ", ")
-      .replace(/&/g, " and ")
-      .replace(/\s?\/\s?/g, " or ")
-  );
+  return text
+    .replace(/(?:PHP|₱)\s?([\d,]+(?:\.\d+)?)/gi, "$1 pesos")
+    .replace(/\bPHP\b/gi, "pesos")
+    .replace(/\$\s?([\d,]+(?:\.\d+)?)/g, "$1 dollars")
+    .replace(/\b(\d+)\s?Mbps\b/gi, "$1 megabits per second")
+    .replace(/\b(\d+)\s?Gbps\b/gi, "$1 gigabits per second")
+    .replace(/\b(\d+)\s?(?:sqm|m²)\b/gi, "$1 square meters")
+    .replace(/\b24\/7\b/g, "twenty-four seven")
+    .replace(/https?:\/\/wa\.me\/\S+/gi, "our WhatsApp")
+    .replace(/https?:\/\/\S+/gi, "our website")
+    .replace(/\bwww\.\S+/gi, "our website")
+    .replace(/\be\.g\.\s?/gi, "for example, ")
+    .replace(/\betc\.?\b/gi, "and so on")
+    .replace(/\bvs\.?\b/gi, "versus")
+    .replace(/\s[—–]\s?/g, ", ")
+    .replace(/&/g, " and ")
+    .replace(/\s?\/\s?/g, " or ");
 }
 
-/** Split text into speakable chunks so long replies start playing sooner. */
 function splitSentences(text: string): string[] {
   const cleaned = normalizeForSpeech(text)
-    .replace(/[*_#`~>]/g, "") // strip any markdown the model sneaks in
+    .replace(/[*_#`~>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return [];
+
   const parts = cleaned.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) ?? [cleaned];
-  // Merge very short fragments into their neighbour so speech doesn't stutter —
-  // BUT let the first chunk stay short so TALA starts talking sooner. A brief
-  // opener ("Sure —") synthesizes in a fraction of the time of a full sentence.
   const chunks: string[] = [];
   for (const part of parts.map((p) => p.trim()).filter(Boolean)) {
-    if (chunks.length && (part.length < 12 || chunks[chunks.length - 1].length < 40)) {
-      chunks[chunks.length - 1] += " " + part;
+    if (chunks.length && part.length < 12) {
+      chunks[chunks.length - 1] += ` ${part}`;
     } else {
       chunks.push(part);
     }
   }
-  // If the first chunk is still very long, break off a short opening clause
-  // at the first comma / semicolon / dash so playback can start sooner.
+
+  // Keep the first synthesis unit short. A short opener starts materially
+  // faster in both Kokoro and hosted TTS than a long paragraph-sized chunk.
   if (chunks.length && chunks[0].length > 90) {
     const first = chunks[0];
     const splitAt = first.search(/[,;:—–]\s/);
@@ -204,62 +172,33 @@ export interface UseTalaVoice {
   setEnabled: (on: boolean) => void;
   engine: TalaVoiceEngine;
   status: TalaVoiceStatus;
-  /** 0–100 while the Kokoro model downloads; null when not loading. */
   loadProgress: number | null;
-  /** Device-measured time from speak() → first audio actually playing (ms), or null. */
   lastTtsMs: number | null;
   voiceId: string;
   setVoiceId: (id: string) => void;
   speak: (text: string) => void;
   stop: () => void;
-  /** Audition a specific Kokoro voice id (does not change the saved selection). */
   preview: (id: string, text?: string) => void;
-  /** The voice id currently auditioning, or null. */
   previewId: string | null;
 }
 
 export interface UseTalaVoiceOptions {
-  /**
-   * Site-wide default voice, set in Admin → TALA. Used only when this
-   * device has no voice preference of its own yet — an explicit per-visitor
-   * choice (stored in their own localStorage) always wins after that.
-   */
   defaultVoiceId?: string;
-  /** "openrouter" only takes effect when apiKey + ttsModelId + ttsVoiceId are all set; otherwise falls back to "kokoro". */
   provider?: "kokoro" | "openrouter";
-  /** OpenRouter API key (same one used for chat) — required for the openrouter provider. */
   apiKey?: string;
-  /** OpenRouter TTS model id, e.g. "mistralai/voxtral-mini-tts-2603". */
   ttsModelId?: string;
-  /** Voice id for the chosen TTS model (each model defines its own set). */
   ttsVoiceId?: string;
-  /**
-   * When true (public site), the visitor's own localStorage voice choice is
-   * IGNORED and TALA always speaks with the owner's Admin-selected voice.
-   * The owner's Admin console passes false so it can preview/change voices.
-   */
   ignoreLocalVoice?: boolean;
-  /**
-   * Gates the ~80 MB Kokoro download. Defaults to true (the admin voice
-   * preview page always wants it available). The public widget passes its
-   * `open` state so every visitor to every page doesn't silently pull 80 MB
-   * in the background before ever opening the chat.
-   */
   active?: boolean;
 }
 
 export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
+  const isMobile = isMobileDevice();
   const siteDefaultVoice = options?.defaultVoiceId || TALA_DEFAULT_VOICE;
   const openRouterReady = Boolean(options?.apiKey && options?.ttsModelId && options?.ttsVoiceId);
-  // On mobile: skip Kokoro entirely (80MB download freezes the CPU).
-  // Use OpenRouter TTS if configured, otherwise browser TTS (robotic but instant).
-  const isMobile = isMobileDevice();
-  const provider: "kokoro" | "openrouter" =
-    isMobile
-      ? openRouterReady ? "openrouter" : "kokoro" // will be overridden to "browser" below
-      : options?.provider === "openrouter" && openRouterReady
-        ? "openrouter"
-        : "kokoro";
+  const preferredProvider: "kokoro" | "openrouter" =
+    options?.provider === "openrouter" && openRouterReady ? "openrouter" : "kokoro";
+
   const [enabled, setEnabledState] = useState<boolean>(() => {
     try {
       return localStorage.getItem(TALA_STORAGE.voiceEnabled) !== "off";
@@ -267,15 +206,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       return true;
     }
   });
-  const [engine, setEngine] = useState<TalaVoiceEngine>("none");
-  const [status, setStatus] = useState<TalaVoiceStatus>("idle");
-  const [loadProgress, setLoadProgress] = useState<number | null>(null);
-  const [lastTtsMs, setLastTtsMs] = useState<number | null>(null);
-  const speakStartRef = useRef(0);
-  const firstPlayedRef = useRef(false);
   const [voiceId, setVoiceIdState] = useState<string>(() => {
-    // On the public site (ignoreLocalVoice), the owner's Admin-selected voice
-    // is the single source of truth — never a visitor's stale localStorage pick.
     if (options?.ignoreLocalVoice) return siteDefaultVoice;
     try {
       return localStorage.getItem(TALA_STORAGE.voiceId) || siteDefaultVoice;
@@ -283,35 +214,35 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       return siteDefaultVoice;
     }
   });
+  const [engine, setEngine] = useState<TalaVoiceEngine>(
+    preferredProvider === "openrouter" ? "openrouter" : "browser",
+  );
+  const [status, setStatus] = useState<TalaVoiceStatus>("idle");
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const [lastTtsMs, setLastTtsMs] = useState<number | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const kokoroRef = useRef<KokoroInstance | null>(null);
-  const kokoroLoading = useRef(false);
+  const kokoroLoadingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const queueRef = useRef<string[]>([]);
-  const speakingRef = useRef(false);
-  const generationRef = useRef(0); // bumped on stop() to cancel stale playback
-  // playQueue/speak are stable useCallbacks (empty deps) but need the latest
-  // provider/config on every call — kept in refs rather than closed-over state.
-  const providerRef = useRef(provider);
-  providerRef.current = provider;
-  const orConfigRef = useRef<{ apiKey: string; model: string; voice: string } | null>(null);
-  orConfigRef.current =
-    provider === "openrouter"
-      ? { apiKey: options!.apiKey!, model: options!.ttsModelId!, voice: options!.ttsVoiceId! }
-      : null;
-  // While Kokoro is still downloading, hold speech instead of using the
-  // robotic browser fallback — that fallback is what "TALA sounds robotic"
-  // reports actually were. If the download outlasts the cap, speak anyway.
-  const pendingSpeakRef = useRef(false);
-  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const playQueueRef = useRef<(() => Promise<void>) | null>(null);
-  // Was 45s — on a first-ever visit over a slow connection that's 45 seconds
-  // of the reply sitting silently on screen before anything is spoken.
-  // Silence reads as far more "broken" than a brief robotic-voice opener, so
-  // this now falls back to the browser voice much sooner.
-  const KOKORO_WAIT_CAP_MS = 3500;
+  const generationRef = useRef(0);
+  const speakStartRef = useRef(0);
+  const firstPlayedRef = useRef(false);
   const voiceIdRef = useRef(voiceId);
   voiceIdRef.current = voiceId;
+
+  const configRef = useRef({
+    provider: preferredProvider,
+    openRouter: openRouterReady
+      ? { apiKey: options!.apiKey!, model: options!.ttsModelId!, voice: options!.ttsVoiceId! }
+      : null,
+  });
+  configRef.current = {
+    provider: preferredProvider,
+    openRouter: openRouterReady
+      ? { apiKey: options!.apiKey!, model: options!.ttsModelId!, voice: options!.ttsVoiceId! }
+      : null,
+  };
 
   const setEnabled = useCallback((on: boolean) => {
     setEnabledState(on);
@@ -331,13 +262,28 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     }
   }, []);
 
-  // iOS/WebKit requires media to be started from a user gesture. TALA's
-  // replies are synthesized AFTER an async network round-trip, so by the time
-  // `new Audio(url).play()` runs it's outside the original tap and iOS silently
-  // rejects it — the `.catch(() => resolve())` swallowed that, which read as
-  // "TALA is silent on iPhone". Fix: on the FIRST user gesture (any tap/key),
-  // play a silent primer to unlock the audio pipeline. All later plays, even
-  // after awaits, then work on iOS. Harmless no-op elsewhere.
+  const noteFirstPlayback = useCallback(() => {
+    if (firstPlayedRef.current) return;
+    firstPlayedRef.current = true;
+    const ms = Math.round(performance.now() - speakStartRef.current);
+    console.debug(`[TALA] reply → first audio in ${ms}ms`);
+    setLastTtsMs(ms);
+  }, []);
+
+  const stop = useCallback(() => {
+    generationRef.current += 1;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setStatus("idle");
+  }, []);
+
+  // iOS/WebKit needs one user gesture to unlock later async audio playback.
   const unlockedRef = useRef(false);
   useEffect(() => {
     const unlock = () => {
@@ -348,403 +294,214 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
           "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
         );
         primer.volume = 0;
-        const play = primer.play().catch(() => {});
-        // Resume a suspended speechSynthesis context if the browser parked it.
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          window.speechSynthesis.resume();
-        }
-        void play;
+        void primer.play().catch(() => {});
+        if ("speechSynthesis" in window) window.speechSynthesis.resume();
       } catch {
-        /* unlocking is best-effort */
+        /* best effort */
       }
     };
-    const events = ["pointerdown", "keydown", "touchstart"] as const;
-    for (const ev of events) window.addEventListener(ev, unlock, { once: false, passive: true });
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("touchstart", unlock, { passive: true });
     return () => {
-      for (const ev of events) window.removeEventListener(ev, unlock);
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
     };
   }, []);
 
-  const stop = useCallback(() => {
-    generationRef.current += 1;
-    queueRef.current = [];
-    speakingRef.current = false;
-    pendingSpeakRef.current = false;
-    if (waitTimerRef.current) {
-      clearTimeout(waitTimerRef.current);
-      waitTimerRef.current = null;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    setStatus((s) => (s === "speaking" ? "idle" : s));
-  }, []);
-
-  // Latency probe: first real audio playback since the reply was handed to
-  // speak(). Only fires once per utterance (speak() resets the flag).
-  const noteFirstPlayback = useCallback(() => {
-    if (firstPlayedRef.current) return;
-    firstPlayedRef.current = true;
-    const ms = Math.round(performance.now() - speakStartRef.current);
-    console.debug(`[TALA] reply → first audio in ${ms}ms`);
-    setLastTtsMs(ms);
-  }, []);
-
-  // Kick off the Kokoro download in the background as soon as voice is on —
-  // ideally while the user is still reading the greeting and typing, so the
-  // ~80 MB model is ready by the time the first assistant reply arrives.
-  // Only when Kokoro is actually the engine in use, though: the whole point
-  // of the OpenRouter provider is no local model download, so skip this
-  // entirely rather than wasting 80 MB of bandwidth nobody will use.
-  // ALSO skip on mobile: Kokoro WASM freezes mobile CPUs and the 80MB
-  // download is too heavy for cellular data. Mobile gets browser TTS instead.
+  // Kokoro is a background enhancement, never a blocking dependency. On a cold
+  // visit TALA speaks with the best local browser voice immediately while the
+  // natural model downloads; later replies automatically switch to Kokoro.
   const active = options?.active ?? true;
   useEffect(() => {
-    if (provider !== "kokoro") return;
-    if (isMobile) return; // skip Kokoro on mobile entirely
-    if (!active || !enabled || kokoroRef.current || kokoroLoading.current) return;
-    if (typeof window === "undefined") return;
+    if (!enabled || !active || isMobile || preferredProvider !== "kokoro") return;
+    if (kokoroRef.current || kokoroLoadingRef.current) return;
 
-    // Use requestIdleCallback to start download during browser idle time
-    // so it doesn't compete with page rendering or user interaction
-    const startDownload = () => {
-      kokoroLoading.current = true;
-      setEngine((e) => (e === "none" ? "browser" : e));
+    let cancelled = false;
+    const start = async () => {
+      kokoroLoadingRef.current = true;
       setLoadProgress(0);
-
-      (async () => {
-        try {
-          const { KokoroTTS } = await import("kokoro-js");
-          const loadWith = (dtype: "q8") =>
-            KokoroTTS.from_pretrained(TALA_KOKORO_MODEL, {
-              dtype,
-              device: "wasm",
-              progress_callback: (p: { status?: string; progress?: number }) => {
-                if (typeof p?.progress === "number") {
-                  setLoadProgress(Math.round(p.progress));
-                }
-              },
-            });
-          const tts = (await loadWith("q8")) as unknown as KokoroInstance;
+      try {
+        const { KokoroTTS } = await import("kokoro-js");
+        const tts = (await KokoroTTS.from_pretrained(TALA_KOKORO_MODEL, {
+          dtype: "q8",
+          device: "wasm",
+          progress_callback: (p: { progress?: number }) => {
+            if (!cancelled && typeof p?.progress === "number") {
+              setLoadProgress(Math.round(p.progress));
+            }
+          },
+        })) as unknown as KokoroInstance;
+        if (!cancelled) {
           kokoroRef.current = tts;
           setEngine("kokoro");
-        } catch (e) {
-          console.warn("[TALA] Kokoro TTS unavailable, using browser voice.", e);
-          setEngine("browser");
-        } finally {
-          setLoadProgress(null);
-          kokoroLoading.current = false;
-          if (pendingSpeakRef.current) {
-            pendingSpeakRef.current = false;
-            if (waitTimerRef.current) {
-              clearTimeout(waitTimerRef.current);
-              waitTimerRef.current = null;
-            }
-            void playQueueRef.current?.();
-          }
         }
-      })();
+      } catch (err) {
+        console.warn("[TALA] Kokoro unavailable; keeping instant browser voice.", err);
+        if (!cancelled) setEngine("browser");
+      } finally {
+        kokoroLoadingRef.current = false;
+        if (!cancelled) setLoadProgress(null);
+      }
     };
 
-    // Use requestIdleCallback to start download during browser idle time
-    // so it doesn't compete with page rendering or user interaction
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(startDownload, { timeout: 5000 });
-    } else {
-      // Fallback: start after a short delay if requestIdleCallback not supported
-      setTimeout(startDownload, 100);
-    }
-  }, [enabled, provider, active]);
+    const ric = (window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }).requestIdleCallback;
+    const cic = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+    let idleId: number | null = null;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    if (ric) idleId = ric(() => void start(), { timeout: 1500 });
+    else timerId = setTimeout(() => void start(), 50);
 
-  const playQueue = useCallback(async () => {
-    if (speakingRef.current) return;
-    speakingRef.current = true;
-    const generation = generationRef.current;
-    setStatus("speaking");
+    return () => {
+      cancelled = true;
+      if (idleId !== null) cic?.(idleId);
+      if (timerId !== null) clearTimeout(timerId);
+    };
+  }, [active, enabled, isMobile, preferredProvider]);
 
-    // OpenRouter path: pipeline chunks — synthesize N+1 while N plays,
-    // same as Kokoro, so only the first chunk waits for a network round-trip.
-    if (providerRef.current === "openrouter" && orConfigRef.current) {
-      const readyOr: Array<{ url: string }> = [];
-      let orProducerDone = false;
-      let orProducerError = false;
-      let orNotify: (() => void) | null = null;
-      const orWake = () => {
-        const n = orNotify;
-        orNotify = null;
-        if (n) n();
-      };
-      const orConfig = orConfigRef.current;
+  const speakBrowserChunk = useCallback(
+    (chunk: string, generation: number) =>
+      new Promise<void>((resolve) => {
+        if (generation !== generationRef.current) return resolve();
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) return resolve();
+        const utter = new SpeechSynthesisUtterance(chunk);
+        const selected = pickBrowserVoice();
+        if (selected) utter.voice = selected;
+        utter.rate = 1;
+        utter.pitch = 1.03;
+        utter.onstart = noteFirstPlayback;
+        utter.onend = () => resolve();
+        utter.onerror = () => resolve();
+        window.speechSynthesis.speak(utter);
+      }),
+    [noteFirstPlayback],
+  );
 
-      const orProducer = (async () => {
-        try {
-          while (queueRef.current.length && generation === generationRef.current) {
-            // Bounded look-ahead of 1 keeps memory in check.
-            while (readyOr.length >= 1 && generation === generationRef.current) {
-              await new Promise<void>((r) => {
-                orNotify = r;
-              });
-            }
-            if (generation !== generationRef.current) break;
-            const chunk = queueRef.current.shift();
-            if (!chunk) break;
-            try {
-              const blob = await synthesizeOpenRouterTts(chunk, orConfig);
-              if (generation !== generationRef.current) break;
-              readyOr.push({ url: URL.createObjectURL(blob) });
-              orWake();
-            } catch (e) {
-              console.warn("[TALA] OpenRouter TTS failed for a chunk.", e);
-              queueRef.current.unshift(chunk);
-              orProducerError = true;
-              break;
-            }
-          }
-        } finally {
-          orProducerDone = true;
-          orWake();
-        }
-      })();
-
-      while (generation === generationRef.current) {
-        if (!readyOr.length) {
-          if (orProducerDone) break;
-          await new Promise<void>((r) => {
-            orNotify = r;
-          });
-          continue;
-        }
-        const { url } = readyOr.shift()!;
-        orWake();
-        await new Promise<void>((resolve) => {
-          const el = new Audio(url);
-          audioRef.current = el;
-          el.onended = () => resolve();
-          el.onerror = () => resolve();
-          noteFirstPlayback();
-          el.play().catch(() => resolve());
-        });
-        URL.revokeObjectURL(url);
-      }
-
-      // Drain leftovers on cancel.
-      for (const item of readyOr) URL.revokeObjectURL(item.url);
-      readyOr.length = 0;
-      await orProducer.catch(() => {});
-
-      // If OpenRouter TTS blew up mid-reply, fall through to browser voice.
-      if (!orProducerError) {
-        speakingRef.current = false;
-        if (generation === generationRef.current) setStatus("idle");
-        return;
-      }
-    } else {
-      const kokoro = kokoroRef.current;
-
-      if (kokoro) {
-        // Pipeline: while chunk N plays, synthesize chunk N+1 in the background.
-        // First-chunk latency is unchanged (a hard floor), but subsequent chunks
-        // start with no gap. Bounded look-ahead of 1 keeps memory in check.
-        const ready: Array<{ url: string }> = [];
-        let producerDone = false;
-        let producerError = false;
-        let notify: (() => void) | null = null;
-        const waitForReady = () =>
-          new Promise<void>((resolve) => {
-            notify = resolve;
-          });
-        const wake = () => {
-          const n = notify;
-          notify = null;
-          if (n) n();
-        };
-
-        const producer = (async () => {
-          try {
-            while (queueRef.current.length && generation === generationRef.current) {
-              // Cap look-ahead at 1 pre-rendered blob.
-              while (ready.length >= 1 && generation === generationRef.current) {
-                await new Promise<void>((r) => {
-                  notify = r;
-                });
-              }
-              if (generation !== generationRef.current) break;
-              const chunk = queueRef.current.shift();
-              if (!chunk) break;
-              try {
-                const audio = await kokoro.generate(chunk, { voice: voiceIdRef.current });
-                if (generation !== generationRef.current) break;
-                const blob = encodePCM16Wav(audio.audio, audio.sampling_rate);
-                ready.push({ url: URL.createObjectURL(blob) });
-                wake();
-              } catch (e) {
-                console.warn("[TALA] Kokoro generation failed.", e);
-                producerError = true;
-                break;
-              }
-            }
-          } finally {
-            producerDone = true;
-            wake();
-          }
-        })();
-
-        // Consumer: play blobs in order as they arrive.
-        while (generation === generationRef.current) {
-          if (!ready.length) {
-            if (producerDone) break;
-            await waitForReady();
-            continue;
-          }
-          const { url } = ready.shift()!;
-          wake(); // producer may be waiting for room
-          await new Promise<void>((resolve) => {
-            const el = new Audio(url);
-            audioRef.current = el;
-            el.onended = () => resolve();
-            el.onerror = () => resolve();
-            noteFirstPlayback();
-            el.play().catch(() => resolve());
-          });
+  const playBlob = useCallback(
+    (blob: Blob, generation: number) =>
+      new Promise<void>((resolve) => {
+        if (generation !== generationRef.current) return resolve();
+        const url = URL.createObjectURL(blob);
+        const el = new Audio(url);
+        audioRef.current = el;
+        el.onplaying = noteFirstPlayback;
+        const finish = () => {
           URL.revokeObjectURL(url);
-          if (generation !== generationRef.current) break;
-        }
-
-        // Drain any leftover blobs on cancel.
-        for (const item of ready) URL.revokeObjectURL(item.url);
-        ready.length = 0;
-        await producer.catch(() => {});
-
-        // If Kokoro blew up mid-reply, fall through to browser voice for the rest.
-        if (producerError && queueRef.current.length && generation === generationRef.current) {
-          // fall through to the browser-speech loop below
-        } else {
-          speakingRef.current = false;
-          if (generation === generationRef.current) setStatus("idle");
-          return;
-        }
-      }
-    }
-
-    // Browser speech synthesis fallback (no engine ready, or the active one failed).
-    while (queueRef.current.length && generation === generationRef.current) {
-      const chunk = queueRef.current.shift()!;
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        await new Promise<void>((resolve) => {
-          const utter = new SpeechSynthesisUtterance(chunk);
-          const voice = pickBrowserVoice();
-          if (voice) utter.voice = voice;
-          utter.rate = 1;
-          utter.pitch = 1.05;
-          utter.onend = () => resolve();
-          utter.onerror = () => resolve();
-          noteFirstPlayback();
-          window.speechSynthesis.speak(utter);
-        });
-      }
-    }
-
-    speakingRef.current = false;
-    if (generation === generationRef.current) setStatus("idle");
-  }, []);
-
-  // The load effect (defined above) needs to flush held speech when the
-  // download finishes; it runs before playQueue exists, so it goes via a ref.
-  playQueueRef.current = playQueue;
+          if (audioRef.current === el) audioRef.current = null;
+          resolve();
+        };
+        el.onended = finish;
+        el.onerror = finish;
+        void el.play().catch(finish);
+      }),
+    [noteFirstPlayback],
+  );
 
   const speak = useCallback(
     (text: string) => {
       if (!enabled) return;
       const chunks = splitSentences(text);
       if (!chunks.length) return;
+
       stop();
+      const generation = generationRef.current;
       speakStartRef.current = performance.now();
       firstPlayedRef.current = false;
-      queueRef.current = chunks;
-      // On mobile, skip Kokoro wait logic entirely — go straight to browser TTS.
-      // The Kokoro model never loads on mobile (see effect above), so there's
-      // nothing to wait for. Browser TTS is robotic but instant and reliable.
-      if (isMobile) {
-        void playQueue();
-        return;
-      }
-      // Natural voice still downloading? Hold the reply instead of speaking
-      // it robotically — the wait cap keeps a slow connection from muting
-      // TALA forever. Once cached (second visit onward) this never waits.
-      // Irrelevant for the OpenRouter provider: there's no local download.
-      if (providerRef.current === "kokoro" && !kokoroRef.current && kokoroLoading.current) {
-        pendingSpeakRef.current = true;
-        setStatus("loading");
-        waitTimerRef.current = setTimeout(() => {
-          if (pendingSpeakRef.current) {
-            pendingSpeakRef.current = false;
-            void playQueue();
+      setStatus("speaking");
+
+      void (async () => {
+        try {
+          for (const chunk of chunks) {
+            if (generation !== generationRef.current) return;
+            const cfg = configRef.current;
+
+            if (cfg.provider === "openrouter" && cfg.openRouter) {
+              try {
+                const blob = await synthesizeOpenRouterTts(chunk, cfg.openRouter);
+                if (generation !== generationRef.current) return;
+                await playBlob(blob, generation);
+                continue;
+              } catch (err) {
+                console.warn("[TALA] Hosted TTS failed; using browser speech.", err);
+                await speakBrowserChunk(chunk, generation);
+                continue;
+              }
+            }
+
+            const kokoro = !isMobile ? kokoroRef.current : null;
+            if (kokoro) {
+              try {
+                const raw = await kokoro.generate(chunk, { voice: voiceIdRef.current });
+                if (generation !== generationRef.current) return;
+                await playBlob(encodePCM16Wav(raw.audio, raw.sampling_rate), generation);
+                continue;
+              } catch (err) {
+                console.warn("[TALA] Kokoro generation failed; using browser speech.", err);
+              }
+            }
+
+            // Critical latency rule: do not wait for Kokoro to finish loading.
+            // Speak now. The next reply can use Kokoro once it is ready.
+            await speakBrowserChunk(chunk, generation);
           }
-        }, KOKORO_WAIT_CAP_MS);
-        return;
-      }
-      void playQueue();
+        } finally {
+          if (generation === generationRef.current) setStatus("idle");
+        }
+      })();
     },
-    [enabled, stop, playQueue],
+    [enabled, isMobile, playBlob, speakBrowserChunk, stop],
   );
 
-  // Audition a specific Kokoro voice without changing the saved selection.
-  // Used by the admin "female voice picker" so David can hear each option
-  // before picking. Loads the model on demand (same cached 80 MB), speaks a
-  // short sample as that voice, and reports playing state via previewState.
-  // Defined AFTER `speak` so the [speak, setEnabled] deps don't hit it in the
-  // temporal dead zone (speak is a const declared just above).
-  const [previewId, setPreviewId] = useState<string | null>(null);
   const preview = useCallback(
     async (id: string, text?: string) => {
-      if (providerRef.current === "openrouter") {
-        // OpenRouter provider has no per-voice sample here; just speak as-is.
-        speak(text || "Hi, I'm TALA — your friend in San Vicente. Lovely to meet you!");
-        return;
-      }
-      if (!kokoroRef.current) {
-        // Kick the loader if it hasn't started (e.g. voice disabled in admin).
-        setEnabled(true);
-      }
-      setPreviewId(id);
       const sample = text || "Hi, I'm TALA — your friend in San Vicente. Lovely to meet you!";
-      // Wait briefly for the model if still loading, then play one sample blob.
-      let tries = 0;
-      while (!kokoroRef.current && tries < 60) {
-        await new Promise((r) => setTimeout(r, 500));
-        tries++;
-      }
-      const kokoro = kokoroRef.current;
-      if (!kokoro) {
-        setPreviewId(null);
-        return; // model unavailable; nothing to audition
-      }
+      setPreviewId(id);
       try {
-        const audio = await kokoro.generate(sample, { voice: id });
-        const blob = encodePCM16Wav(audio.audio, audio.sampling_rate);
-        const url = URL.createObjectURL(blob);
-        await new Promise<void>((resolve) => {
-          const el = new Audio(url);
-          audioRef.current = el;
-          el.onended = () => resolve();
-          el.onerror = () => resolve();
-          el.play().catch(() => resolve());
-        });
-        URL.revokeObjectURL(url);
-      } catch {
-        /* audition failed silently */
+        const cfg = configRef.current;
+        if (cfg.provider === "openrouter" && cfg.openRouter) {
+          speak(sample);
+          return;
+        }
+
+        // Preview is an explicit admin action, so loading Kokoro on demand is
+        // acceptable here even if the public widget has not loaded it yet.
+        let kokoro = kokoroRef.current;
+        if (!kokoro && !isMobile) {
+          setLoadProgress(0);
+          const { KokoroTTS } = await import("kokoro-js");
+          kokoro = (await KokoroTTS.from_pretrained(TALA_KOKORO_MODEL, {
+            dtype: "q8",
+            device: "wasm",
+            progress_callback: (p: { progress?: number }) => {
+              if (typeof p?.progress === "number") setLoadProgress(Math.round(p.progress));
+            },
+          })) as unknown as KokoroInstance;
+          kokoroRef.current = kokoro;
+          setEngine("kokoro");
+          setLoadProgress(null);
+        }
+
+        if (!kokoro) {
+          speak(sample);
+          return;
+        }
+        const generation = generationRef.current;
+        const raw = await kokoro.generate(sample, { voice: id });
+        await playBlob(encodePCM16Wav(raw.audio, raw.sampling_rate), generation);
+      } catch (err) {
+        console.warn("[TALA] Voice preview failed.", err);
       } finally {
+        setLoadProgress(null);
         setPreviewId(null);
       }
     },
-    [speak, setEnabled],
+    [isMobile, playBlob, speak],
   );
 
-  // Some browsers populate speechSynthesis voices asynchronously.
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const warm = () => window.speechSynthesis.getVoices();
@@ -753,14 +510,21 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     return () => window.speechSynthesis.removeEventListener?.("voiceschanged", warm);
   }, []);
 
-  useEffect(() => stop, [stop]); // silence TALA on unmount
+  useEffect(() => stop, [stop]);
+
+  const effectiveEngine: TalaVoiceEngine =
+    preferredProvider === "openrouter" && openRouterReady
+      ? "openrouter"
+      : isMobile
+        ? "browser"
+        : engine;
 
   return {
     enabled,
     setEnabled,
-    engine: provider === "openrouter" ? "openrouter" : engine,
+    engine: effectiveEngine,
     status,
-    loadProgress: provider === "openrouter" ? null : loadProgress,
+    loadProgress: effectiveEngine === "openrouter" || isMobile ? null : loadProgress,
     lastTtsMs,
     voiceId,
     setVoiceId,
