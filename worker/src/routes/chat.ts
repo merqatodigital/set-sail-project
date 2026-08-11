@@ -79,7 +79,8 @@ export async function handleTallaChat(request: Request, env: Env): Promise<Respo
     // by index.ts wrapper, but add them here for directness).
     if (wantsStream && chatResponse.headers.get("Content-Type")?.includes("text/event-stream")) {
       const headers = new Headers(chatResponse.headers);
-      headers.set("Access-Control-Allow-Origin", "*");
+      // CORS is applied once, by the index.ts wrapper — setting it here too
+      // used to produce a duplicated Access-Control-Allow-Origin value.
       headers.set("Cache-Control", "no-cache, no-transform");
       headers.set("Connection", "keep-alive");
       return new Response(chatResponse.body, { status: 200, headers });
