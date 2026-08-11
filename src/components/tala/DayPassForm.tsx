@@ -80,7 +80,11 @@ export function DayPassForm({ cms }: { cms: CmsData }) {
   const [allergies, setAllergies] = useState("");
   const [requests, setRequests] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ reference: string | null; foodReference: string | null } | null>(null);
+  const [done, setDone] = useState<{
+    reference: string | null;
+    foodReference: string | null;
+    foodStatus: "none" | "saved" | "failed";
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
 
@@ -137,11 +141,9 @@ export function DayPassForm({ cms }: { cms: CmsData }) {
       if (arrival) notesParts.push(`Arrival around ${arrival}`);
       if (allergies.trim()) notesParts.push(`Allergies/dietary: ${allergies.trim()}`);
       if (requests.trim()) notesParts.push(requests.trim());
-      if (cart.length) {
-        const itemsSummary = cart.map((c) => `${c.quantity}x ${c.name}`).join(", ");
-        notesParts.push(`Food add-on: ${itemsSummary} (serving: ${servingTime}; price ${formatPrice(foodTotal)})`);
-        if (foodNotes.trim()) notesParts.push(`Food notes: ${foodNotes.trim()}`);
-      }
+      // NOTE: the food add-on is deliberately NOT embedded here. Food has one
+      // source of truth (tala_food_orders) — it must never hide inside the
+      // booking notes. If the food write fails below, we say so explicitly.
       const notes = notesParts.join(" · ");
 
       // Day Pass through the worker path FIRST — it is the critical write.
@@ -154,8 +156,21 @@ export function DayPassForm({ cms }: { cms: CmsData }) {
         notes,
       });
 
+      // Only a returned MT- reference means tala_booking_requests actually
+      // got a row. If TALA asked for more details or failed to book, never
+      // claim the request was saved — surface the agent's reply instead, and
+      // skip the food write (no orphan food order without a day pass).
+      if (!res.reference || !res.content) {
+        throw new Error(
+          res.content || "TALA couldn't save the request — no confirmation reference was returned.",
+        );
+      }
+
       // Food add-on persists to tala_food_orders (the Supabase source the
       // Guest Portal folio reads) so the pass + food show up on one bill.
+      // Success and failure are BOTH surfaced to the guest — a failed food
+      // order is never implied to have succeeded.
+      let foodStatus: "none" | "saved" | "failed" = cart.length ? "failed" : "none";
       let foodReference: string | null = null;
       if (cart.length) {
         const saved = await createFoodOrder({
@@ -171,10 +186,15 @@ export function DayPassForm({ cms }: { cms: CmsData }) {
           totalCost: foodCostTotal,
           notes: `Serving: ${servingTime}.${foodNotes.trim() ? " " + foodNotes.trim() : ""}`,
         });
-        foodReference = saved ? saved.reference : null;
+        if (saved) {
+          foodStatus = "saved";
+          foodReference = saved.reference;
+        } else {
+          foodStatus = "failed";
+        }
       }
 
-      if (mounted.current) setDone({ reference: res.reference, foodReference });
+      if (mounted.current) setDone({ reference: res.reference, foodReference, foodStatus });
     } catch (e) {
       if (mounted.current) setError(e instanceof Error ? e.message : "Could not reach TALA.");
     } finally {
@@ -201,9 +221,14 @@ export function DayPassForm({ cms }: { cms: CmsData }) {
               "The team will confirm shortly."
             )}
           </p>
-          {done.foodReference && (
+          {done.foodReference && done.foodStatus === "saved" && (
             <p className="mt-1.5 text-sm leading-relaxed">
               Food order <span className="font-mono font-semibold">{done.foodReference}</span> placed for your day. We'll have it ready at serving time.
+            </p>
+          )}
+          {done.foodStatus === "failed" && (
+            <p className="mt-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Your food order was NOT saved — nothing has been added to your bill. Please order again, or message Reception to add it.
             </p>
           )}
           <p className="mt-1.5 text-xs opacity-60">
