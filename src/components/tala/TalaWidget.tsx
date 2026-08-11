@@ -116,7 +116,12 @@ export function TalaWidget() {
     return () => setTalaOpenListener(null);
   }, [openAndPrefill]);
 
-  const speech = useSpeechInput((finalText) => void submit(finalText));
+  // Second argument = barge-in: the moment the recognizer hears the guest,
+  // TALA stops talking (no waiting for her current audio to finish).
+  const speech = useSpeechInput(
+    (finalText) => void submit(finalText),
+    () => voice.stop(),
+  );
 
   useEffect(() => {
     if (open) setDevKeyState(getDevApiKey());
@@ -462,7 +467,11 @@ export function TalaWidget() {
             <input
               ref={inputRef}
               value={speech.listening ? speech.transcript : input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                // Typing is also an interruption — silence TALA right away.
+                if (voice.status === "speaking") voice.stop();
+                setInput(e.target.value);
+              }}
               readOnly={speech.listening}
               placeholder={speech.listening ? "Listening…" : "Ask TALA anything…"}
               aria-label="Chat message"
