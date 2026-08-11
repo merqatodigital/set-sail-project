@@ -49,8 +49,14 @@ export interface UseSpeechInput {
 /**
  * @param onFinal called with the finished utterance when the visitor stops
  *                speaking — the widget sends it to TALA automatically.
+ * @param onSpeechStart fired on the FIRST recognized sound of an utterance
+ *                (interim or final). The widget uses it for barge-in so TALA
+ *                goes quiet the instant the guest starts speaking.
  */
-export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput {
+export function useSpeechInput(
+  onFinal: (text: string) => void,
+  onSpeechStart?: () => void,
+): UseSpeechInput {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -61,6 +67,9 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
   const startedAtRef = useRef(0);
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
+  const onSpeechStartRef = useRef(onSpeechStart);
+  onSpeechStartRef.current = onSpeechStart;
+  const spokeRef = useRef(false);
 
   useEffect(() => {
     setSupported(getRecognizer() !== null);
@@ -76,6 +85,7 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
     if (!rec) return;
     recRef.current = rec;
     finalRef.current = "";
+    spokeRef.current = false;
     setTranscript("");
     setError(null);
     rec.lang = "en-PH"; // English with Filipino accent support; falls back to en-US
@@ -83,6 +93,12 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
     rec.interimResults = true;
 
     rec.onresult = (event) => {
+      // Barge-in: the guest is speaking — silence TALA immediately, without
+      // waiting for the utterance to finish.
+      if (!spokeRef.current) {
+        spokeRef.current = true;
+        onSpeechStartRef.current?.();
+      }
       let interim = "";
       let gotFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {

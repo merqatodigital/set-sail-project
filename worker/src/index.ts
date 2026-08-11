@@ -198,11 +198,18 @@ export default {
       response = Response.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Add CORS headers to response
+    // Add CORS headers to the response.
+    // Use a Headers instance with set(): spreading Object.fromEntries(headers)
+    // yields LOWERCASE keys, so merging the capitalised corsHeaders on top
+    // produced two Access-Control-Allow-Origin entries ("*, *") whenever the
+    // inner handler had already set CORS itself (the SSE chat stream). Browsers
+    // reject a multi-valued ACAO header, which broke streaming chat entirely.
+    const mergedHeaders = new Headers(response.headers);
+    for (const [k, v] of Object.entries(corsHeaders)) mergedHeaders.set(k, v);
     const newResponse = new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
-      headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      headers: mergedHeaders,
     });
 
     return newResponse;

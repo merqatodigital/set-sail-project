@@ -1,44 +1,23 @@
 import { useCallback, useRef, useState } from "react";
+import { TALA_STORAGE, type TalaMessage } from "./talaConfig";
 import {
-  TALA_MAX_HISTORY,
-  TALA_STORAGE,
-  type TalaMessage,
-} from "./talaConfig";
-import {
-  executeTalaTool,
   captureGuestLead,
   confirmBookingDraft,
-  type TalaToolContext,
 } from "./talaTools";
 import {
   classifyHeuristically,
   writeAuditEntry,
   type TalaClassification,
 } from "./talaGraph";
-import { detectSentiment, sentimentInstruction } from "./talaSentiment";
+import { detectSentiment } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
-import { talaChat, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
-
-interface ToolCallWire {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-}
-
-interface WireMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-  tool_call_id?: string;
-}
+import { talaChat, talaChatStream, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
 
 interface AssistantReply {
   content: string | null;
-  tool_calls?: ToolCallWire[];
+  timing?: Record<string, number | string>;
 }
-
-const MAX_TOOL_HOPS = 3;
 
 function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -89,36 +68,46 @@ export function getGuestSessionId(): string {
  *
  *   browser -> ${VITE_TALA_WORKER_URL}/api/talla/chat -> TallaAgent DO -> tools
  *
- * The Worker runs the full LLM + tool loop server-side and returns only the
- * final text, so no tool_calls come back to the browser. For owner mode we
+ * The Worker runs the full prompt build + LLM + tool loop server-side, so the
+ * browser sends ONLY the guest's text and renders what streams back. There is
+ * no browser-side prompt, tool loop, or context injection. For owner mode we
  * forward the existing Supabase access token; the Worker — not the `role`
  * field — decides whether the caller actually gets owner privileges.
+ *
+ * When `onDelta` is provided the Worker's SSE endpoint is used so text appears
+ * as it is generated; otherwise a single buffered call is made.
  */
 async function askCloudflareAgent(
-  messages: WireMessage[],
-  preferredModel?: string,
-  owner?: boolean,
+  text: string,
+  opts?: {
+    model?: string;
+    owner?: boolean;
+    signal?: AbortSignal;
+    onDelta?: (delta: string) => void;
+  },
 ): Promise<AssistantReply> {
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const text = lastUser?.content || "";
   if (!text.trim()) throw new Error("Empty message.");
   let authToken: string | undefined;
   let userId = getGuestSessionId();
-  if (owner) {
+  if (opts?.owner) {
     const [token, ownerId] = await Promise.all([talaOwnerToken(), talaOwnerUserId()]);
     authToken = token || undefined;
     if (ownerId) userId = ownerId;
   }
-  const result = await talaChat({
+  const payload = {
     message: text,
-    role: owner ? "owner" : "guest",
+    role: (opts?.owner ? "owner" : "guest") as "owner" | "guest",
     userId,
-    model: preferredModel,
+    model: opts?.model,
     authToken,
-  });
+    signal: opts?.signal,
+  };
+  const result = opts?.onDelta
+    ? await talaChatStream(payload, opts.onDelta)
+    : await talaChat(payload);
   const content = result.content?.trim() || "";
   if (!content) throw new Error("TALA returned an empty reply.");
-  return { content, tool_calls: undefined };
+  return { content, timing: result.timing };
 }
 
 
@@ -160,7 +149,7 @@ export async function requestDayPass(
   ]
     .filter(Boolean)
     .join(" ");
-  const reply = await askCloudflareAgent([{ role: "user", content: text }], preferredModel);
+  const reply = await askCloudflareAgent(text, { model: preferredModel });
   const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
   return { content: reply.content || "", reference: match ? match[0] : null };
 }
@@ -225,6 +214,9 @@ export function useTalaChat(): UseTalaChat {
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const [lastTurn, setLastTurn] = useState<{ ms: number; text: string } | null>(null);
   const inFlight = useRef(false);
+  // Live stream of the current turn — aborted when a new turn starts or the
+  // conversation resets, so a stale reply can never overwrite a newer one.
+  const abortRef = useRef<AbortController | null>(null);
   // Use the shared CMS store so owner-mode writes persist exactly like the
   // admin managers do (through CmsContext -> cms_data).
   const { update: persistCms } = useCms();
@@ -260,90 +252,59 @@ export function useTalaChat(): UseTalaChat {
         void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
       }
 
-      let wire: WireMessage[] = [
-        { role: "system", content: systemPrompt },
-        ...history.slice(-TALA_MAX_HISTORY).map((m) => ({ role: m.role, content: m.content })),
-      ];
-
-      // Sentiment analysis — inject context-aware instructions into the prompt
+      // Local (network-free) sentiment — kept ONLY for the audit entry below.
+      // It is never injected into a prompt: the Worker owns the prompt.
       const sentiment = detectSentiment(trimmed);
-      const sentimentNote = sentimentInstruction(sentiment);
-      if (sentimentNote) {
-        wire.splice(1, 0, { role: "system", content: `[Guest sentiment: ${sentiment.sentiment} (${Math.round(sentiment.confidence * 100)}% confidence). ${sentimentNote}]` });
-      }
 
-      // Time-of-day context injection for proactive behavior
-      const hour = new Date().getHours();
-      if (hour >= 16 && hour <= 17) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's late afternoon — sunset session is happening now. Mention it if relevant.]" });
-      } else if (hour >= 7 && hour <= 10) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's morning — breakfast is being served. Mention it if relevant.]" });
-      } else if (hour >= 12 && hour <= 14) {
-        wire.splice(1, 0, { role: "system", content: "[Context: It's lunch time. Mention the menu if relevant.]" });
-      }
-
-      // Weather context injection — fetches from OpenWeatherMap (cached 30 min)
-      // Runs in PARALLEL with the LLM call to save 200-500ms
-      const weatherPromise = import("./talaWeather")
-        .then(({ buildWeatherContext }) => buildWeatherContext())
-        .catch(() => null);
+      // Cancel any still-open stream from a previous turn.
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
-        // ONE brain: guest and owner turns both go to the Cloudflare
-        // TallaAgent. No direct browser->OpenRouter call, no Supabase
-        // tala-chat edge function. Owner privileges are verified by the
-        // Worker from the forwarded Supabase bearer token.
-        const requestReply = async (msgs: WireMessage[]): Promise<AssistantReply> =>
-          askCloudflareAgent(msgs, preferredModel, options?.owner);
+        // ONE brain: guest and owner turns both stream from the Cloudflare
+        // TallaAgent. No browser prompt build, no browser tool loop, no
+        // weather/time/sentiment injection, no direct browser->OpenRouter call
+        // and no Supabase tala-chat edge function. Owner privileges are
+        // verified by the Worker from the forwarded Supabase bearer token.
+        const assistantId = newId();
+        let streamed = "";
+        let firstTokenMs: number | null = null;
 
-        // Graph node 2 — agent: the tool-calling loop.
-        const toolsUsed: string[] = [];
-        let reply = await requestReply(wire);
-
-        // Inject weather context into wire after LLM call returns (parallel)
-        const weatherCtx = await weatherPromise;
-        if (weatherCtx?.suggestion) {
-          wire.splice(1, 0, { role: "system", content: `[Weather: ${weatherCtx.suggestion}]` });
-        }
-        let hops = 0;
-        while (reply.tool_calls?.length && hops < MAX_TOOL_HOPS) {
-          hops++;
-          wire = [
-            ...wire,
-            { role: "assistant", content: reply.content, tool_calls: reply.tool_calls },
-          ];
-          // Execute ALL tool calls in parallel (saves 50-200ms per extra tool)
-          const toolCtx: TalaToolContext = {
-            cms: options?.cms!,
-            update: options?.owner ? persistCms : undefined,
-            owner: !!options?.owner,
-          };
-          const toolResults = await Promise.all(
-            reply.tool_calls.map(async (call) => {
-              toolsUsed.push(call.function.name);
-              const result = options?.cms
-                ? await executeTalaTool(
-                    { id: call.id, name: call.function.name, arguments: call.function.arguments },
-                    toolCtx,
-                  )
-                : { error: "Tool unavailable — no site data loaded." };
-              const draft = (result as { draft?: BookingDraft }).draft;
-              if (draft) setPendingDraft(draft);
-              return { role: "tool" as const, tool_call_id: call.id, content: JSON.stringify(result) };
-            }),
-          );
-          wire = [...wire, ...toolResults];
-          reply = await requestReply(wire);
-        }
+        const reply = await askCloudflareAgent(trimmed, {
+          model: preferredModel,
+          owner: options?.owner,
+          signal: controller.signal,
+          onDelta: (delta) => {
+            if (firstTokenMs === null) {
+              firstTokenMs = Math.round(performance.now() - turnStart);
+              // First visible token — drop the thinking indicator immediately.
+              setThinking(false);
+              messagesRef.current = [
+                ...messagesRef.current,
+                { id: assistantId, role: "assistant", content: "" },
+              ];
+            }
+            streamed += delta;
+            messagesRef.current = messagesRef.current.map((m) =>
+              m.id === assistantId ? { ...m, content: streamed } : m,
+            );
+            setMessages(messagesRef.current);
+          },
+        });
 
         const finalText = reply.content?.trim();
         if (!finalText) throw new Error("TALA didn't have a reply.");
 
-        messagesRef.current = [
-          ...messagesRef.current,
-          { id: newId(), role: "assistant", content: finalText },
-        ];
+        // Reconcile the streamed placeholder with the Worker's final text
+        // (identical in the normal case; the Worker sanitizes the final copy).
+        const hasPlaceholder = messagesRef.current.some((m) => m.id === assistantId);
+        messagesRef.current = hasPlaceholder
+          ? messagesRef.current.map((m) => (m.id === assistantId ? { ...m, content: finalText } : m))
+          : [...messagesRef.current, { id: newId(), role: "assistant", content: finalText }];
         setMessages(messagesRef.current);
+
+        const toolsUsed: string[] = [];
 
         // Graph node 3 — audit. Never blocks or breaks the reply.
         // Use deterministic heuristics only — no extra LLM call needed.
@@ -358,7 +319,13 @@ export function useTalaChat(): UseTalaChat {
         });
 
         const turnMs = Math.round(performance.now() - turnStart);
-        console.debug(`[TALA] reply round-trip ${turnMs}ms`, finalText.slice(0, 60));
+        // Latency telemetry — no internal reasoning, only timings.
+        console.debug(
+          `[TALA] first token ${firstTokenMs ?? "n/a"}ms · complete ${turnMs}ms`,
+          reply.timing
+            ? `worker prompt ${reply.timing.promptMs ?? "?"}ms · llm ${reply.timing.llmMs ?? "?"}ms · tools ${reply.timing.toolMs ?? "?"}ms · total ${reply.timing.totalMs ?? "?"}ms`
+            : "",
+        );
         setLastTurn({ ms: turnMs, text: finalText.slice(0, 80) });
 
         return finalText;
@@ -375,6 +342,8 @@ export function useTalaChat(): UseTalaChat {
   );
 
   const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     messagesRef.current = [];
     setMessages([]);
     setError(null);
