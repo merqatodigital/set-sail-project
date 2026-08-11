@@ -102,6 +102,18 @@ export interface ChatResponse {
     completionTokens: number;
     totalTokens: number;
   };
+  // Latency telemetry (no secrets / no reasoning). Added by TallaAgent.
+  timing?: {
+    totalMs: number;
+    authMs: number;
+    doMs: number;
+    promptMs: number;
+    llmMs: number;
+    toolMs: number;
+    deterministicMs: number;
+    mode: "deterministic" | "conversational" | "agentic";
+    modelCalls: number;
+  };
 }
 
 /**
@@ -258,4 +270,100 @@ function parseResponse(data: OpenRouterResponse): ChatResponse {
         }
       : undefined,
   };
+}
+
+/**
+ * Streaming chat completion (SSE from OpenRouter). Yields only user-visible
+ * assistant text deltas — never tool-call JSON or chain-of-thought. Captures
+ * the final model/usage from the terminal chunk when available.
+ *
+ * Streaming is used ONLY for tool-free calls (conversational fast path and the
+ * final natural answer after a tool loop), so we never stream raw tool args.
+ *
+ * Resilient: supports an AbortSignal for client barge-in cancellation. Primary
+ * model only (the fast path does not need the fallback chain); on failure it
+ * throws so the caller can fall back to a non-streaming JSON call.
+ */
+export async function* chatCompletionStream(
+  apiKey: string,
+  request: ChatRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<{ delta: string; model?: string; usage?: ChatResponse["usage"] }, void, unknown> {
+  const config = { ...resolveModelConfig(undefined), ...request.modelConfig };
+  const model = config.model;
+  const body: Record<string, unknown> = {
+    model,
+    messages: request.messages,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  if (config.providerRouting) {
+    body.provider = config.providerRouting;
+  }
+
+  const response = await fetch(OPENROUTER_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://marinaterrace.ph",
+      "X-Title": "TALA - Marina Terrace",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`OpenRouter ${response.status}: ${errorText}`);
+  }
+  if (!response.body) {
+    throw new Error("OpenRouter returned no stream body");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let lastModel: string | undefined;
+  let lastUsage: ChatResponse["usage"];
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        let json: Record<string, any>;
+        try {
+          json = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        if (json.model) lastModel = json.model;
+        if (json.usage) {
+          lastUsage = {
+            promptTokens: json.usage.prompt_tokens ?? 0,
+            completionTokens: json.usage.completion_tokens ?? 0,
+            totalTokens: json.usage.total_tokens ?? 0,
+          };
+        }
+        const delta = json.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta.length > 0) {
+          yield { delta, model: lastModel, usage: lastUsage };
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  // Emit a terminal chunk carrying model/usage even if no deltas arrived last.
+  yield { delta: "", model: lastModel, usage: lastUsage };
 }

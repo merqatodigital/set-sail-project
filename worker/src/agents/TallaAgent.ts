@@ -18,7 +18,7 @@
 import { Agent, callable } from "agents";
 import type { AgentEmail } from "agents/email";
 import type { Env } from "../env.js";
-import { chatCompletion, resolveModelConfig, type ChatResponse } from "./provider.js";
+import { chatCompletion, chatCompletionStream, resolveModelConfig, type ChatResponse } from "./provider.js";
 import { buildSystemPrompt, type SystemPromptContext } from "./systemPrompt.js";
 import { getTools, toOpenRouterTools, executeTool } from "./tools/index.js";
 import { createAuditWrapper } from "./toolAudit.js";
@@ -40,6 +40,7 @@ import { logEmail } from "../db/repos/emailLogRepo.js";
 import { markEventProcessed } from "../db/repos/eventLogRepo.js";
 import { logBrowser } from "../db/repos/browserLogRepo.js";
 import { tryDeterministicActions, isFoodQuoteWithoutOrder, resolveFoodItems } from "./deterministicActions.js";
+import { classifyTurn, type TurnMode } from "./turnRouter.js";
 import { inspectPage } from "./tools/browserTools.js";
 import { RESORT_EMAIL_SENDER } from "./tools/emailTools.js";
 
@@ -174,13 +175,15 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         guestRoom?: string;
       };
 
-      // Handle initialization message
+      // Handle initialization message — role is NEVER taken from the client.
+      // The DO's role is set from server-auth headers on each HTTP /chat request;
+      // for WebSocket sessions it stays as the established state (guest by
+      // default). A client-supplied role here is ignored for security.
       if (parsed.type === "init") {
         this.setState({
           ...this.state,
           tenantId: parsed.tenantId || this.state.tenantId,
           userId: parsed.userId || this.state.userId,
-          role: parsed.role || this.state.role,
           guestName: parsed.guestName || this.state.guestName,
           guestRoom: parsed.guestRoom || this.state.guestRoom,
         });
@@ -528,20 +531,34 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
           content: string;
           tenantId?: string;
           userId?: string;
-          role?: string;
         };
 
-        if (body.tenantId) {
+        // SECURITY: never trust body.role. Role comes ONLY from the headers the
+        // route handler set from server-side resolveAuth(). Always overwrite
+        // state role explicitly so a guest request cannot inherit a previously
+        // set privileged role on a shared DO (owner/admin share one DO).
+        const headerTenantId = request.headers.get("X-Tenant-Id");
+        const headerRole = request.headers.get("X-User-Role");
+        const headerUserId = request.headers.get("X-User-Id");
+
+        if (headerTenantId) {
           this.setState({
             ...this.state,
-            tenantId: body.tenantId,
-            userId: body.userId || this.state.userId,
-            role: body.role || this.state.role,
+            tenantId: headerTenantId,
+            role: headerRole === "owner" || headerRole === "admin" ? headerRole : "guest",
+            userId: headerUserId || this.state.userId,
           });
         }
 
-        const response = await this.handleChat(body.content);
-        return Response.json(response);
+        const wantsStream = request.headers.get("X-Stream") === "1";
+
+        if (wantsStream) {
+          const sse = await this.streamTurn(body.content, request.signal);
+          return sse;
+        }
+
+        const result = await this.handleChat(body.content, request.signal);
+        return Response.json(result);
       } catch (err) {
         return Response.json({ error: (err as Error).message }, { status: 500 });
       }
@@ -973,7 +990,23 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
   /**
    * Main chat handling — sends to LLM, executes tools, returns response.
    */
-  private async handleChat(userMessage: string): Promise<ChatResponse> {
+  /**
+   * Handle an interactive chat turn.
+   *
+   * Execution pipeline (deterministic, server-side routing — NO extra LLM
+   * classification call):
+   *   1. Deterministic actions (food / reception / Day Pass) -> execute, no LLM.
+   *   2. Conversational fast path -> ONE LLM call, NO tools.
+   *   3. Agentic path -> multi-hop tool loop (bounded hops) for live ops.
+   *
+   * Returns full ChatResponse incl. latency timing. `signal` enables barge-in
+   * cancellation; `onDelta` (when provided) streams assistant text for SSE.
+   */
+  private async executeTurn(
+    userMessage: string,
+    opts: { signal?: AbortSignal; onDelta?: (text: string) => void } = {},
+  ): Promise<ChatResponse> {
+    const tEnter = Date.now();
     const apiKey = this.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return {
@@ -981,17 +1014,16 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         toolCalls: [],
         finishReason: "error",
         model: "none",
+        timing: { totalMs: Date.now() - tEnter, authMs: 0, doMs: 0, promptMs: 0, llmMs: 0, toolMs: 0, deterministicMs: 0, mode: "deterministic", modelCalls: 0 },
       };
     }
 
-    // Update state
     this.setState({
       ...this.state,
       lastInteractionAt: new Date().toISOString(),
       conversationCount: this.state.conversationCount + 1,
     });
 
-    // Build tool context
     const toolCtx: ToolContext = {
       tenantId: this.state.tenantId,
       userId: this.state.userId,
@@ -1004,273 +1036,218 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
       bookingReference: this.state.bookingReference,
     };
 
-    // Build system prompt with live D1 data
-    const systemPrompt = await this.buildLiveSystemPrompt(toolCtx);
-
-    // Add user message to history
-    const userMsg: ConversationMessage = { role: "user", content: userMessage };
-    const messages = [...this.state.messages, userMsg];
-
-    // Deterministic pre-execution: complete unambiguous, self-contained guest
-    // actions (food order, reception message, confirm-a-quoted-order) WITHOUT
-    // relying on the model's personality. This guarantees clear workflows
-    // persist even when the free model hesitates or returns null.
+    // (1) Deterministic pre-execution — unambiguous self-contained guest
+    // actions persist WITHOUT the model's personality.
+    const tDetStart = Date.now();
     const deterministic = await tryDeterministicActions(userMessage, toolCtx, this.state.pendingFoodOrder);
     if (deterministic) {
-      // Persist/reset any stashed food quote.
+      const deterministicMs = Date.now() - tDetStart;
       if (deterministic.pendingFoodOrder !== undefined) {
         this.setState({ ...this.state, pendingFoodOrder: deterministic.pendingFoodOrder ?? null });
       }
-      // Keep the user message in history, but do NOT loop the LLM.
       const resp = deterministic.response;
       if (resp.content) {
+        const messages = [...this.state.messages, { role: "user" as const, content: userMessage }];
         const trimmed = messages.slice(-MAX_HISTORY);
-        this.setState({ ...this.state, messages: [...trimmed, { role: "assistant", content: resp.content }] });
+        this.setState({ ...this.state, messages: [...trimmed, { role: "assistant" as const, content: resp.content }] });
+        if (opts.onDelta) opts.onDelta(resp.content);
       }
-      return resp;
+      return {
+        ...resp,
+        timing: {
+          totalMs: Date.now() - tEnter,
+          authMs: 0, doMs: 0, promptMs: 0, llmMs: 0, toolMs: 0,
+          deterministicMs, mode: "deterministic", modelCalls: 0,
+        },
+      };
     }
 
-    // Get tools for current role
-    const tools = getTools(this.state.role, this.computerEnabled);
-    const orTools = toOpenRouterTools(tools);
+    // Build live system prompt (measured — operational truth, never cached).
+    const tPromptStart = Date.now();
+    const systemPrompt = await this.buildLiveSystemPrompt(toolCtx);
+    const promptMs = Date.now() - tPromptStart;
 
-    // Identity accumulator — captured from successfully executed guest writes
-    // (booking/request) so later turns reuse it (identity continuity). We only
-    // persist values the server has already validated; we never trust a raw
-    // guest-supplied name for read scoping.
-    const identityDelta: {
-      guestName?: string;
-      guestPhone?: string;
-      guestEmail?: string;
-      bookingReference?: string;
-    } = {};
+    const userMsg: ConversationMessage = { role: "user", content: userMessage };
+    const messages = [...this.state.messages, userMsg];
 
-    // Tool-calling loop
+    // (2) Conversational fast path — ONE LLM call, NO tools.
+    const mode: TurnMode = classifyTurn(userMessage);
     let finalResponse: ChatResponse | null = null;
-    const audit = createAuditWrapper(
-      this.env.DB,
-      this.state.tenantId,
-      this.state.userId,
-      this.state.sessionId,
-    );
+    let modelCalls = 0;
+    let llmMs = 0;
+    let toolMs = 0;
 
-    for (let hop = 0; hop < MAX_TOOL_HOPS; hop++) {
-      // Build wire messages
+    if (mode === "conversational") {
       const wire: ConversationMessage[] = [
         { role: "system", content: systemPrompt },
         ...messages.slice(-MAX_HISTORY),
       ];
-
-      // Call LLM
-      const response = await chatCompletion(apiKey, {
-        messages: wire,
-        tools: orTools,
-        modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>),
-      });
-
-      // If no tool calls, we're done
-      if (response.toolCalls.length === 0) {
-        finalResponse = response;
-        break;
-      }
-
-      // Add assistant message with tool calls to history
-      const assistantMsg: ConversationMessage = {
-        role: "assistant",
-        content: response.content ?? "",
-        tool_calls: response.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.name, arguments: tc.arguments },
-        })),
-      };
-      messages.push(assistantMsg);
-
-      // Execute all tool calls
-      for (const tc of response.toolCalls) {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(tc.arguments);
-        } catch {
-          // Invalid JSON arguments
+      const tLlm = Date.now();
+      if (opts.onDelta) {
+        // Streaming: one tool-free call, emit user-visible deltas only.
+        let acc = "";
+        let model = this.state.resortId;
+        let usage: ChatResponse["usage"];
+        for await (const chunk of chatCompletionStream(apiKey, { messages: wire, modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>) }, opts.signal)) {
+          acc += chunk.delta;
+          if (chunk.delta) opts.onDelta(chunk.delta);
+          if (chunk.model) model = chunk.model;
+          if (chunk.usage) usage = chunk.usage;
         }
-
-        let toolResult;
-        if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled) {
-          // Computer tool — auto-initialize the lazy workspace on first use
-          // (mirrors the direct /computer/* endpoints) so LLM-selected tool
-          // calls actually execute against the workspace, not the D1 registry.
-          try {
-            await this.computer.initialize();
-          } catch (err) {
-            console.error(`[TallaAgent] Computer auto-init failed for ${tc.name}:`, err);
-          }
-          toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
-        } else {
-          // D1 resort tool — execute via tool registry
-          // Approval gate: some tool actions require durable owner approval.
-          // When REQUIRES_APPROVAL, start an AgentWorkflow and DO NOT execute
-          // the tool here — the LLM only receives a pending marker, so it
-          // cannot bypass the policy and obtain/trigger the side effect.
-          const approval = evaluateToolApproval({
-            actionName: tc.name,
-            role: toolCtx.role,
-            tenantId: toolCtx.tenantId,
-          });
-          if (approval.decision === "REQUIRES_APPROVAL") {
-            let workflowId: string | null = null;
-            try {
-              workflowId = await this.runWorkflow(
-                "TALLA_APPROVAL",
-                {
-                  tenantId: toolCtx.tenantId,
-                  requestedBy: toolCtx.userId,
-                  actionName: tc.name,
-                  actionArgs: args,
-                  reason: approval.reason,
-                  requestedAt: new Date().toISOString(),
-                },
-                { metadata: { tenantId: toolCtx.tenantId, actionName: tc.name } },
-              );
-              // Record the durable approval in D1 so the owner can list/inspect
-              // it cross-request. The native workflow instance (workflowId) is
-              // the durable gate; this row is the queryable owner-facing list.
-              if (workflowId) {
-                await insertApproval(toolCtx.env.DB, {
-                  workflowId,
-                  tenantId: toolCtx.tenantId,
-                  requestedBy: toolCtx.userId ?? null,
-                  actionName: tc.name,
-                  actionArgs: args,
-                  reason: approval.reason,
-                });
-              }
-            } catch (wfErr) {
-              console.error(`[TallaAgent] Failed to start approval workflow for ${tc.name}:`, wfErr);
-            }
-            if (!workflowId) {
-              toolResult = {
-                success: false,
-                error: `Failed to start approval workflow for ${tc.name}. Please try again or contact support.`,
-              };
-            } else {
-              toolResult = {
-                success: true,
-                data: {
-                  status: "pending_approval",
-                  workflowId,
-                  actionName: tc.name,
-                  message:
-                    "This action requires owner approval. It has been queued and will execute once an owner approves it.",
-                },
-              };
-            }
-          } else {
-            toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
-          }
-        }
-
-        // Capture identity from a successful guest write so later turns reuse it.
-        // Only values the server validated are trusted. A name supplied to a
-        // read-only tool is NOT persisted (guests never set read scope).
-        try {
-          const ok = (toolResult && (toolResult as { success?: boolean }).success) ?? false;
-          if (ok) {
-            const a = args as Record<string, unknown>;
-            const r = (toolResult as { data?: Record<string, unknown> }).data ?? {};
-            const name = (a.guestName as string) || (r.guestName as string);
-            const phone = (a.guestPhone as string) || (r.guestPhone as string);
-            const email = (a.guestEmail as string) || (r.guestEmail as string);
-            if (name && typeof name === "string") identityDelta.guestName = name;
-            if (phone && typeof phone === "string") identityDelta.guestPhone = phone;
-            if (email && typeof email === "string") identityDelta.guestEmail = email;
-            if (tc.name === "requestRoomBooking") {
-              const ref = r.reference as string;
-              if (ref && typeof ref === "string") identityDelta.bookingReference = ref;
-            }
-          }
-        } catch {
-          /* ignore identity capture errors */
-        }
-
-        // Add tool result to history
-        const toolMsg: ConversationMessage = {
-          role: "tool",
-          content: JSON.stringify(toolResult),
-          tool_call_id: tc.id,
-          name: tc.name,
+        finalResponse = {
+          content: acc || "I'm sorry, I didn't catch that. Could you say that again?",
+          toolCalls: [], finishReason: "stop", model, usage,
         };
-        messages.push(toolMsg);
-      }
-
-      // Persist any captured identity into durable session state so the NEXT
-      // turn (and later hops in this same turn) reuse it — identity continuity.
-      if (
-        identityDelta.guestName ||
-        identityDelta.guestPhone ||
-        identityDelta.guestEmail ||
-        identityDelta.bookingReference
-      ) {
-        this.setState({
-          ...this.state,
-          guestName: identityDelta.guestName ?? this.state.guestName,
-          guestPhone: identityDelta.guestPhone ?? this.state.guestPhone,
-          guestEmail: identityDelta.guestEmail ?? this.state.guestEmail,
-          bookingReference: identityDelta.bookingReference ?? this.state.bookingReference,
+      } else {
+        finalResponse = await chatCompletion(apiKey, {
+          messages: wire,
+          modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>),
         });
       }
+      llmMs = Date.now() - tLlm;
+      modelCalls = 1;
+    } else {
+      // (3) Agentic path — bounded multi-hop tool loop.
+      const tools = getTools(this.state.role, this.computerEnabled);
+      const orTools = toOpenRouterTools(tools);
+      const identityDelta: { guestName?: string; guestPhone?: string; guestEmail?: string; bookingReference?: string } = {};
+      const audit = createAuditWrapper(this.env.DB, this.state.tenantId, this.state.userId, this.state.sessionId);
+      const tToolTotal = Date.now();
 
-      // Continue loop — LLM will process tool results
-      finalResponse = response;
+      for (let hop = 0; hop < MAX_TOOL_HOPS; hop++) {
+        const wire: ConversationMessage[] = [
+          { role: "system", content: systemPrompt },
+          ...messages.slice(-MAX_HISTORY),
+        ];
+        const tLlm = Date.now();
+        const response = await chatCompletion(apiKey, {
+          messages: wire,
+          tools: orTools,
+          modelConfig: resolveModelConfig(this.env as unknown as Record<string, any>),
+        });
+        llmMs += Date.now() - tLlm;
+        modelCalls++;
+
+        if (response.toolCalls.length === 0) {
+          finalResponse = response;
+          break;
+        }
+
+        const assistantMsg: ConversationMessage = {
+          role: "assistant",
+          content: response.content ?? "",
+          tool_calls: response.toolCalls.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.name, arguments: tc.arguments } })),
+        };
+        messages.push(assistantMsg);
+
+        const tHopTools = Date.now();
+        for (const tc of response.toolCalls) {
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(tc.arguments); } catch { /* invalid JSON */ }
+
+          let toolResult;
+          if (COMPUTER_TOOL_NAMES.has(tc.name) && this.computerEnabled) {
+            try { await this.computer.initialize(); } catch (err) { console.error(`[TallaAgent] Computer auto-init failed for ${tc.name}:`, err); }
+            toolResult = await audit(tc.name, () => this.executeComputerTool(tc.name, args, toolCtx));
+          } else {
+            const approval = evaluateToolApproval({ actionName: tc.name, role: toolCtx.role, tenantId: toolCtx.tenantId });
+            if (approval.decision === "REQUIRES_APPROVAL") {
+              let workflowId: string | null = null;
+              try {
+                workflowId = await this.runWorkflow("TALLA_APPROVAL", {
+                  tenantId: toolCtx.tenantId, requestedBy: toolCtx.userId, actionName: tc.name, actionArgs: args, reason: approval.reason, requestedAt: new Date().toISOString(),
+                }, { metadata: { tenantId: toolCtx.tenantId, actionName: tc.name } });
+                if (workflowId) {
+                  await insertApproval(toolCtx.env.DB, { workflowId, tenantId: toolCtx.tenantId, requestedBy: toolCtx.userId ?? null, actionName: tc.name, actionArgs: args, reason: approval.reason });
+                }
+              } catch (wfErr) { console.error(`[TallaAgent] Failed to start approval workflow for ${tc.name}:`, wfErr); }
+              if (!workflowId) {
+                toolResult = { success: false, error: `Failed to start approval workflow for ${tc.name}. Please try again or contact support.` };
+              } else {
+                toolResult = { success: true, data: { status: "pending_approval", workflowId, actionName: tc.name, message: "This action requires owner approval. It has been queued and will execute once an owner approves it." } };
+              }
+            } else {
+              toolResult = await audit(tc.name, () => executeTool(tc.name, args, toolCtx));
+            }
+          }
+
+          try {
+            const ok = (toolResult && (toolResult as { success?: boolean }).success) ?? false;
+            if (ok) {
+              const a = args as Record<string, unknown>;
+              const r = (toolResult as { data?: Record<string, unknown> }).data ?? {};
+              const name = (a.guestName as string) || (r.guestName as string);
+              const phone = (a.guestPhone as string) || (r.guestPhone as string);
+              const email = (a.guestEmail as string) || (r.guestEmail as string);
+              if (name && typeof name === "string") identityDelta.guestName = name;
+              if (phone && typeof phone === "string") identityDelta.guestPhone = phone;
+              if (email && typeof email === "string") identityDelta.guestEmail = email;
+              if (tc.name === "requestRoomBooking") {
+                const ref = r.reference as string;
+                if (ref && typeof ref === "string") identityDelta.bookingReference = ref;
+              }
+            }
+          } catch { /* ignore identity capture errors */ }
+
+          messages.push({ role: "tool", content: JSON.stringify(toolResult), tool_call_id: tc.id, name: tc.name });
+        }
+        toolMs += Date.now() - tHopTools;
+
+        if (identityDelta.guestName || identityDelta.guestPhone || identityDelta.guestEmail || identityDelta.bookingReference) {
+          this.setState({
+            ...this.state,
+            guestName: identityDelta.guestName ?? this.state.guestName,
+            guestPhone: identityDelta.guestPhone ?? this.state.guestPhone,
+            guestEmail: identityDelta.guestEmail ?? this.state.guestEmail,
+            bookingReference: identityDelta.bookingReference ?? this.state.bookingReference,
+          });
+        }
+        finalResponse = response;
+      }
+      toolMs = Date.now() - tToolTotal - llmMs;
     }
 
-    // If we exhausted tool hops without a final response
     if (!finalResponse) {
-      finalResponse = {
-        content: "I wasn't able to complete that request. Please try again.",
-        toolCalls: [],
-        finishReason: "max_hops",
-        model: "none",
-      };
+      finalResponse = { content: "I wasn't able to complete that request. Please try again.", toolCalls: [], finishReason: "max_hops", model: "none" };
     }
 
     // Add assistant response to history
     if (finalResponse.content) {
       messages.push({ role: "assistant", content: finalResponse.content });
     }
-
-    // Trim and save history
     const trimmedMessages = messages.slice(-MAX_HISTORY);
 
-    // If the LLM quoted a food total but did NOT actually place the order
-    // (free-model hesitation), stash the resolved items so a later "yes/confirm"
-    // completes the write deterministically instead of looping on model mood.
+    // Stash a quoted-but-unplaced food order so "yes" completes it deterministically.
     if (finalResponse?.content && isFoodQuoteWithoutOrder(finalResponse.content)) {
       const resolved = await resolveFoodItems(userMessage, toolCtx);
       if (resolved && resolved.length > 0) {
         this.setState({ ...this.state, messages: trimmedMessages, pendingFoodOrder: resolved });
-        return finalResponse;
+        return this.finalizeResponse(finalResponse, tEnter, 0, promptMs, llmMs, toolMs, mode, modelCalls);
       }
     }
-    // If an order was actually placed this turn, clear any stashed quote.
     if (finalResponse?.content && /order\s+(tt|mt|fk|fo|fd|ff)-/i.test(finalResponse.content)) {
       this.setState({ ...this.state, messages: trimmedMessages, pendingFoodOrder: null });
-      return finalResponse;
+      return this.finalizeResponse(finalResponse, tEnter, 0, promptMs, llmMs, toolMs, mode, modelCalls);
     }
 
     this.setState({ ...this.state, messages: trimmedMessages });
+    return this.finalizeResponse(finalResponse, tEnter, 0, promptMs, llmMs, toolMs, mode, modelCalls);
+  }
 
-    // Strip any model chain-of-thought so the owner never sees internal
-    // reasoning (mirrors runBriefing's sanitizer).
+  /** Attach sanitized content + null-guard + timing to a ChatResponse. */
+  private finalizeResponse(
+    finalResponse: ChatResponse,
+    tEnter: number,
+    _authMs: number,
+    promptMs: number,
+    llmMs: number,
+    toolMs: number,
+    mode: TurnMode,
+    modelCalls: number,
+  ): ChatResponse {
     if (finalResponse?.content) {
       finalResponse = { ...finalResponse, content: this.sanitizeOwnerReply(finalResponse.content) };
     }
-
-    // Null/empty output guard: never surface a blank guest response. The model
-    // occasionally returns null content (free-model flakiness); answer gracefully
-    // instead of an empty bubble. Write tools are never re-executed here — a null
-    // response only triggers a retry of the LLM call, and server-side dedupe
-    // protects against any accidental replay of a prior successful write.
     if (!finalResponse?.content || finalResponse.content.trim().length === 0) {
       finalResponse = {
         ...finalResponse,
@@ -1280,9 +1257,72 @@ export class TallaAgent extends Agent<Env, TallaAgentState> {
         model: finalResponse?.model ?? "none",
       };
     }
-
-    return finalResponse;
+    return {
+      ...finalResponse,
+      timing: {
+        totalMs: Date.now() - tEnter,
+        authMs: 0, doMs: 0, promptMs, llmMs,
+        toolMs: Math.max(0, toolMs), deterministicMs: 0, mode, modelCalls,
+      },
+    };
   }
+
+  /** Non-streaming JSON path (WebSocket + back-compat). */
+  private async handleChat(userMessage: string, signal?: AbortSignal): Promise<ChatResponse> {
+    return this.executeTurn(userMessage, { signal });
+  }
+
+  /**
+   * Streaming SSE path. Returns text/event-stream. Streams ONLY user-visible
+   * assistant text (never tool JSON / chain-of-thought). For the agentic path
+   * the tool loop runs non-streaming, then the final answer is emitted as a
+   * single text event so the browser can begin TTS immediately.
+   */
+  private async streamTurn(userMessage: string, signal?: AbortSignal): Promise<Response> {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start: async (controller) => {
+        const send = (obj: Record<string, unknown>) => {
+          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
+        };
+        try {
+          const tEnter = Date.now();
+          const result = await this.executeTurn(userMessage, {
+            signal,
+            onDelta: (text) => send({ type: "text", text }),
+          });
+          send({
+            type: "done",
+            content: result.content,
+            model: result.model,
+            usage: result.usage ?? null,
+            role: this.state.role,
+            timing: result.timing ?? { totalMs: Date.now() - tEnter, authMs: 0, doMs: 0, promptMs: 0, llmMs: 0, toolMs: 0, deterministicMs: 0, mode: "conversational", modelCalls: 1 },
+          });
+        } catch (err) {
+          if ((err as Error).name === "AbortError") {
+            send({ type: "aborted" });
+          } else {
+            send({ type: "error", error: (err as Error).message ?? "stream failed" });
+          }
+        } finally {
+          try { controller.close(); } catch { /* already closed */ }
+        }
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }
+
 
   /**
    * Generate the daily owner operations briefing by running the SAME agent

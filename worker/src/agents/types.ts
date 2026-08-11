@@ -65,6 +65,22 @@ export interface TallaAgentState {
   pendingFoodOrder: { menuItemId: string; quantity: number; specialInstructions?: string }[] | null;
 }
 
+// Real latency telemetry for a single /api/talla/chat turn. Safe to return to
+// the browser: no secrets, no chain-of-thought, no prompt contents.
+export interface TurnTiming {
+  totalMs: number;
+  authMs: number;
+  doMs: number;
+  promptMs: number;
+  llmMs: number;
+  toolMs: number;
+  deterministicMs: number;
+  mode: "deterministic" | "conversational" | "agentic";
+  // Number of OpenRouter model calls this turn consumed. Conversational fast
+  // path must be exactly 1; agentic path may be several (tool loop).
+  modelCalls: number;
+}
+
 export interface OpenRouterResponse {
   id: string;
   choices: Array<{
