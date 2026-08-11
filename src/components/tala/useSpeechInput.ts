@@ -40,18 +40,23 @@ export interface UseSpeechInput {
   transcript: string;
   /** Human-readable error (e.g. mic permission denied) or null when healthy. */
   error: string | null;
-  /** Device-measured time from mic start → final transcript (ms), or null. */
+  /** Device-measured time from mic start → usable transcript (ms), or null. */
   lastRecognitionMs: number | null;
   start: () => void;
   stop: () => void;
+  abort: () => void;
 }
 
 /**
- * @param onFinal called with the finished utterance when the visitor stops
- *                speaking — the widget sends it to TALA automatically.
- * @param onSpeechStart fired on the FIRST recognized sound of an utterance
- *                (interim or final). The widget uses it for barge-in so TALA
- *                goes quiet the instant the guest starts speaking.
+ * Mobile WebKit/Chrome can end recognition after emitting only interim text.
+ * We therefore retain the latest usable transcript and finalize it on `onend`
+ * when no final result was emitted. This prevents the common mobile failure
+ * where the guest sees their words appear and then TALA silently discards them.
+ *
+ * @param onFinal called once with the finished utterance.
+ * @param onSpeechStart called on the first non-empty recognition result. TALA
+ *        uses this for true barge-in so current speech stops as soon as the
+ *        guest actually begins talking, not only when the mic button is tapped.
  */
 export function useSpeechInput(
   onFinal: (text: string) => void,
@@ -62,75 +67,130 @@ export function useSpeechInput(
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lastRecognitionMs, setLastRecognitionMs] = useState<number | null>(null);
+
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const finalRef = useRef("");
+  const latestTranscriptRef = useRef("");
   const startedAtRef = useRef(0);
+  const listeningRef = useRef(false);
+  const sessionRef = useRef(0);
+  const speechStartedRef = useRef(false);
+  const suppressFinalizeRef = useRef(false);
   const onFinalRef = useRef(onFinal);
-  onFinalRef.current = onFinal;
   const onSpeechStartRef = useRef(onSpeechStart);
+  onFinalRef.current = onFinal;
   onSpeechStartRef.current = onSpeechStart;
-  const spokeRef = useRef(false);
 
   useEffect(() => {
     setSupported(getRecognizer() !== null);
   }, []);
 
+  const abort = useCallback(() => {
+    sessionRef.current += 1;
+    suppressFinalizeRef.current = true;
+    listeningRef.current = false;
+    const rec = recRef.current;
+    recRef.current = null;
+    try {
+      rec?.abort();
+    } catch {
+      /* already ended */
+    }
+    finalRef.current = "";
+    latestTranscriptRef.current = "";
+    setTranscript("");
+    setListening(false);
+  }, []);
+
   const stop = useCallback(() => {
-    recRef.current?.stop();
+    const rec = recRef.current;
+    if (!rec || !listeningRef.current) return;
+    try {
+      rec.stop();
+    } catch {
+      listeningRef.current = false;
+      setListening(false);
+    }
   }, []);
 
   const start = useCallback(() => {
-    if (listening) return;
+    if (listeningRef.current) return;
+
+    if (recRef.current) {
+      try {
+        recRef.current.abort();
+      } catch {
+        /* already ended */
+      }
+      recRef.current = null;
+    }
+
     const rec = getRecognizer();
-    if (!rec) return;
+    if (!rec) {
+      setSupported(false);
+      return;
+    }
+
+    const session = ++sessionRef.current;
     recRef.current = rec;
     finalRef.current = "";
-    spokeRef.current = false;
+    latestTranscriptRef.current = "";
+    speechStartedRef.current = false;
+    suppressFinalizeRef.current = false;
     setTranscript("");
     setError(null);
-    rec.lang = "en-PH"; // English with Filipino accent support; falls back to en-US
+
+    rec.lang = "en-PH";
     rec.continuous = false;
     rec.interimResults = true;
 
     rec.onresult = (event) => {
-      // Barge-in: the guest is speaking — silence TALA immediately, without
-      // waiting for the utterance to finish.
-      if (!spokeRef.current) {
-        spokeRef.current = true;
-        onSpeechStartRef.current?.();
-      }
+      if (session !== sessionRef.current) return;
+
       let interim = "";
       let gotFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+        const piece = result[0]?.transcript ?? "";
         if (result.isFinal) {
-          finalRef.current += result[0].transcript;
+          finalRef.current += piece;
           gotFinal = true;
-        } else interim += result[0].transcript;
+        } else {
+          interim += piece;
+        }
       }
-      setTranscript((finalRef.current + interim).trim());
-      // Chrome's non-continuous recognizer doesn't end on the first final
-      // result — it waits out its own ~1-1.5s internal silence timer first.
-      // Stopping as soon as we have a final result removes that dead air.
-      if (gotFinal) rec.stop();
-    };
-    rec.onend = () => {
-      setListening(false);
-      const text = finalRef.current.trim();
-      setTranscript("");
-      if (text) {
-        const ms = Math.round(performance.now() - startedAtRef.current);
-        console.debug(`[TALA] speech → transcript in ${ms}ms`, text.slice(0, 60));
-        setLastRecognitionMs(ms);
-        onFinalRef.current(text);
+
+      const latest = (finalRef.current + interim).trim();
+      latestTranscriptRef.current = latest;
+      setTranscript(latest);
+
+      if (latest && !speechStartedRef.current) {
+        speechStartedRef.current = true;
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+        onSpeechStartRef.current?.();
+      }
+
+      if (gotFinal) {
+        try {
+          rec.stop();
+        } catch {
+          /* recognizer already ending */
+        }
       }
     };
+
     rec.onerror = (event) => {
-      // "no-speech" → idle quietly. Permission problems get real feedback so
-      // the guest knows the mic isn't just broken.
+      if (session !== sessionRef.current) return;
       const err = event?.error;
+      listeningRef.current = false;
       setListening(false);
-      setTranscript("");
+
+      if (err === "not-allowed" || err === "service-not-allowed" || err === "network" || err === "aborted") {
+        suppressFinalizeRef.current = true;
+      }
+
       if (err === "not-allowed" || err === "service-not-allowed") {
         setError("Microphone access was denied. Enable it in your browser settings to speak to TALA.");
       } else if (err === "network") {
@@ -140,17 +200,43 @@ export function useSpeechInput(
       }
     };
 
+    rec.onend = () => {
+      if (session !== sessionRef.current) return;
+
+      listeningRef.current = false;
+      recRef.current = null;
+      setListening(false);
+
+      const text = suppressFinalizeRef.current
+        ? ""
+        : (finalRef.current.trim() || latestTranscriptRef.current.trim());
+
+      finalRef.current = "";
+      latestTranscriptRef.current = "";
+      setTranscript("");
+
+      if (text) {
+        const ms = Math.round(performance.now() - startedAtRef.current);
+        console.debug(`[TALA] speech → transcript in ${ms}ms`, text.slice(0, 60));
+        setLastRecognitionMs(ms);
+        onFinalRef.current(text);
+      }
+    };
+
     try {
-      rec.start();
+      listeningRef.current = true;
       startedAtRef.current = performance.now();
+      rec.start();
       setListening(true);
     } catch {
+      listeningRef.current = false;
+      recRef.current = null;
       setListening(false);
       setError("Could not start the microphone. Please try again.");
     }
-  }, [listening]);
+  }, []);
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  useEffect(() => abort, [abort]);
 
-  return { supported, listening, transcript, error, lastRecognitionMs, start, stop };
+  return { supported, listening, transcript, error, lastRecognitionMs, start, stop, abort };
 }
