@@ -250,6 +250,8 @@ export interface RequestDayPassInput {
   guestEmail: string;
   guestPhone: string;
   day: string; // ISO YYYY-MM-DD
+  guests?: number; // people on the pass (>= 1)
+  notes?: string; // arrival time, allergies, dietary needs, food add-on fallback
 }
 
 export async function requestDayPass(
@@ -259,13 +261,18 @@ export async function requestDayPass(
   const day = input.day.slice(0, 10);
   const { addDays } = await import("./talaDate");
   const next = addDays(day, 1);
+  const guests = Math.max(1, Math.floor(input.guests ?? 1));
+  const notes = (input.notes || "").trim();
   const text = [
-    `I'd like to book a Workspace Day Pass on ${day} for 1 guest.`,
+    `I'd like to book a Workspace Day Pass on ${day} for ${guests} guest${guests > 1 ? "s" : ""}.`,
     `My name is ${input.guestName}.`,
     `My email is ${input.guestEmail}.`,
     `My WhatsApp/mobile number is ${input.guestPhone}.`,
     `Check-in ${day}, check-out ${next} (single day pass).`,
-  ].join(" ");
+    notes ? `Additional requests: ${notes}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const reply = await askCloudflareAgent([{ role: "user", content: text }], preferredModel);
   const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
   return { content: reply.content || "", reference: match ? match[0] : null };
@@ -288,6 +295,8 @@ export interface UseTalaChat {
   pendingDraft: BookingDraft | null;
   /** Classification + tools from the most recent completed turn (agent-graph telemetry). */
   lastRun: TalaRunInfo | null;
+  /** Device-measured round-trip of the most recent turn (send → final reply), in ms. */
+  lastTurn: { ms: number; text: string } | null;
   send: (
     text: string,
     systemPrompt: string,
@@ -327,6 +336,7 @@ export function useTalaChat(): UseTalaChat {
   const [error, setError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<TalaRunInfo | null>(null);
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
+  const [lastTurn, setLastTurn] = useState<{ ms: number; text: string } | null>(null);
   const inFlight = useRef(false);
   // Use the shared CMS store so owner-mode writes persist exactly like the
   // admin managers do (through CmsContext -> cms_data).
@@ -349,6 +359,7 @@ export function useTalaChat(): UseTalaChat {
       inFlight.current = true;
       setError(null);
       setThinking(true);
+      const turnStart = performance.now();
 
       const preferredModel = options?.model;
       const userMsg: TalaMessage = { id: newId(), role: "user", content: trimmed };
@@ -479,6 +490,10 @@ export function useTalaChat(): UseTalaChat {
           sentiment: sentiment.sentiment,
         });
 
+        const turnMs = Math.round(performance.now() - turnStart);
+        console.debug(`[TALA] reply round-trip ${turnMs}ms`, finalText.slice(0, 60));
+        setLastTurn({ ms: turnMs, text: finalText.slice(0, 80) });
+
         return finalText;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Something went wrong.";
@@ -497,6 +512,7 @@ export function useTalaChat(): UseTalaChat {
     setMessages([]);
     setError(null);
     setLastRun(null);
+    setLastTurn(null);
     setPendingDraft(null);
   }, []);
 
@@ -526,5 +542,5 @@ export function useTalaChat(): UseTalaChat {
     [pendingDraft, persistCms],
   );
 
-  return { messages, thinking, error, lastRun, send, reset, clearDraft, pendingDraft, confirmDraft };
+  return { messages, thinking, error, lastRun, lastTurn, send, reset, clearDraft, pendingDraft, confirmDraft };
 }

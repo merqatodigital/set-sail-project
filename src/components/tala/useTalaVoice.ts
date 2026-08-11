@@ -206,6 +206,8 @@ export interface UseTalaVoice {
   status: TalaVoiceStatus;
   /** 0–100 while the Kokoro model downloads; null when not loading. */
   loadProgress: number | null;
+  /** Device-measured time from speak() → first audio actually playing (ms), or null. */
+  lastTtsMs: number | null;
   voiceId: string;
   setVoiceId: (id: string) => void;
   speak: (text: string) => void;
@@ -268,6 +270,9 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
   const [engine, setEngine] = useState<TalaVoiceEngine>("none");
   const [status, setStatus] = useState<TalaVoiceStatus>("idle");
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const [lastTtsMs, setLastTtsMs] = useState<number | null>(null);
+  const speakStartRef = useRef(0);
+  const firstPlayedRef = useRef(false);
   const [voiceId, setVoiceIdState] = useState<string>(() => {
     // On the public site (ignoreLocalVoice), the owner's Admin-selected voice
     // is the single source of truth — never a visitor's stale localStorage pick.
@@ -377,6 +382,16 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       window.speechSynthesis.cancel();
     }
     setStatus((s) => (s === "speaking" ? "idle" : s));
+  }, []);
+
+  // Latency probe: first real audio playback since the reply was handed to
+  // speak(). Only fires once per utterance (speak() resets the flag).
+  const noteFirstPlayback = useCallback(() => {
+    if (firstPlayedRef.current) return;
+    firstPlayedRef.current = true;
+    const ms = Math.round(performance.now() - speakStartRef.current);
+    console.debug(`[TALA] reply → first audio in ${ms}ms`);
+    setLastTtsMs(ms);
   }, []);
 
   // Kick off the Kokoro download in the background as soon as voice is on —
@@ -510,6 +525,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
           audioRef.current = el;
           el.onended = () => resolve();
           el.onerror = () => resolve();
+          noteFirstPlayback();
           el.play().catch(() => resolve());
         });
         URL.revokeObjectURL(url);
@@ -591,6 +607,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
             audioRef.current = el;
             el.onended = () => resolve();
             el.onerror = () => resolve();
+            noteFirstPlayback();
             el.play().catch(() => resolve());
           });
           URL.revokeObjectURL(url);
@@ -625,6 +642,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
           utter.pitch = 1.05;
           utter.onend = () => resolve();
           utter.onerror = () => resolve();
+          noteFirstPlayback();
           window.speechSynthesis.speak(utter);
         });
       }
@@ -644,6 +662,8 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
       const chunks = splitSentences(text);
       if (!chunks.length) return;
       stop();
+      speakStartRef.current = performance.now();
+      firstPlayedRef.current = false;
       queueRef.current = chunks;
       // On mobile, skip Kokoro wait logic entirely — go straight to browser TTS.
       // The Kokoro model never loads on mobile (see effect above), so there's
@@ -741,6 +761,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     engine: provider === "openrouter" ? "openrouter" : engine,
     status,
     loadProgress: provider === "openrouter" ? null : loadProgress,
+    lastTtsMs,
     voiceId,
     setVoiceId,
     speak,

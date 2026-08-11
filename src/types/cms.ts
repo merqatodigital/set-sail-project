@@ -406,6 +406,18 @@ export interface FinancialSettings {
   dailyLaborCost: number; // PHP per day — staff wages + utilities
   monthlyUtilities: number; // PHP — electricity, water, internet estimate
   defaultCurrency: string; // "PHP"
+  /**
+   * Authoritative numeric Day Pass price (PHP/day), shared by the Day Pass
+   * form and the guest folio so both always quote the same total. Defaults to
+   * 1040 and mirrors the "Day Pass" row in cms.pricing ("₱1,040").
+   */
+  dayPassPrice: number;
+  /**
+   * Optional service/convenience fee on the guest folio, as a percent of the
+   * folio subtotal. 0 = none. This is the ONLY tax/fee source — if no fee is
+   * configured the guest bill shows "Taxes & Fees ₱0" from this value.
+   */
+  folioServiceFeePercent: number;
 }
 
 export interface SiteSettings {

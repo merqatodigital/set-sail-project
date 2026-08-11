@@ -1,9 +1,13 @@
 import { useMemo } from "react";
 import type { Booking, TourBooking, MotorbikeRental, FoodOrder, Payment } from "@/types/cms";
+import { useCms } from "@/context/CmsContext";
 import CheckoutStub from "./CheckoutStub";
 
 // ---------------------------------------------------------------------------
 // View Bill — aggregated charges and payments for the guest.
+// Reconstructed from backend records ONLY (bookings / tour / rental / food
+// orders / folio lines), plus the site's configured Day Pass price and folio
+// fee — so the total always mirrors what the Day Pass form quotes.
 // ---------------------------------------------------------------------------
 
 const GOLD = "#C6A15B";
@@ -29,13 +33,17 @@ function matchGuest(
 }
 
 function matchBooking(
-  record: { guestName: string; notes?: string },
+  record: { guestName: string; guestPhone?: string; notes?: string },
   guest: { phone: string; name: string },
 ): boolean {
+  // Day Pass requests carry guest_phone as a real column (worker path), so
+  // compare it directly first; blob demo rows store it in notes.
+  const colPhoneMatch =
+    !!record.guestPhone && record.guestPhone.replace(/\s/g, "") === guest.phone.replace(/\s/g, "");
   const phoneFromNotes = record.notes?.match(/Phone:\s*(.+)/i)?.[1]?.replace(/\s/g, "") || "";
-  const phoneMatch = phoneFromNotes === guest.phone.replace(/\s/g, "");
+  const notesPhoneMatch = !!phoneFromNotes && phoneFromNotes === guest.phone.replace(/\s/g, "");
   const nameMatch = record.guestName.toLowerCase() === guest.name.toLowerCase();
-  return phoneMatch || nameMatch;
+  return colPhoneMatch || notesPhoneMatch || nameMatch;
 }
 
 export default function ViewBill({
@@ -51,6 +59,27 @@ export default function ViewBill({
     () => bookings.filter((b) => matchBooking(b, guest)),
     [bookings, guest],
   );
+
+  // Day Pass rows are a distinct product line in the folio — shown on their
+  // own line, with the amount derived from the configured Day Pass price
+  // whenever the backend row doesn't carry an amount (the worker writes
+  // amount=0; the authoritative rate lives in settings.financial.dayPassPrice).
+  const dayPassBookings = useMemo(
+    () => myBookings.filter((b) => /day ?pass/i.test(b.roomType)),
+    [myBookings],
+  );
+  const otherBookings = useMemo(
+    () => myBookings.filter((b) => !/day ?pass/i.test(b.roomType)),
+    [myBookings],
+  );
+
+  const { data: cms } = useCms();
+  const financial = cms?.settings?.financial;
+  const dayPassPrice =
+    typeof financial?.dayPassPrice === "number" && financial.dayPassPrice > 0
+      ? financial.dayPassPrice
+      : 1040;
+  const serviceFeePercent = financial?.folioServiceFeePercent || 0;
 
   const myTours = useMemo(
     () => tourBookings.filter((b) => matchGuest(b, guest)),
@@ -79,11 +108,26 @@ export default function ViewBill({
     );
   }, [payments, myBookings, myTours, myRentals, myFoodOrders, guest]);
 
-  const totalCharges =
-    myBookings.reduce((s, b) => s + b.amount, 0) +
-    myTours.reduce((s, t) => s + t.amount, 0) +
-    myRentals.reduce((s, r) => s + r.amount, 0) +
-    myFoodOrders.reduce((s, f) => s + f.total, 0);
+  const dayPassCharge = useMemo(
+    () =>
+      dayPassBookings.reduce(
+        (s, b) => s + (b.amount > 0 ? b.amount : dayPassPrice * Math.max(1, b.guests || 1)),
+        0,
+      ),
+    [dayPassBookings, dayPassPrice],
+  );
+  const otherBookingsCharge = useMemo(
+    () => otherBookings.reduce((s, b) => s + b.amount, 0),
+    [otherBookings],
+  );
+  const toursCharge = useMemo(() => myTours.reduce((s, t) => s + t.amount, 0), [myTours]);
+  const rentalsCharge = useMemo(() => myRentals.reduce((s, r) => s + r.amount, 0), [myRentals]);
+  const foodCharge = useMemo(() => myFoodOrders.reduce((s, f) => s + f.total, 0), [myFoodOrders]);
+
+  const subtotal = dayPassCharge + otherBookingsCharge + toursCharge + rentalsCharge + foodCharge;
+  // Configured folio fee (percent of subtotal) — 0 until set in Admin.
+  const serviceFee = Math.round(subtotal * serviceFeePercent) / 100;
+  const totalCharges = subtotal + serviceFee;
 
   const totalPaid = myPayments
     .filter((p) => p.direction === "in")
@@ -109,25 +153,39 @@ export default function ViewBill({
       <div className="rounded-xl p-4 shadow-lg sm:rounded-2xl sm:p-5" style={{ backgroundColor: DARK_CARD }}>
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
+            <span className="opacity-50">Day Pass</span>
+            <span>{fmt(dayPassCharge)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
             <span className="opacity-50">Room Bookings</span>
-            <span>{fmt(myBookings.reduce((s, b) => s + b.amount, 0))}</span>
+            <span>{fmt(otherBookingsCharge)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="opacity-50">Tours</span>
-            <span>{fmt(myTours.reduce((s, t) => s + t.amount, 0))}</span>
+            <span>{fmt(toursCharge)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="opacity-50">Motorbike Rentals</span>
-            <span>{fmt(myRentals.reduce((s, r) => s + r.amount, 0))}</span>
+            <span>{fmt(rentalsCharge)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="opacity-50">Food & Drinks</span>
-            <span>{fmt(myFoodOrders.reduce((s, f) => s + f.total, 0))}</span>
+            <span>{fmt(foodCharge)}</span>
           </div>
           <div className="border-t pt-3" style={{ borderColor: `${GOLD}22` }}>
             <div className="flex justify-between text-sm">
-              <span className="opacity-50">Total Charges</span>
-              <span className="font-semibold">{fmt(totalCharges)}</span>
+              <span className="opacity-50">Subtotal</span>
+              <span>{fmt(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="opacity-50">
+                Taxes & Fees{serviceFeePercent > 0 ? ` (${serviceFeePercent}%)` : ""}
+              </span>
+              <span className={serviceFee > 0 ? "" : "opacity-50"}>{fmt(serviceFee)}</span>
+            </div>
+            <div className="mt-1 flex justify-between text-sm font-semibold">
+              <span>Total Charges</span>
+              <span>{fmt(totalCharges)}</span>
             </div>
           </div>
           <div className="flex justify-between text-sm">
@@ -143,12 +201,32 @@ export default function ViewBill({
         </div>
       </div>
 
+      {/* Breakdown: Day Pass */}
+      {dayPassBookings.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm uppercase tracking-wide opacity-50">Day Pass</h2>
+          <div className="space-y-2">
+            {dayPassBookings.map((b) => (
+              <div key={b.id} className="flex items-center justify-between rounded-xl p-4" style={{ backgroundColor: DARK_CARD }}>
+                <div>
+                  <p className="text-sm font-medium">{b.roomType}</p>
+                  <p className="text-xs opacity-40">{b.checkIn} · {Math.max(1, b.guests || 1)} pax</p>
+                </div>
+                <span className="text-sm font-semibold" style={{ color: GOLD }}>
+                  {fmt(b.amount > 0 ? b.amount : dayPassPrice * Math.max(1, b.guests || 1))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Breakdown: Room Bookings */}
-      {myBookings.length > 0 && (
+      {otherBookings.length > 0 && (
         <div>
           <h2 className="mb-2 text-sm uppercase tracking-wide opacity-50">Room Bookings</h2>
           <div className="space-y-2">
-            {myBookings.map((b) => (
+            {otherBookings.map((b) => (
               <div key={b.id} className="flex items-center justify-between rounded-xl p-4" style={{ backgroundColor: DARK_CARD }}>
                 <div>
                   <p className="text-sm font-medium">{b.roomType}</p>

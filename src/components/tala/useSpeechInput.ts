@@ -40,6 +40,8 @@ export interface UseSpeechInput {
   transcript: string;
   /** Human-readable error (e.g. mic permission denied) or null when healthy. */
   error: string | null;
+  /** Device-measured time from mic start → final transcript (ms), or null. */
+  lastRecognitionMs: number | null;
   start: () => void;
   stop: () => void;
 }
@@ -53,8 +55,10 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [lastRecognitionMs, setLastRecognitionMs] = useState<number | null>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const finalRef = useRef("");
+  const startedAtRef = useRef(0);
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
 
@@ -98,7 +102,12 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
       setListening(false);
       const text = finalRef.current.trim();
       setTranscript("");
-      if (text) onFinalRef.current(text);
+      if (text) {
+        const ms = Math.round(performance.now() - startedAtRef.current);
+        console.debug(`[TALA] speech → transcript in ${ms}ms`, text.slice(0, 60));
+        setLastRecognitionMs(ms);
+        onFinalRef.current(text);
+      }
     };
     rec.onerror = (event) => {
       // "no-speech" → idle quietly. Permission problems get real feedback so
@@ -117,6 +126,7 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
 
     try {
       rec.start();
+      startedAtRef.current = performance.now();
       setListening(true);
     } catch {
       setListening(false);
@@ -126,5 +136,5 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
 
   useEffect(() => () => recRef.current?.abort(), []);
 
-  return { supported, listening, transcript, error, start, stop };
+  return { supported, listening, transcript, error, lastRecognitionMs, start, stop };
 }

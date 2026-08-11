@@ -705,6 +705,8 @@ export function buildDefaultData(): CmsData {
         dailyLaborCost: 1550, // IT ₱750 + 2 Housekeeping ₱800
         monthlyUtilities: 31000, // utilities ₱25,000 + maintenance ₱6,000
         defaultCurrency: "PHP",
+        dayPassPrice: 1040, // matches the "Day Pass" pricing row (₱1,040/day)
+        folioServiceFeePercent: 0, // no folio fee configured — guest bill shows it as ₱0
       },
     },
     media: buildDefaultMedia(),

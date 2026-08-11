@@ -298,6 +298,34 @@ export function TalaWidget() {
                 className="mb-3 w-full rounded-md border bg-white px-2 py-1.5"
                 style={{ borderColor: `${GOLD}55` }}
               />
+              <div
+                className="mb-3 rounded-md border px-2.5 py-2"
+                style={{ borderColor: `${GOLD}33`, backgroundColor: `${GOLD}08` }}
+              >
+                <p className="mb-1 font-medium">Latency (this session, device-measured)</p>
+                <dl className="space-y-1 text-[11px] opacity-80">
+                  <div className="flex justify-between">
+                    <dt>Voice → transcript</dt>
+                    <dd className="font-mono">
+                      {speech.lastRecognitionMs != null ? `${speech.lastRecognitionMs} ms` : "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt>TALA reply round-trip</dt>
+                    <dd className="font-mono">
+                      {chat.lastTurn ? `${chat.lastTurn.ms} ms` : "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt>Reply → first audio</dt>
+                    <dd className="font-mono">{voice.lastTtsMs != null ? `${voice.lastTtsMs} ms` : "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt>Voice engine</dt>
+                    <dd className="font-mono">{voice.engine}</dd>
+                  </div>
+                </dl>
+              </div>
               <button
                 onClick={() => {
                   voice.stop();
