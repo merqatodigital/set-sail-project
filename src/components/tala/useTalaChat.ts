@@ -72,36 +72,46 @@ export function getGuestSessionId(): string {
  *
  *   browser -> ${VITE_TALA_WORKER_URL}/api/talla/chat -> TallaAgent DO -> tools
  *
- * The Worker runs the full LLM + tool loop server-side and returns only the
- * final text, so no tool_calls come back to the browser. For owner mode we
+ * The Worker runs the full prompt build + LLM + tool loop server-side, so the
+ * browser sends ONLY the guest's text and renders what streams back. There is
+ * no browser-side prompt, tool loop, or context injection. For owner mode we
  * forward the existing Supabase access token; the Worker — not the `role`
  * field — decides whether the caller actually gets owner privileges.
+ *
+ * When `onDelta` is provided the Worker's SSE endpoint is used so text appears
+ * as it is generated; otherwise a single buffered call is made.
  */
 async function askCloudflareAgent(
-  messages: WireMessage[],
-  preferredModel?: string,
-  owner?: boolean,
+  text: string,
+  opts?: {
+    model?: string;
+    owner?: boolean;
+    signal?: AbortSignal;
+    onDelta?: (delta: string) => void;
+  },
 ): Promise<AssistantReply> {
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const text = lastUser?.content || "";
   if (!text.trim()) throw new Error("Empty message.");
   let authToken: string | undefined;
   let userId = getGuestSessionId();
-  if (owner) {
+  if (opts?.owner) {
     const [token, ownerId] = await Promise.all([talaOwnerToken(), talaOwnerUserId()]);
     authToken = token || undefined;
     if (ownerId) userId = ownerId;
   }
-  const result = await talaChat({
+  const payload = {
     message: text,
-    role: owner ? "owner" : "guest",
+    role: (opts?.owner ? "owner" : "guest") as "owner" | "guest",
     userId,
-    model: preferredModel,
+    model: opts?.model,
     authToken,
-  });
+    signal: opts?.signal,
+  };
+  const result = opts?.onDelta
+    ? await talaChatStream(payload, opts.onDelta)
+    : await talaChat(payload);
   const content = result.content?.trim() || "";
   if (!content) throw new Error("TALA returned an empty reply.");
-  return { content, tool_calls: undefined };
+  return { content, timing: result.timing };
 }
 
 
@@ -143,7 +153,7 @@ export async function requestDayPass(
   ]
     .filter(Boolean)
     .join(" ");
-  const reply = await askCloudflareAgent([{ role: "user", content: text }], preferredModel);
+  const reply = await askCloudflareAgent(text, { model: preferredModel });
   const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
   return { content: reply.content || "", reference: match ? match[0] : null };
 }
