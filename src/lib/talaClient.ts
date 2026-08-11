@@ -108,21 +108,31 @@ export async function talaChatStream(
     Accept: "text/event-stream",
   };
   if (input.authToken) headers.Authorization = `Bearer ${input.authToken}`;
-  const res = await fetch(`${base}/api/talla/chat`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      message: input.message,
-      tenantId: input.tenantId ?? TALA_TENANT,
-      role: input.role ?? "guest",
-      userId: input.userId,
-      model: input.model || undefined,
-      guestName: input.guestName,
-      guestRoom: input.guestRoom,
-      stream: true,
-    }),
-    signal: input.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/talla/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: input.message,
+        tenantId: input.tenantId ?? TALA_TENANT,
+        role: input.role ?? "guest",
+        userId: input.userId,
+        model: input.model || undefined,
+        guestName: input.guestName,
+        guestRoom: input.guestRoom,
+        stream: true,
+      }),
+      signal: input.signal,
+    });
+  } catch (e) {
+    // A user cancel must stay a cancel; anything else (network/CORS on a Worker
+    // deployment that predates streaming) degrades to the buffered call so TALA
+    // still answers.
+    if ((e as Error)?.name === "AbortError") throw e;
+    console.warn("[TALA] streaming unavailable, using buffered reply.", e);
+    return talaChat(input);
+  }
 
   const ctype = res.headers.get("Content-Type") || "";
   if (!res.ok || !res.body || !ctype.includes("text/event-stream")) {
