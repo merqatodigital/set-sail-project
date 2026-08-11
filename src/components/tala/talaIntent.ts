@@ -50,3 +50,27 @@ export function normalizeIntent(input: string | TalaIntentPayload | undefined): 
     context: input.context ?? {},
   };
 }
+
+/**
+ * Message a CTA sends when it already knows the guest's goal but didn't pass
+ * copy of its own. Keeps transactional CTAs from opening a vague generic chat.
+ */
+export function intentMessage(intent: TalaIntentPayload): string | undefined {
+  if (intent.message?.trim()) return intent.message.trim();
+  const c = intent.context ?? {};
+  switch (intent.kind) {
+    case "room_booking": {
+      const room = c.roomType ? ` ${c.roomType}` : " a stay";
+      const dates = c.checkIn && c.checkOut ? ` from ${c.checkIn} to ${c.checkOut}` : "";
+      const guests = c.guests ? ` for ${c.guests} guest(s)` : "";
+      return `Hi TALA! I'd like to check availability and book${room}${dates}${guests}.`;
+    }
+    case "package_booking":
+      return `Hi TALA! I'd like to book the ${c.packageName || "package"}.`;
+    case "workspace_day_pass":
+      return "Hi TALA! I'd like a Workspace Day Pass.";
+    case "general_help":
+    default:
+      return undefined;
+  }
+}
