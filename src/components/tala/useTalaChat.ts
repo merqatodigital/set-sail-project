@@ -5,10 +5,8 @@ import {
   type TalaMessage,
 } from "./talaConfig";
 import {
-  executeTalaTool,
   captureGuestLead,
   confirmBookingDraft,
-  type TalaToolContext,
 } from "./talaTools";
 import {
   classifyHeuristically,
@@ -18,27 +16,12 @@ import {
 import { detectSentiment, sentimentInstruction } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
-import { talaChat, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
-
-interface ToolCallWire {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-}
-
-interface WireMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
-  tool_calls?: ToolCallWire[];
-  tool_call_id?: string;
-}
+import { talaChat, talaChatStream, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
 
 interface AssistantReply {
   content: string | null;
-  tool_calls?: ToolCallWire[];
+  timing?: Record<string, number | string>;
 }
-
-const MAX_TOOL_HOPS = 3;
 
 function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
