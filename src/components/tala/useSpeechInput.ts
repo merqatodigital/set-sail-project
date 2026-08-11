@@ -110,8 +110,8 @@ export function useSpeechInput(
     try {
       rec.stop();
     } catch {
-      // If WebKit says the recognizer is no longer active, finalize through the
-      // normal state reset rather than leaving the mic visually stuck.
+      // If WebKit says the recognizer is no longer active, reset immediately so
+      // the mic cannot remain visually stuck.
       listeningRef.current = false;
       setListening(false);
     }
@@ -173,6 +173,12 @@ export function useSpeechInput(
 
       if (latest && !speechStartedRef.current) {
         speechStartedRef.current = true;
+        // Mobile TALA uses browser speech synthesis. Cancel it at the first
+        // actual recognition result as a second barge-in guard, even if the UI
+        // callback is not wired yet or the mic was started by another surface.
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
         onSpeechStartRef.current?.();
       }
 
