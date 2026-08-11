@@ -299,17 +299,7 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     provider === "openrouter"
       ? { apiKey: options!.apiKey!, model: options!.ttsModelId!, voice: options!.ttsVoiceId! }
       : null;
-  // While Kokoro is still downloading, hold speech instead of using the
-  // robotic browser fallback — that fallback is what "TALA sounds robotic"
-  // reports actually were. If the download outlasts the cap, speak anyway.
-  const pendingSpeakRef = useRef(false);
-  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playQueueRef = useRef<(() => Promise<void>) | null>(null);
-  // Was 45s — on a first-ever visit over a slow connection that's 45 seconds
-  // of the reply sitting silently on screen before anything is spoken.
-  // Silence reads as far more "broken" than a brief robotic-voice opener, so
-  // this now falls back to the browser voice much sooner.
-  const KOKORO_WAIT_CAP_MS = 3500;
   const voiceIdRef = useRef(voiceId);
   voiceIdRef.current = voiceId;
 
