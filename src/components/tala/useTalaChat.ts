@@ -218,6 +218,9 @@ export function useTalaChat(): UseTalaChat {
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const [lastTurn, setLastTurn] = useState<{ ms: number; text: string } | null>(null);
   const inFlight = useRef(false);
+  // Live stream of the current turn — aborted when a new turn starts or the
+  // conversation resets, so a stale reply can never overwrite a newer one.
+  const abortRef = useRef<AbortController | null>(null);
   // Use the shared CMS store so owner-mode writes persist exactly like the
   // admin managers do (through CmsContext -> cms_data).
   const { update: persistCms } = useCms();
