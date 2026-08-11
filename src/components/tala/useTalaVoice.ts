@@ -326,6 +326,40 @@ export function useTalaVoice(options?: UseTalaVoiceOptions): UseTalaVoice {
     }
   }, []);
 
+  // iOS/WebKit requires media to be started from a user gesture. TALA's
+  // replies are synthesized AFTER an async network round-trip, so by the time
+  // `new Audio(url).play()` runs it's outside the original tap and iOS silently
+  // rejects it — the `.catch(() => resolve())` swallowed that, which read as
+  // "TALA is silent on iPhone". Fix: on the FIRST user gesture (any tap/key),
+  // play a silent primer to unlock the audio pipeline. All later plays, even
+  // after awaits, then work on iOS. Harmless no-op elsewhere.
+  const unlockedRef = useRef(false);
+  useEffect(() => {
+    const unlock = () => {
+      if (unlockedRef.current) return;
+      unlockedRef.current = true;
+      try {
+        const primer = new Audio(
+          "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+        );
+        primer.volume = 0;
+        const play = primer.play().catch(() => {});
+        // Resume a suspended speechSynthesis context if the browser parked it.
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.resume();
+        }
+        void play;
+      } catch {
+        /* unlocking is best-effort */
+      }
+    };
+    const events = ["pointerdown", "keydown", "touchstart"] as const;
+    for (const ev of events) window.addEventListener(ev, unlock, { once: false, passive: true });
+    return () => {
+      for (const ev of events) window.removeEventListener(ev, unlock);
+    };
+  }, []);
+
   const stop = useCallback(() => {
     generationRef.current += 1;
     queueRef.current = [];

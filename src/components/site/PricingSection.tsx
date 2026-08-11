@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { getIcon } from "@/lib/icons";
-import { openTala } from "@/components/tala/talaOpen";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 import { Reveal } from "./Reveal";
 import { cn } from "@/utils/cn";
 
@@ -72,7 +72,11 @@ export function PricingSection() {
                 </ul>
                 <button
                   type="button"
-                  onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
+                  onClick={() =>
+                    /day ?pass/i.test(pkg.name)
+                      ? openTalaIntent("workspace_day_pass", { roomType: pkg.name })
+                      : openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} plan.`)
+                  }
                   className={cn(
                     "mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:mt-8 sm:h-12 sm:px-6 sm:text-sm",
                     pkg.featured
@@ -167,7 +171,7 @@ export function PricingSection() {
 
                     <button
                       type="button"
-                      onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
+                      onClick={() => openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} package.`)}
                       className={cn(
                         "mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:mt-8 sm:h-12 sm:px-6 sm:text-sm",
                         pkg.featured

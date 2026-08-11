@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Home, MessageCircle } from "lucide-react";
-import { openTala } from "@/components/tala/talaOpen";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 
 export default function NotFound() {
   return (
@@ -19,7 +19,7 @@ export default function NotFound() {
           Back to Home
         </Link>
         <button
-          onClick={() => openTala("I'm looking for something on the site")}
+          onClick={() => openTalaIntent("general_help", {}, "I'm looking for something on the site")}
           className="flex items-center gap-2 rounded-full border border-[#C6A15B]/30 px-5 py-2.5 text-sm font-medium text-[#C6A15B] transition-colors hover:bg-[#C6A15B]/10"
         >
           <MessageCircle className="h-4 w-4" />

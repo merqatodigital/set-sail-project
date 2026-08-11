@@ -3,7 +3,7 @@ import { Check, X } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { getIcon } from "@/lib/icons";
-import { openTala } from "@/components/tala/talaOpen";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 import { Reveal } from "./Reveal";
 import { cn } from "@/utils/cn";
 
@@ -93,7 +93,7 @@ export function PackagesSection() {
 
                 <button
                   type="button"
-                  onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
+                  onClick={() => openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} package.`)}
                   className={cn(
                     "mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:h-12 sm:px-6 sm:text-sm",
                     pkg.featured

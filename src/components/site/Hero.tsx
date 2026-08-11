@@ -3,6 +3,7 @@ import { MapPin, MessageCircle, CalendarCheck } from "lucide-react";
 import { useCms } from "@/context/CmsContext";
 import { safeHref } from "@/lib/security";
 import { getBackgroundEmbedUrl } from "@/lib/videoUtils";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 
 export function Hero() {
   const { data } = useCms();
@@ -118,7 +119,7 @@ export function Hero() {
             <span>{hero.primaryButtonLabel}</span>
           </button>
           <button
-            onClick={() => scrollTo(hero.secondaryButtonLink)}
+            onClick={() => openTalaIntent("workspace_day_pass", { roomType: "Day Pass" })}
             className="group inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/30 bg-white/5 px-5 text-[13px] font-medium tracking-wide text-white backdrop-blur-sm transition-all duration-200 hover:border-white/60 hover:bg-white/15 active:scale-[0.98] sm:h-12 sm:px-6 sm:text-sm"
           >
             <CalendarCheck className="h-4 w-4" />

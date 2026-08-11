@@ -1,5 +1,5 @@
 import { useCms } from "@/context/CmsContext";
-import { openTala } from "@/components/tala/talaOpen";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 import type { PackageItem } from "@/types/cms";
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ function PackageCard({ pkg }: { pkg: PackageItem }) {
 
       {/* CTA */}
       <button
-        onClick={() => openTala(`Hi TALA! I'd like to book the ${pkg.name} package.`)}
+        onClick={() => openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} package.`)}
         className="mt-4 w-full rounded-lg py-2.5 text-sm font-medium transition sm:mt-5 sm:py-3"
         style={{ backgroundColor: GOLD, color: "#1a1a2e" }}
       >

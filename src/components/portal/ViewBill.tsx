@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Booking, TourBooking, MotorbikeRental, FoodOrder, Payment } from "@/types/cms";
+import CheckoutStub from "./CheckoutStub";
 
 // ---------------------------------------------------------------------------
 // View Bill — aggregated charges and payments for the guest.
@@ -235,6 +236,9 @@ export default function ViewBill({
           </div>
         </div>
       )}
+
+      {/* Checkout */}
+      <CheckoutStub balance={balance} totalCharges={totalCharges} totalPaid={totalPaid} />
 
       {/* Empty state */}
       {totalCharges === 0 && (

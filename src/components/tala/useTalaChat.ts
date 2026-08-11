@@ -236,6 +236,42 @@ async function askCloudflareAgent(
 }
 
 /**
+ * Workspace Day Pass — a structured, single-purpose request sent to the SAME
+ * Cloudflare TallaAgent used by chat. The worker resolves it through
+ * requestRoomBooking (roomType "Day Pass", checkIn = the chosen day, checkOut =
+ * the next day, guests 1), which hard-enforces all required fields server-side,
+ * dedupes a pending request, and persists ONE row to tala_booking_requests
+ * (status pending, MT- reference). We never craft pricing client-side — the
+ * day pass price shown in the form comes from cms_data.pricing, and the worker
+ * ignores any guest-supplied amount.
+ */
+export interface RequestDayPassInput {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  day: string; // ISO YYYY-MM-DD
+}
+
+export async function requestDayPass(
+  input: RequestDayPassInput,
+  preferredModel?: string,
+): Promise<{ content: string; reference: string | null }> {
+  const day = input.day.slice(0, 10);
+  const { addDays } = await import("./talaDate");
+  const next = addDays(day, 1);
+  const text = [
+    `I'd like to book a Workspace Day Pass on ${day} for 1 guest.`,
+    `My name is ${input.guestName}.`,
+    `My email is ${input.guestEmail}.`,
+    `My WhatsApp/mobile number is ${input.guestPhone}.`,
+    `Check-in ${day}, check-out ${next} (single day pass).`,
+  ].join(" ");
+  const reply = await askCloudflareAgent([{ role: "user", content: text }], preferredModel);
+  const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
+  return { content: reply.content || "", reference: match ? match[0] : null };
+}
+
+/**
  * Classify node of the agent graph — uses deterministic keyword rules only.
  * No extra LLM call needed. Fast, free, and reliable.
  */

@@ -21,6 +21,8 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
+import { normalizeIntent, type TalaIntentPayload } from "./talaIntent";
+import { DayPassForm } from "./DayPassForm";
 import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ export function TalaWidget() {
   const [devKey, setDevKeyState] = useState("");
   const [proactiveMessages, setProactiveMessages] = useState<ProactiveMessage[]>([]);
   const [showProactive, setShowProactive] = useState(false);
+  const [intent, setIntent] = useState<TalaIntentPayload | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +79,7 @@ export function TalaWidget() {
     const trimmed = text.trim();
     if (!trimmed || chat.thinking) return;
     setInput("");
+    setIntent(null);
     voice.stop();
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
@@ -85,8 +89,16 @@ export function TalaWidget() {
   };
 
   const openAndPrefill = useCallback(
-    (message?: string) => {
+    (message?: string, intentPayload?: TalaIntentPayload | null) => {
       setOpen(true);
+      const normalized = normalizeIntent(intentPayload ?? undefined) ?? (message ? normalizeIntent(message) : null);
+      if (normalized?.kind === "workspace_day_pass") {
+        // Structured flow: open straight into the Day Pass form, no free chat.
+        setIntent({ kind: "workspace_day_pass", message: normalized.message });
+        setShowSettings(false);
+        return;
+      }
+      setIntent(null);
       if (message && message.trim()) {
         // Seed the input and send immediately so TALA responds to the intent.
         void submit(message);
@@ -208,6 +220,8 @@ export function TalaWidget() {
             <button
               onClick={() => {
                 voice.stop();
+                speech.stop();
+                setIntent(null);
                 setOpen(false);
               }}
               aria-label="Close TALA"
@@ -300,7 +314,11 @@ export function TalaWidget() {
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            <Bubble role="assistant" text={greeting} />
+            {intent?.kind === "workspace_day_pass" ? (
+              <DayPassForm cms={data} />
+            ) : (
+              <Bubble role="assistant" text={greeting} />
+            )}
 
             {/* Proactive messages — notifications TALA generated for the guest */}
             {showProactive && proactiveMessages.length > 0 && (
@@ -367,6 +385,24 @@ export function TalaWidget() {
               {chat.error ? "TALA hit a snag — message us on WhatsApp" : "Prefer a human? Message us on WhatsApp"}
             </a>
           </div>
+
+          {/* Speech permission / mic errors */}
+          {speech.error && !speech.listening && (
+            <div
+              className="flex items-start justify-between gap-2 border-t px-4 py-2 text-[11px]"
+              style={{ borderColor: `${GOLD}33`, backgroundColor: "#FBEFEC", color: "#8C3B32" }}
+            >
+              <span className="flex-1">{speech.error}</span>
+              <button
+                type="button"
+                onClick={() => speech.start()}
+                className="shrink-0 font-semibold underline"
+                aria-label="Retry microphone"
+              >
+                Try again
+              </button>
+            </div>
+          )}
 
           {/* Composer */}
           <form

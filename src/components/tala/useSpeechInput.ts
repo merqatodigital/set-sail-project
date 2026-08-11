@@ -38,6 +38,8 @@ export interface UseSpeechInput {
   listening: boolean;
   /** Live transcript while speaking (interim + final so far). */
   transcript: string;
+  /** Human-readable error (e.g. mic permission denied) or null when healthy. */
+  error: string | null;
   start: () => void;
   stop: () => void;
 }
@@ -50,6 +52,7 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const finalRef = useRef("");
   const onFinalRef = useRef(onFinal);
@@ -70,6 +73,7 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
     recRef.current = rec;
     finalRef.current = "";
     setTranscript("");
+    setError(null);
     rec.lang = "en-PH"; // English with Filipino accent support; falls back to en-US
     rec.continuous = false;
     rec.interimResults = true;
@@ -96,10 +100,19 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
       setTranscript("");
       if (text) onFinalRef.current(text);
     };
-    rec.onerror = () => {
-      // "no-speech" / "not-allowed" — just return to idle quietly.
+    rec.onerror = (event) => {
+      // "no-speech" → idle quietly. Permission problems get real feedback so
+      // the guest knows the mic isn't just broken.
+      const err = event?.error;
       setListening(false);
       setTranscript("");
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        setError("Microphone access was denied. Enable it in your browser settings to speak to TALA.");
+      } else if (err === "network") {
+        setError("Speech recognition needs a connection. Check your network and try again.");
+      } else if (err && err !== "no-speech" && err !== "aborted") {
+        setError("The microphone had a problem. Please try again.");
+      }
     };
 
     try {
@@ -107,10 +120,11 @@ export function useSpeechInput(onFinal: (text: string) => void): UseSpeechInput 
       setListening(true);
     } catch {
       setListening(false);
+      setError("Could not start the microphone. Please try again.");
     }
   }, [listening]);
 
   useEffect(() => () => recRef.current?.abort(), []);
 
-  return { supported, listening, transcript, start, stop };
+  return { supported, listening, transcript, error, start, stop };
 }
