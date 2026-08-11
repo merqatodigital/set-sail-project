@@ -1,9 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  TALA_MAX_HISTORY,
-  TALA_STORAGE,
-  type TalaMessage,
-} from "./talaConfig";
+import { TALA_STORAGE, type TalaMessage } from "./talaConfig";
 import {
   captureGuestLead,
   confirmBookingDraft,
@@ -13,7 +9,7 @@ import {
   writeAuditEntry,
   type TalaClassification,
 } from "./talaGraph";
-import { detectSentiment, sentimentInstruction } from "./talaSentiment";
+import { detectSentiment } from "./talaSentiment";
 import { useCms } from "@/context/CmsContext";
 import type { CmsData } from "@/types/cms";
 import { talaChat, talaChatStream, talaOwnerToken, talaOwnerUserId } from "@/lib/talaClient";
