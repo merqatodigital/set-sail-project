@@ -4,6 +4,7 @@ import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { getIcon } from "@/lib/icons";
 import { openTalaIntent } from "@/components/tala/talaOpen";
+import { nightsFromPeriod } from "@/components/tala/talaOffers";
 import { Reveal } from "./Reveal";
 import { cn } from "@/utils/cn";
 
@@ -81,7 +82,7 @@ export function PricingSection() {
                         })
                       : openTalaIntent(
                           "package_booking",
-                          { stayPlan: pkg.name, source: "pricing" },
+                          { stayPlan: pkg.name, nights: nightsFromPeriod(pkg.period), source: "pricing" },
                           `Hi TALA! I'd like to book the ${pkg.name} stay plan advertised on your website.`,
                         )
                   }
@@ -182,7 +183,11 @@ export function PricingSection() {
                       onClick={() =>
                         openTalaIntent(
                           "package_booking",
-                          { packageName: pkg.name, source: "pricing_packages" },
+                          {
+                            packageName: pkg.name,
+                            nights: nightsFromPeriod(pkg.period),
+                            source: "pricing_packages",
+                          },
                           `Hi TALA! I'd like to book the ${pkg.name} package.`,
                         )
                       }

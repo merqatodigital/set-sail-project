@@ -4,6 +4,7 @@ import { useCms } from "@/context/CmsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { getIcon } from "@/lib/icons";
 import { openTalaIntent } from "@/components/tala/talaOpen";
+import { nightsFromPeriod } from "@/components/tala/talaOffers";
 import { Reveal } from "./Reveal";
 import { cn } from "@/utils/cn";
 
@@ -96,7 +97,7 @@ export function PackagesSection() {
                   onClick={() =>
                     openTalaIntent(
                       "package_booking",
-                      { packageName: pkg.name, source: "packages" },
+                      { packageName: pkg.name, nights: nightsFromPeriod(pkg.period), source: "packages" },
                       `Hi TALA! I'd like to book the ${pkg.name} package.`,
                     )
                   }
