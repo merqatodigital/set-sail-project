@@ -1153,4 +1153,15 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 }
 
-Deno.serve(handleRequest);
+// Any unexpected throw outside handleRequest's own try/catch (config load,
+// JSON parse, graph construction) used to escape Deno.serve and surface as an
+// opaque 503. Wrap once so failures come back as a diagnosable JSON 500.
+Deno.serve(async (req) => {
+  try {
+    return await handleRequest(req);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[tala-chat] unhandled error:", message);
+    return json({ error: `TALA chat failed: ${message.slice(0, 200)}` }, 500, req);
+  }
+});

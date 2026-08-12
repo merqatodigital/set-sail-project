@@ -148,16 +148,10 @@ async function executeDayPass(
   try {
     // Authoritative price from Admin Financial settings (cms_data). Never trust
     // a guest-supplied amount; never hardcode.
+    // Authoritative price when configured. When it is not configured yet we
+    // still SAVE the request (amount 0 = rate confirmed by reception) instead
+    // of dropping a complete guest submission on the floor.
     const unitPrice = await getDayPassPrice(toolCtx.env, toolCtx.tenantId || "");
-    if (unitPrice === null) {
-      return {
-        content:
-          "I can take your Workspace Day Pass request, but I need to confirm today's rate with reception first. Could you share your name, email, and WhatsApp number, and I'll have the team follow up with pricing and availability?",
-        toolCalls: [],
-        finishReason: "stop",
-        model: "deterministic",
-      };
-    }
 
     // Dedupe: same guest/day/guests already pending -> return existing ref.
     const dup = await findPendingDayPass(toolCtx.env, {
@@ -174,7 +168,7 @@ async function executeDayPass(
       };
     }
 
-    const amount = unitPrice * parsed.guests;
+    const amount = unitPrice === null ? 0 : unitPrice * parsed.guests;
     const res = await createDayPassRequest(toolCtx.env, {
       guestName: parsed.guestName,
       guestEmail: parsed.guestEmail,
@@ -187,8 +181,12 @@ async function executeDayPass(
       reference: "",
     });
     const arrivalNote = parsed.arrivalTime ? ` Arriving around ${parsed.arrivalTime}.` : "";
+    const priceNote =
+      unitPrice === null
+        ? "Reception will confirm today's rate with you."
+        : `₱${amount} total (₱${unitPrice}/guest).`;
     return {
-      content: `Workspace Day Pass request received (pending). Reference ${res.reference}. ${parsed.guests} guest${parsed.guests > 1 ? "s" : ""} on ${parsed.day} — ₱${amount} total (₱${unitPrice}/guest).${arrivalNote} We'll confirm shortly.`,
+      content: `Workspace Day Pass request received (pending). Reference ${res.reference}. ${parsed.guests} guest${parsed.guests > 1 ? "s" : ""} on ${parsed.day} — ${priceNote}${arrivalNote} We'll confirm shortly.`,
       toolCalls: [],
       finishReason: "stop",
       model: "deterministic",
