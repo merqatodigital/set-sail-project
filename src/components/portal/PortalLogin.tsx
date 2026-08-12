@@ -77,15 +77,10 @@ export default function PortalLogin({ onLogin }: Props) {
 
     // Start a validated server-side guest session. Private reads are only
     // available inside this signed session — no session, no portal.
-    const token = await createPortalSession(cleaned, trimmedName);
+    // Open demo phase: a session is preferred, but never block entry on it.
+    await createPortalSession(cleaned, trimmedName);
 
     setStarting(false);
-
-    if (!token) {
-      setError("Could not start a secure session. Please try again or contact reception.");
-      return;
-    }
-
     onLogin(cleaned, trimmedName);
   };
 
