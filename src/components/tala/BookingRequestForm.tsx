@@ -4,7 +4,7 @@ import type { CmsData } from "@/types/cms";
 import { normalizePhone } from "@/lib/portalRepo";
 import { todayISO, addDays } from "./talaDate";
 import { requestStayBooking } from "./useTalaChat";
-import { inferNights, type TalaIntentPayload } from "./talaIntent";
+import type { TalaIntentPayload } from "./talaIntent";
 import { listOffers, type Offer } from "./talaOffers";
 
 const GREEN = "#1F3D2B";
@@ -42,8 +42,8 @@ export function BookingRequestForm({
   const effKind: "room" | "plan" | "package" | "none" =
     offerKind === "none" ? chosen?.kind ?? "none" : offerKind;
   const defaultNights = useMemo(
-    () => (effKind === "room" || effKind === "none" ? 1 : inferNights(effLabel)),
-    [effKind, effLabel],
+    () => Math.max(1, ctx.nights || chosen?.nights || 1),
+    [ctx.nights, chosen],
   );
 
   const [checkIn, setCheckIn] = useState(ctx.checkIn || todayISO());
@@ -75,7 +75,7 @@ export function BookingRequestForm({
   // advertised name (7-Day package -> 7 nights) unless the CTA already knew.
   useEffect(() => {
     if (!chosen || ctx.checkOut) return;
-    setCheckOut(addDays(checkIn, chosen.kind === "room" ? 1 : inferNights(chosen.label)));
+    setCheckOut(addDays(checkIn, Math.max(1, chosen.nights || 1)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosen]);
 
