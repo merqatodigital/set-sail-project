@@ -21,13 +21,19 @@ const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 export default function App() {
-  // BrowserRouter syncs with window.history as it mounts, which the outer
-  // TanStack router observes. Mounting it after the first commit (instead of
-  // during the parent's render pass) keeps that sync out of the render phase,
-  // so no router state is updated while another component is rendering.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
+  // BrowserRouter stamps its history index onto window.history DURING render,
+  // which the outer router observes and turns into a state update mid-render.
+  // Stamping it here, in an effect (before BrowserRouter ever mounts), keeps
+  // that history write in the commit phase where updates are legal.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const state = window.history.state as { idx?: number } | null;
+    if (!state || typeof state.idx !== "number") {
+      window.history.replaceState({ ...(state ?? {}), usr: null, key: "default", idx: 0 }, "");
+    }
+    setReady(true);
+  }, []);
+  if (!ready) return null;
 
   return (
     <ToastProvider>
