@@ -24,9 +24,12 @@ import { supabase, isSupabaseConnected } from "@/lib/supabase";
 
 interface AuthContextValue {
   isAuthed: boolean;
+  /** Temporary read-only demo access for partners/investors (no Supabase session). */
+  isGuest: boolean;
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
+  guestLogin: () => void;
   logout: () => Promise<void>;
 }
 
@@ -46,6 +49,9 @@ async function sessionIsAdmin(session: Session | null): Promise<boolean> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthed, setIsAuthed] = useState(false);
+  const [isGuest, setIsGuest] = useState(
+    () => typeof window !== "undefined" && sessionStorage.getItem("mt_admin_guest") === "1",
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,12 +111,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConnected() && supabase) {
       await supabase.auth.signOut();
     }
+    if (typeof window !== "undefined") sessionStorage.removeItem("mt_admin_guest");
+    setIsGuest(false);
     setIsAuthed(false);
   }, []);
 
+  const guestLogin = useCallback(() => {
+    if (typeof window !== "undefined") sessionStorage.setItem("mt_admin_guest", "1");
+    setError(null);
+    setIsGuest(true);
+  }, []);
+
   const value = useMemo(
-    () => ({ isAuthed, loading, error, login, logout }),
-    [isAuthed, loading, error, login, logout],
+    () => ({ isAuthed: isAuthed || isGuest, isGuest, loading, error, login, guestLogin, logout }),
+    [isAuthed, isGuest, loading, error, login, guestLogin, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
