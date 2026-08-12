@@ -1,9 +1,10 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route } from "react-router-dom";
 import {
+  Routes,
+  Route,
   unstable_HistoryRouter as HistoryRouter,
   UNSAFE_createBrowserHistory as createBrowserHistory,
-} from "react-router";
+} from "react-router-dom";
 import { CmsProvider } from "@/context/CmsContext";
 import { ThemeProvider } from "@/context/ThemeProvider";
 import { CurrencyProvider } from "@/context/CurrencyContext";
