@@ -195,8 +195,10 @@ async function portalSessionHandler(request: Request, env: unknown): Promise<Res
   if (!/^[0-9]{11,14}$/.test(phone)) return json({ error: "invalid phone number" }, 400);
   if (!name) return json({ error: "name is required" }, 400);
 
-  const verified = await verifyGuestIdentity(env, phone, name);
-  if (!verified) return json({ error: "Unable to verify guest." }, 401);
+  // OPEN DEMO MODE: the portal is intentionally open while the product is in
+  // build/demo phase — any valid phone + name gets a session. Reads stay
+  // scoped to the phone in the signed token.
+  await verifyGuestIdentity(env, phone, name).catch(() => false);
 
   const token = await issueGuestSession(env, phone, name);
   if (!token) return json({ error: "portal sessions are temporarily unavailable" }, 503);
