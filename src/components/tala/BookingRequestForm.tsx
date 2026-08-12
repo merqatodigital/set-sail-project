@@ -5,6 +5,7 @@ import { normalizePhone } from "@/lib/portalRepo";
 import { todayISO, addDays } from "./talaDate";
 import { requestStayBooking } from "./useTalaChat";
 import { inferNights, type TalaIntentPayload } from "./talaIntent";
+import { listOffers, type Offer } from "./talaOffers";
 
 const GREEN = "#1F3D2B";
 const GOLD = "#C6A15B";
@@ -33,9 +34,16 @@ export function BookingRequestForm({
   offerKind: "room" | "plan" | "package" | "none";
 }) {
   const ctx = intent.context ?? {};
+  // When the CTA carried no specific selection (e.g. the closing extended-stay
+  // button), the visitor picks from the LIVE catalogue instead of typing it out.
+  const offers = useMemo(() => listOffers(cms), [cms]);
+  const [chosen, setChosen] = useState<Offer | null>(null);
+  const effLabel = offerKind === "none" ? chosen?.label ?? "" : offerLabel;
+  const effKind: "room" | "plan" | "package" | "none" =
+    offerKind === "none" ? chosen?.kind ?? "none" : offerKind;
   const defaultNights = useMemo(
-    () => (offerKind === "room" || offerKind === "none" ? 1 : inferNights(offerLabel)),
-    [offerKind, offerLabel],
+    () => (effKind === "room" || effKind === "none" ? 1 : inferNights(effLabel)),
+    [effKind, effLabel],
   );
 
   const [checkIn, setCheckIn] = useState(ctx.checkIn || todayISO());
@@ -74,10 +82,16 @@ export function BookingRequestForm({
   );
 
   const offerTitle =
-    offerKind === "package" ? "All-Inclusive Package" : offerKind === "plan" ? "Stay Plan" : "Room";
+    effKind === "package" ? "All-Inclusive Package" : effKind === "plan" ? "Stay Plan" : "Room";
 
   const canSubmit =
-    !busy && !!checkIn && !!checkOut && !!name.trim() && !!email.trim() && !!phone.trim();
+    !busy &&
+    !!checkIn &&
+    !!checkOut &&
+    !!name.trim() &&
+    !!email.trim() &&
+    !!phone.trim() &&
+    (offerKind !== "none" || !!chosen);
 
   const toggleTour = (t: string) =>
     setPicked((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]));
@@ -96,8 +110,8 @@ export function BookingRequestForm({
         .filter(Boolean)
         .join(" · ");
       const res = await requestStayBooking({
-        offerLabel,
-        offerKind,
+        offerLabel: effLabel,
+        offerKind: effKind,
         guestName: name.trim(),
         guestEmail: email.trim(),
         guestPhone: normalizePhone(countryCode + phone),
@@ -128,7 +142,7 @@ export function BookingRequestForm({
         className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide"
         style={{ color: GOLD }}
       >
-        <Sparkles className="h-3.5 w-3.5" /> {offerLabel ? offerTitle : "Book your stay"}
+        <Sparkles className="h-3.5 w-3.5" /> {effLabel ? offerTitle : "Book your stay"}
       </p>
 
       {done ? (
@@ -144,8 +158,8 @@ export function BookingRequestForm({
         </div>
       ) : (
         <>
-          {offerLabel ? (
-            <p className="mt-1 break-words font-serif text-lg leading-snug">{offerLabel}</p>
+          {effLabel ? (
+            <p className="mt-1 break-words font-serif text-lg leading-snug">{effLabel}</p>
           ) : (
             <p className="mt-1 text-sm leading-relaxed opacity-70">
               Tell us your dates below and TALA will match you with the right room or plan.
@@ -153,6 +167,41 @@ export function BookingRequestForm({
           )}
 
           <div className="mt-3 space-y-2.5">
+            {offerKind === "none" && offers.length > 0 && (
+              <label className="block text-sm">
+                <span className="mb-1 flex items-center gap-1 opacity-70">
+                  <Sparkles className="h-3.5 w-3.5" /> Room, stay plan or package
+                </span>
+                <select
+                  value={chosen ? `${chosen.kind}:${chosen.label}` : ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setChosen(offers.find((o) => `${o.kind}:${o.label}` === v) ?? null);
+                  }}
+                  className="mt-1 w-full rounded-md border bg-white px-2 py-1.5 text-sm"
+                  style={{ borderColor: `${GOLD}55` }}
+                >
+                  <option value="">Select…</option>
+                  {(["room", "plan", "package"] as const).map((k) => {
+                    const group = offers.filter((o) => o.kind === k);
+                    if (!group.length) return null;
+                    return (
+                      <optgroup
+                        key={k}
+                        label={k === "room" ? "Rooms" : k === "plan" ? "Stay plans" : "All-inclusive packages"}
+                      >
+                        {group.map((o) => (
+                          <option key={`${k}:${o.label}`} value={`${k}:${o.label}`}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                </select>
+              </label>
+            )}
+
             <label className="block text-sm">
               <span className="mb-1 flex items-center gap-1 opacity-70">
                 <Calendar className="h-3.5 w-3.5" /> Check-in
