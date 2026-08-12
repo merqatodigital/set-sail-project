@@ -21,8 +21,15 @@ import { useTalaVoice } from "./useTalaVoice";
 import { useSpeechInput } from "./useSpeechInput";
 import { TALA_KOKORO_VOICES } from "./talaConfig";
 import { setTalaOpenListener, openTala } from "./talaOpen";
-import { normalizeIntent, intentMessage, type TalaIntentPayload } from "./talaIntent";
+import {
+  normalizeIntent,
+  intentMessage,
+  intentOfferLabel,
+  intentOfferKind,
+  type TalaIntentPayload,
+} from "./talaIntent";
 import { DayPassForm } from "./DayPassForm";
+import { BookingRequestForm } from "./BookingRequestForm";
 import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
@@ -78,7 +85,6 @@ export function TalaWidget() {
     const trimmed = text.trim();
     if (!trimmed || chat.thinking) return;
     setInput("");
-    setIntent(null);
     voice.stop();
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
@@ -91,8 +97,17 @@ export function TalaWidget() {
     (message?: string, intentPayload?: TalaIntentPayload | null) => {
       setOpen(true);
       const normalized = normalizeIntent(intentPayload ?? undefined) ?? (message ? normalizeIntent(message) : null);
-      if (normalized?.kind === "workspace_day_pass") {
-        setIntent({ kind: "workspace_day_pass", message: normalized.message });
+      // Structured flows render a form instead of a free-form chat turn, so the
+      // exact room / stay plan / package the visitor clicked can never be lost
+      // or denied by the model. A NEW intent always replaces the previous one,
+      // so a stale package never leaks into a fresh conversation.
+      if (
+        normalized &&
+        (normalized.kind === "workspace_day_pass" ||
+          normalized.kind === "room_booking" ||
+          normalized.kind === "package_booking")
+      ) {
+        setIntent(normalized);
         setShowSettings(false);
         return;
       }
@@ -317,6 +332,13 @@ export function TalaWidget() {
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {intent?.kind === "workspace_day_pass" ? (
               <DayPassForm cms={data} />
+            ) : intent && (intent.kind === "room_booking" || intent.kind === "package_booking") ? (
+              <BookingRequestForm
+                cms={data}
+                intent={intent}
+                offerLabel={intentOfferLabel(intent)}
+                offerKind={intentOfferKind(intent)}
+              />
             ) : (
               <Bubble role="assistant" text={greeting} />
             )}

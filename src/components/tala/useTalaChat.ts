@@ -155,6 +155,60 @@ export async function requestDayPass(
 }
 
 /**
+ * Stay / plan / package booking request — the structured sibling of
+ * requestDayPass. The EXACT offer the visitor clicked on the website (room
+ * name, advertised stay plan, or all-inclusive package) is passed through to
+ * the same Cloudflare TallaAgent, which resolves it with requestRoomBooking:
+ * required fields validated server-side, pricing derived from backend data
+ * (never from the browser), ONE pending row in tala_booking_requests with an
+ * MT- reference, duplicate replay prevented. No confirmation is ever implied
+ * unless the worker returns a reference.
+ */
+export interface RequestStayBookingInput {
+  /** Exactly what the guest selected on the site. */
+  offerLabel: string;
+  offerKind: "room" | "plan" | "package" | "none";
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  notes?: string;
+}
+
+export async function requestStayBooking(
+  input: RequestStayBookingInput,
+  preferredModel?: string,
+): Promise<{ content: string; reference: string | null }> {
+  const label = input.offerLabel.trim();
+  const kindWord =
+    input.offerKind === "package"
+      ? "all-inclusive package"
+      : input.offerKind === "plan"
+        ? "stay plan"
+        : "room";
+  const guests = Math.max(1, Math.floor(input.guests || 1));
+  const notes = (input.notes || "").trim();
+  const text = [
+    label
+      ? `I'd like to book the ${label} ${kindWord} currently advertised on the Marina Terrace website. Use "${label}" as the roomType/plan for this booking request.`
+      : `I'd like to book a stay at Marina Terrace.`,
+    `Check-in ${input.checkIn}, check-out ${input.checkOut}, ${guests} guest${guests > 1 ? "s" : ""}.`,
+    `My name is ${input.guestName}.`,
+    `My email is ${input.guestEmail}.`,
+    `My WhatsApp/mobile number is ${input.guestPhone}.`,
+    notes ? `Additional requests: ${notes}.` : "",
+    `Please create the pending booking request now — do not ask me to repeat any of these details.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const reply = await askCloudflareAgent(text, { model: preferredModel });
+  const match = reply.content?.match(/\bMT-\d{8}-\d{4}\b/);
+  return { content: reply.content || "", reference: match ? match[0] : null };
+}
+
+/**
  * Classify node of the agent graph — uses deterministic keyword rules only.
  * No extra LLM call needed. Fast, free, and reliable.
  */
