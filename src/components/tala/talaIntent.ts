@@ -25,6 +25,8 @@ export interface TalaIntentContext {
   guests?: number;
   /** Package booking: the package name as listed in cms_data. */
   packageName?: string;
+  /** Stay plan booking: the advertised pricing-plan name (e.g. "Weekly Sprint"). */
+  stayPlan?: string;
 }
 
 export interface TalaIntentPayload {
@@ -66,11 +68,41 @@ export function intentMessage(intent: TalaIntentPayload): string | undefined {
       return `Hi TALA! I'd like to check availability and book${room}${dates}${guests}.`;
     }
     case "package_booking":
-      return `Hi TALA! I'd like to book the ${c.packageName || "package"}.`;
+      return `Hi TALA! I'd like to book the ${c.stayPlan || c.packageName || "package"}${c.stayPlan ? " stay plan" : ""}.`;
     case "workspace_day_pass":
       return "Hi TALA! I'd like a Workspace Day Pass.";
     case "general_help":
     default:
       return undefined;
   }
+}
+
+/**
+ * The EXACT item the visitor clicked — room name, advertised stay plan or
+ * all-inclusive package. Empty string when the CTA carried no selection
+ * (e.g. the closing "Book Now" button), in which case TALA/the form asks.
+ */
+export function intentOfferLabel(intent: TalaIntentPayload | null | undefined): string {
+  const c = intent?.context ?? {};
+  return (c.packageName || c.stayPlan || c.roomType || "").trim();
+}
+
+/** How the selected offer should be labelled in the form and in the request. */
+export function intentOfferKind(
+  intent: TalaIntentPayload | null | undefined,
+): "room" | "plan" | "package" | "none" {
+  const c = intent?.context ?? {};
+  if (c.packageName) return "package";
+  if (c.stayPlan) return "plan";
+  if (c.roomType) return "room";
+  return "none";
+}
+
+/** Nights to pre-fill for an advertised plan/package, from its own name. */
+export function inferNights(label: string): number {
+  const days = label.match(/(\d+)\s*-?\s*day/i);
+  if (days) return Math.max(1, Number(days[1]));
+  if (/month/i.test(label)) return 30;
+  if (/week/i.test(label)) return 7;
+  return 1;
 }
