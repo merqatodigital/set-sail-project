@@ -1,8 +1,9 @@
-import { MapPin, Phone, Mail, Sparkles, User } from "lucide-react";
+import { MapPin, Phone, Mail, MessageCircle, Sparkles, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
 import { safeHref, safeMailto, safeTel } from "@/lib/security";
 import { openTala, openTalaIntent } from "@/components/tala/talaOpen";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { Reveal } from "./Reveal";
 import { InstagramIcon, FacebookIcon, YoutubeIcon } from "./SocialIcons";
 
@@ -175,15 +176,19 @@ export function Footer() {
 export function WhatsAppFloat() {
   const { data } = useCms();
   if (!data.settings.whatsapp.showFloatingButton) return null;
+  // Real WhatsApp deep link. TALA has exactly ONE launcher (its own orb) —
+  // this green button must never be a second chat launcher.
+  const href = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact);
   return (
-    <button
-      type="button"
-      onClick={() => openTalaIntent("general_help", {}, "Hi TALA! How can you help me today?")}
-      aria-label="Chat with TALA"
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Message us on WhatsApp"
       className="group fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition-all duration-200 hover:scale-110 hover:shadow-[0_10px_28px_rgba(37,211,102,0.55)] active:scale-95 sm:bottom-6 sm:right-6 sm:h-14 sm:w-14"
     >
       <span className="pointer-events-none absolute inset-0 rounded-full bg-[#25D366]/40 opacity-0 transition-opacity duration-500 group-hover:opacity-75" />
-      <Sparkles className="relative h-5 w-5 sm:h-6 sm:w-6" />
-    </button>
+      <MessageCircle className="relative h-5 w-5 sm:h-6 sm:w-6" />
+    </a>
   );
 }
