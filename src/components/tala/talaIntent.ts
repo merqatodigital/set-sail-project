@@ -27,6 +27,8 @@ export interface TalaIntentContext {
   packageName?: string;
   /** Stay plan booking: the advertised pricing-plan name (e.g. "Weekly Sprint"). */
   stayPlan?: string;
+  /** Stay length in nights, taken from the offer's structured CMS duration. */
+  nights?: number;
   /** Where the click came from (section or page id) — context only. */
   source?: string;
   /** What the visitor is broadly after when no exact offer was clicked. */
@@ -102,13 +104,4 @@ export function intentOfferKind(
   if (c.stayPlan) return "plan";
   if (c.roomType) return "room";
   return "none";
-}
-
-/** Nights to pre-fill for an advertised plan/package, from its own name. */
-export function inferNights(label: string): number {
-  const days = label.match(/(\d+)\s*-?\s*day/i);
-  if (days) return Math.max(1, Number(days[1]));
-  if (/month/i.test(label)) return 30;
-  if (/week/i.test(label)) return 7;
-  return 1;
 }
