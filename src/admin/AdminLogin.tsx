@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button, Input } from "@/components/ui";
 
 export default function AdminLogin() {
-  const { login, error } = useAuth();
+  const { login, guestLogin, error } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +62,26 @@ export default function AdminLogin() {
             {submitting ? "Signing in…" : "Sign in"}
           </Button>
         </form>
+
+        <div className="mt-5">
+          <div className="mb-3 flex items-center gap-3">
+            <span className="h-px flex-1 bg-[#26221C]/10" />
+            <span className="text-[10px] uppercase tracking-widest text-[#26221C]/35">or</span>
+            <span className="h-px flex-1 bg-[#26221C]/10" />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            size="lg"
+            onClick={guestLogin}
+          >
+            Guest Login
+          </Button>
+          <p className="mt-2 text-center text-[11px] leading-relaxed text-[#26221C]/45">
+            Temporary demo access for partners and investors. Sample data only.
+          </p>
+        </div>
 
         <div className="mt-6 text-center">
           <Link to="/" className="text-xs text-[#26221C]/45 hover:text-[#8A6B32]">
