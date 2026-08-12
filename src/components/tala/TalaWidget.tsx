@@ -27,8 +27,9 @@ import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
 // TALA — floating AI concierge widget. Sits above the WhatsApp float on the
-// public site. Chat is powered by OpenRouter free models (via the tala-chat
-// edge function); the voice is Kokoro-82M running in the visitor's browser.
+// public site. Chat is powered by the authoritative Cloudflare TallaAgent.
+// Public voice deliberately avoids loading Kokoro/WASM in the page because
+// that large local model can make the landing page unresponsive on real devices.
 // ---------------------------------------------------------------------------
 
 const GREEN = "#1F3D2B";
@@ -54,18 +55,16 @@ export function TalaWidget() {
     defaultVoiceId: data.settings.tala.voiceId || undefined,
     provider: data.settings.tala.voiceProvider,
     // No API key in the public bundle — hosted TTS is admin-preview only;
-    // visitors get the free in-browser voice (or the built-in one on mobile).
+    // visitors get the best built-in browser voice on the public site.
     ttsModelId: data.settings.tala.ttsModelId || undefined,
     ttsVoiceId: data.settings.tala.ttsVoiceId || undefined,
     ignoreLocalVoice: true,
-    // Only pull the ~80 MB natural-voice model once the guest actually
-    // opens the chat — not on every page load for every visitor.
-    active: open,
+    // IMPORTANT: never load the ~80 MB Kokoro/WASM model in the public page.
+    // It is CPU-heavy enough to trigger Chrome's "page unresponsive" dialog.
+    // Admin preview can still load/audition Kokoro independently.
+    active: false,
   });
 
-  // Fallback to the human team — always points at the primary WhatsApp number
-  // configured in Admin → WhatsApp. Shows as a persistent button and again
-  // whenever TALA errors or can't finish the job.
   const waHref = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact, {
     message: `Hi Marina Terrace! I was just chatting with TALA and need a hand: `,
   });
@@ -93,31 +92,24 @@ export function TalaWidget() {
       setOpen(true);
       const normalized = normalizeIntent(intentPayload ?? undefined) ?? (message ? normalizeIntent(message) : null);
       if (normalized?.kind === "workspace_day_pass") {
-        // Structured flow: open straight into the Day Pass form, no free chat.
         setIntent({ kind: "workspace_day_pass", message: normalized.message });
         setShowSettings(false);
         return;
       }
       setIntent(null);
-      // A CTA with a known goal always sends a concrete message so TALA (on
-      // Cloudflare) routes the guest instead of opening a vague chat.
       const text = normalized ? intentMessage({ ...normalized, message: message ?? normalized.message }) : message;
       if (text && text.trim()) {
-        // Send immediately so TALA responds to the intent.
         void submit(text);
       }
     },
     [submit],
   );
 
-  // Let any public CTA open TALA with a prefilled intent via openTala().
   useEffect(() => {
     setTalaOpenListener(openAndPrefill);
     return () => setTalaOpenListener(null);
   }, [openAndPrefill]);
 
-  // Second argument = barge-in: the moment the recognizer hears the guest,
-  // TALA stops talking (no waiting for her current audio to finish).
   const speech = useSpeechInput(
     (finalText) => void submit(finalText),
     () => voice.stop(),
@@ -127,10 +119,6 @@ export function TalaWidget() {
     if (open) setDevKeyState(getDevApiKey());
   }, [open]);
 
-  // Proactive updates are personal to an identified guest. The public widget has
-  // no guest identity, so nothing is generated here — passing empty identifiers
-  // previously matched arbitrary bookings and rendered nameless greetings with
-  // another guest's room and dates.
   useEffect(() => {
     if (!open) return;
     setProactiveMessages([]);
@@ -145,7 +133,7 @@ export function TalaWidget() {
     if (speech.listening) {
       speech.stop();
     } else {
-      voice.stop(); // barge-in: TALA goes quiet when the guest speaks
+      voice.stop();
       speech.start();
     }
   };
@@ -156,14 +144,13 @@ export function TalaWidget() {
       : voice.engine === "kokoro"
         ? "Natural voice ready"
         : voice.engine === "browser"
-          ? "Standard voice (natural voice downloads in background)"
+          ? "Voice ready"
           : "";
 
   if (!data.settings.tala.enabled) return null;
 
   return (
     <>
-      {/* Launcher — stacked above the WhatsApp float */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
@@ -179,7 +166,6 @@ export function TalaWidget() {
         </button>
       )}
 
-      {/* Panel */}
       {open && (
         <div
           className="fixed bottom-4 right-4 z-50 flex w-[min(92vw,380px)] flex-col overflow-hidden rounded-2xl border shadow-[0_18px_60px_rgba(38,34,28,0.35)] sm:bottom-6 sm:right-6"
@@ -187,7 +173,6 @@ export function TalaWidget() {
           role="dialog"
           aria-label="TALA chat"
         >
-          {/* Header */}
           <div
             className="flex items-center gap-3 px-4 py-3 text-white"
             style={{ background: `linear-gradient(135deg, ${GREEN} 0%, ${GREEN_DARK} 100%)` }}
@@ -200,9 +185,7 @@ export function TalaWidget() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-serif text-lg leading-none tracking-wide">TALA</p>
-              <p className="mt-0.5 truncate text-[11px] text-white/70">
-                Your friend in San Vicente
-              </p>
+              <p className="mt-0.5 truncate text-[11px] text-white/70">Your friend in San Vicente</p>
             </div>
             <button
               onClick={() =>
@@ -228,7 +211,7 @@ export function TalaWidget() {
             <button
               onClick={() => {
                 voice.stop();
-                speech.stop();
+                speech.abort();
                 setIntent(null);
                 setOpen(false);
               }}
@@ -239,7 +222,6 @@ export function TalaWidget() {
             </button>
           </div>
 
-          {/* Voice status strip */}
           {voice.enabled && voiceStatusLabel && (
             <div
               className="flex items-center gap-2 px-4 py-1.5 text-[11px]"
@@ -250,17 +232,12 @@ export function TalaWidget() {
             </div>
           )}
 
-          {/* Settings */}
           {showSettings && (
             <div
               className="border-b px-4 py-3 text-xs"
               style={{ borderColor: `${GOLD}33`, color: INK }}
             >
               <label className="mb-1 block font-medium">Voice</label>
-              {/* Read-only: TALA's voice is owner-controlled in Admin → TALA.
-                  Visitors (including foreigners on their own devices) must NOT
-                  be able to override it, so we show the active voice but don't
-                  let them change it — the gear is a dev/diagnostic panel only. */}
               <div
                 className="mb-3 w-full rounded-md border bg-white/60 px-2 py-1.5"
                 style={{ borderColor: `${GOLD}55` }}
@@ -270,9 +247,7 @@ export function TalaWidget() {
               </div>
               <label className="mb-1 block font-medium">
                 Dev OpenRouter key{" "}
-                <span className="font-normal opacity-60">
-                  (this device only — for building without the edge function)
-                </span>
+                <span className="font-normal opacity-60">(this device only — for building without the edge function)</span>
               </label>
               <input
                 type="password"
@@ -287,20 +262,15 @@ export function TalaWidget() {
               />
               <label className="mb-1 block font-medium">
                 OpenWeatherMap key{" "}
-                <span className="font-normal opacity-60">
-                  (optional — enables weather-aware suggestions)
-                </span>
+                <span className="font-normal opacity-60">(optional — enables weather-aware suggestions)</span>
               </label>
               <input
                 type="password"
                 defaultValue={typeof localStorage !== "undefined" ? localStorage.getItem("openweathermap_api_key") || "" : ""}
                 onChange={(e) => {
                   const val = e.target.value.trim();
-                  if (val) {
-                    localStorage.setItem("openweathermap_api_key", val);
-                  } else {
-                    localStorage.removeItem("openweathermap_api_key");
-                  }
+                  if (val) localStorage.setItem("openweathermap_api_key", val);
+                  else localStorage.removeItem("openweathermap_api_key");
                 }}
                 placeholder="your-api-key (optional)"
                 className="mb-3 w-full rounded-md border bg-white px-2 py-1.5"
@@ -314,15 +284,11 @@ export function TalaWidget() {
                 <dl className="space-y-1 text-[11px] opacity-80">
                   <div className="flex justify-between">
                     <dt>Voice → transcript</dt>
-                    <dd className="font-mono">
-                      {speech.lastRecognitionMs != null ? `${speech.lastRecognitionMs} ms` : "—"}
-                    </dd>
+                    <dd className="font-mono">{speech.lastRecognitionMs != null ? `${speech.lastRecognitionMs} ms` : "—"}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt>TALA reply round-trip</dt>
-                    <dd className="font-mono">
-                      {chat.lastTurn ? `${chat.lastTurn.ms} ms` : "—"}
-                    </dd>
+                    <dd className="font-mono">{chat.lastTurn ? `${chat.lastTurn.ms} ms` : "—"}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt>Reply → first audio</dt>
@@ -348,7 +314,6 @@ export function TalaWidget() {
             </div>
           )}
 
-          {/* Messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {intent?.kind === "workspace_day_pass" ? (
               <DayPassForm cms={data} />
@@ -356,7 +321,6 @@ export function TalaWidget() {
               <Bubble role="assistant" text={greeting} />
             )}
 
-            {/* Proactive messages — notifications TALA generated for the guest */}
             {showProactive && proactiveMessages.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: GOLD }}>
@@ -392,13 +356,9 @@ export function TalaWidget() {
               </div>
             )}
             {chat.error && (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {chat.error}
-              </p>
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{chat.error}</p>
             )}
 
-            {/* Guest booking verification + visitor details form — TALA
-                drafted it; the guest fills the few missing bits and confirms. */}
             {chat.pendingDraft && (
               <BookingFormCard
                 draft={chat.pendingDraft}
@@ -408,8 +368,6 @@ export function TalaWidget() {
               />
             )}
 
-            {/* Fallback to a human — always available, and the safety net when
-                TALA can't finish the job. */}
             <a
               href={waHref}
               target="_blank"
@@ -422,7 +380,6 @@ export function TalaWidget() {
             </a>
           </div>
 
-          {/* Speech permission / mic errors */}
           {speech.error && !speech.listening && (
             <div
               className="flex items-start justify-between gap-2 border-t px-4 py-2 text-[11px]"
@@ -440,7 +397,6 @@ export function TalaWidget() {
             </div>
           )}
 
-          {/* Composer */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -457,18 +413,13 @@ export function TalaWidget() {
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95"
                 style={{ backgroundColor: speech.listening ? "#B4433A" : GREEN }}
               >
-                {speech.listening ? (
-                  <Square className="h-3.5 w-3.5" />
-                ) : (
-                  <Mic className="h-4 w-4" />
-                )}
+                {speech.listening ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-4 w-4" />}
               </button>
             )}
             <input
               ref={inputRef}
               value={speech.listening ? speech.transcript : input}
               onChange={(e) => {
-                // Typing is also an interruption — silence TALA right away.
                 if (voice.status === "speaking") voice.stop();
                 setInput(e.target.value);
               }}
@@ -517,12 +468,6 @@ function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Visitor booking form — shown after TALA drafts a booking. TALA already
-// knows name/room/dates; this lets the guest refine guests, add their email,
-// and tell us about their stay (nomad? working? tours?) before the human
-// team sees it. Confirm = the guest's human action; we never auto-write.
-// ---------------------------------------------------------------------------
 type DraftExtra = { email?: string; phone?: string; nomad?: boolean; working?: boolean; tours?: string[] };
 
 function BookingFormCard({
@@ -622,11 +567,7 @@ function BookingFormCard({
             type="button"
             onClick={() => setNomad((v) => !v)}
             className="flex-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors"
-            style={
-              nomad
-                ? { backgroundColor: GREEN, color: "#fff" }
-                : { border: `1px solid ${GOLD}55`, color: INK }
-            }
+            style={nomad ? { backgroundColor: GREEN, color: "#fff" } : { border: `1px solid ${GOLD}55`, color: INK }}
           >
             Digital nomad
           </button>
@@ -634,11 +575,7 @@ function BookingFormCard({
             type="button"
             onClick={() => setWorking((v) => !v)}
             className="flex-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors"
-            style={
-              working
-                ? { backgroundColor: GREEN, color: "#fff" }
-                : { border: `1px solid ${GOLD}55`, color: INK }
-            }
+            style={working ? { backgroundColor: GREEN, color: "#fff" } : { border: `1px solid ${GOLD}55`, color: INK }}
           >
             Working here
           </button>
@@ -654,11 +591,7 @@ function BookingFormCard({
                   type="button"
                   onClick={() => toggleTour(t.name)}
                   className="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors"
-                  style={
-                    picked.includes(t.name)
-                      ? { backgroundColor: GOLD, color: "#fff" }
-                      : { border: `1px solid ${GOLD}55`, color: INK }
-                  }
+                  style={picked.includes(t.name) ? { backgroundColor: GOLD, color: "#fff" } : { border: `1px solid ${GOLD}55`, color: INK }}
                 >
                   {t.name}
                 </button>
