@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CmsProvider } from "@/context/CmsContext";
 import { ThemeProvider } from "@/context/ThemeProvider";
@@ -21,6 +21,14 @@ const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 export default function App() {
+  // BrowserRouter syncs with window.history as it mounts, which the outer
+  // TanStack router observes. Mounting it after the first commit (instead of
+  // during the parent's render pass) keeps that sync out of the render phase,
+  // so no router state is updated while another component is rendering.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
   return (
     <ToastProvider>
       <CmsProvider>
