@@ -74,8 +74,8 @@ export function PricingSection() {
                   type="button"
                   onClick={() =>
                     /day ?pass/i.test(pkg.name)
-                      ? openTalaIntent("workspace_day_pass", { roomType: pkg.name })
-                      : openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} plan.`)
+                      ? openTalaIntent("workspace_day_pass", { roomType: "Day Pass" })
+                      : openTalaIntent("package_booking", { stayPlan: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} stay plan advertised on your website.`)
                   }
                   className={cn(
                     "mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:mt-8 sm:h-12 sm:px-6 sm:text-sm",

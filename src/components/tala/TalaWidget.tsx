@@ -85,7 +85,6 @@ export function TalaWidget() {
     const trimmed = text.trim();
     if (!trimmed || chat.thinking) return;
     setInput("");
-    setIntent(null);
     voice.stop();
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
