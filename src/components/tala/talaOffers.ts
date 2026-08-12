@@ -18,7 +18,7 @@ export interface Offer {
 
 /** Every bookable offer currently advertised on the site. */
 export function listOffers(cms: CmsData): Offer[] {
-  const rooms = (cms.home?.rooms ?? [])
+  const rooms = (cms.homepage?.rooms ?? [])
     .filter((r) => r.visible !== false)
     .map<Offer>((r) => ({ label: r.name, kind: "room" }));
   const plans = (cms.pricing ?? [])
