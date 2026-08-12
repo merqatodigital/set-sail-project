@@ -71,6 +71,14 @@ export function BookingRequestForm({
     };
   }, []);
 
+  // Picking an offer from the selector re-derives the stay length from its own
+  // advertised name (7-Day package -> 7 nights) unless the CTA already knew.
+  useEffect(() => {
+    if (!chosen || ctx.checkOut) return;
+    setCheckOut(addDays(checkIn, chosen.kind === "room" ? 1 : inferNights(chosen.label)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen]);
+
   const tours = useMemo(
     () => (cms.operations?.tours ?? []).filter((t) => t.active !== false).map((t) => t.name),
     [cms],
