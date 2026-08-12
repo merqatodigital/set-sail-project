@@ -27,6 +27,10 @@ export interface TalaIntentContext {
   packageName?: string;
   /** Stay plan booking: the advertised pricing-plan name (e.g. "Weekly Sprint"). */
   stayPlan?: string;
+  /** Where the click came from (section or page id) — context only. */
+  source?: string;
+  /** What the visitor is broadly after when no exact offer was clicked. */
+  interest?: "workspace" | "long_stay" | "general";
 }
 
 export interface TalaIntentPayload {
@@ -73,7 +77,9 @@ export function intentMessage(intent: TalaIntentPayload): string | undefined {
       return "Hi TALA! I'd like a Workspace Day Pass.";
     case "general_help":
     default:
-      return undefined;
+      return c.interest === "long_stay"
+        ? "Hi TALA! I'm interested in an extended stay — can you help me pick the right room or plan?"
+        : undefined;
   }
 }
 

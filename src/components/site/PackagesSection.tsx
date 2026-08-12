@@ -93,7 +93,13 @@ export function PackagesSection() {
 
                 <button
                   type="button"
-                  onClick={() => openTalaIntent("package_booking", { packageName: pkg.name }, `Hi TALA! I'd like to book the ${pkg.name} package.`)}
+                  onClick={() =>
+                    openTalaIntent(
+                      "package_booking",
+                      { packageName: pkg.name, source: "packages" },
+                      `Hi TALA! I'd like to book the ${pkg.name} package.`,
+                    )
+                  }
                   className={cn(
                     "mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-[13px] font-medium tracking-wide transition-all duration-200 active:scale-[0.98] sm:h-12 sm:px-6 sm:text-sm",
                     pkg.featured

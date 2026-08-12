@@ -103,7 +103,13 @@ export function Navbar() {
           {data.settings.whatsapp.showInNavbar && (
             <button
               type="button"
-              onClick={() => openTalaIntent("general_help", {}, "Hi TALA! I'd like to ask about staying or booking.")}
+              onClick={() =>
+                openTalaIntent(
+                  "general_help",
+                  { source: "header", interest: "general" },
+                  "Hi TALA! I'd like to ask about staying or booking.",
+                )
+              }
               className={cn(
                 "inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
                 solid
@@ -174,7 +180,13 @@ export function Navbar() {
 
               <button
                 type="button"
-                onClick={() => openTalaIntent("general_help", {}, "Hi TALA! I'd like to ask about staying or booking.")}
+                onClick={() =>
+                  openTalaIntent(
+                    "general_help",
+                    { source: "header_mobile", interest: "general" },
+                    "Hi TALA! I'd like to ask about staying or booking.",
+                  )
+                }
                 className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#26221C] px-5 text-[13px] font-medium text-[#F5EFE2] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition active:scale-[0.98] sm:mt-4 sm:h-11 sm:text-sm"
               >
                 <Sparkles className="h-4 w-4" /> Talk to TALA

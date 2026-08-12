@@ -30,6 +30,7 @@ import {
 } from "./talaIntent";
 import { DayPassForm } from "./DayPassForm";
 import { BookingRequestForm } from "./BookingRequestForm";
+import { detectBookingIntent } from "./talaOffers";
 import { markProactiveRead, type ProactiveMessage } from "./talaProactive";
 
 // ---------------------------------------------------------------------------
@@ -86,6 +87,11 @@ export function TalaWidget() {
     if (!trimmed || chat.thinking) return;
     setInput("");
     voice.stop();
+    // Conversation -> structured form: a typed booking request that names an
+    // offer the site actually advertises opens the prefilled booking form, so
+    // the visitor never has to repeat what TALA already understood.
+    const escalated = detectBookingIntent(trimmed, data);
+    if (escalated) setIntent(escalated);
     const reply = await chat.send(trimmed, systemPrompt, {
       model: data.settings.tala.modelId || undefined,
       cms: data,
@@ -319,6 +325,7 @@ export function TalaWidget() {
                 onClick={() => {
                   voice.stop();
                   chat.reset();
+                  setIntent(null);
                   setShowSettings(false);
                 }}
                 className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors hover:bg-white"

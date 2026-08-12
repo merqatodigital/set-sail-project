@@ -217,7 +217,19 @@ export function RoomsSection() {
 
                 <button
                   type="button"
-                  onClick={() => openTalaIntent("room_booking", { roomType: activeRoom.name, checkIn, checkOut, guests: Number(guests) }, `Hi TALA! I'd like to book ${activeRoom.name} from ${checkIn || "check-in"} to ${checkOut || "check-out"} for ${guests} guest(s).`)}
+                  onClick={() =>
+                    openTalaIntent(
+                      "room_booking",
+                      {
+                        roomType: activeRoom.name,
+                        checkIn,
+                        checkOut,
+                        guests: Number(guests),
+                        source: "rooms",
+                      },
+                      `Hi TALA! I'd like to book ${activeRoom.name} from ${checkIn || "check-in"} to ${checkOut || "check-out"} for ${guests} guest(s).`,
+                    )
+                  }
                   className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C6A15B] text-xs font-semibold uppercase tracking-wider text-[#221D14] shadow-md shadow-[#C6A15B]/20 transition-all hover:bg-[#B8924B]"
                 >
                   <Sparkles className="h-4 w-4" />
