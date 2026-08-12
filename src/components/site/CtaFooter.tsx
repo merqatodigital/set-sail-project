@@ -2,7 +2,7 @@ import { MapPin, Phone, Mail, MessageCircle, Sparkles, User } from "lucide-react
 import { Link } from "react-router-dom";
 import { useCms } from "@/context/CmsContext";
 import { safeHref, safeMailto, safeTel } from "@/lib/security";
-import { openTala, openTalaIntent } from "@/components/tala/talaOpen";
+import { openTalaIntent } from "@/components/tala/talaOpen";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { Reveal } from "./Reveal";
 import { InstagramIcon, FacebookIcon, YoutubeIcon } from "./SocialIcons";
