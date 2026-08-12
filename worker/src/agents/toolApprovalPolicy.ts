@@ -28,8 +28,9 @@ export interface ToolApprovalResult {
  * Tool actions that require owner approval before execution.
  * Configurable — add tool names here to gate more actions.
  */
+// createHousekeepingTask is intentionally NOT gated: guests asking for a room
+// clean must actually create the task, not wait on an approval queue.
 export const APPROVAL_REQUIRED_TOOLS: ReadonlySet<string> = new Set([
-  "createHousekeepingTask",
   "sendGuestEmail",
 ]);
 
