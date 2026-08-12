@@ -1,5 +1,9 @@
-import { Suspense, lazy, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { Routes, Route } from "react-router-dom";
+import {
+  unstable_HistoryRouter as HistoryRouter,
+  UNSAFE_createBrowserHistory as createBrowserHistory,
+} from "react-router";
 import { CmsProvider } from "@/context/CmsContext";
 import { ThemeProvider } from "@/context/ThemeProvider";
 import { CurrencyProvider } from "@/context/CurrencyContext";
@@ -20,28 +24,20 @@ const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
-export default function App() {
-  // BrowserRouter stamps its history index onto window.history DURING render,
-  // which the outer router observes and turns into a state update mid-render.
-  // Stamping it here, in an effect (before BrowserRouter ever mounts), keeps
-  // that history write in the commit phase where updates are legal.
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const state = window.history.state as { idx?: number } | null;
-    if (!state || typeof state.idx !== "number") {
-      window.history.replaceState({ ...(state ?? {}), usr: null, key: "default", idx: 0 }, "");
-    }
-    setReady(true);
-  }, []);
-  if (!ready) return null;
+// Created once at module scope. BrowserRouter builds this history INSIDE its
+// render, and stamping the history index there triggered a router state update
+// during React's render phase. Building it outside the render phase keeps the
+// exact same routing behaviour without the illegal mid-render update.
+const history = createBrowserHistory();
 
+export default function App() {
   return (
     <ToastProvider>
       <CmsProvider>
         <ThemeProvider>
           <CurrencyProvider>
             <AuthProvider>
-            <BrowserRouter>
+            <HistoryRouter history={history}>
               <Routes>
                 <Route element={<PublicLayout />}>
                   <Route path="/" element={<Home />} />
@@ -111,7 +107,7 @@ export default function App() {
                   }
                 />
               </Routes>
-            </BrowserRouter>
+            </HistoryRouter>
             <CookieConsent />
           </AuthProvider>
         </CurrencyProvider>
