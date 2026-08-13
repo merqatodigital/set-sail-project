@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // TALA's ears — Web Speech API (built into Chrome, Edge, Safari; free).
 // Firefox has no recognizer, so the widget hides the mic button there and
 // visitors type instead.
+//
+// IMPORTANT: this hook now keeps one listening session alive across turns.
+// A guest taps the mic once, speaks naturally, and each final utterance is
+// delivered to TALA without forcing another tap. The session ends only when
+// the guest presses Stop, closes the widget, aborts, or the browser reports a
+// non-recoverable permission/network error.
 // ---------------------------------------------------------------------------
 
 interface SpeechRecognitionLike {
@@ -36,28 +42,17 @@ function getRecognizer(): SpeechRecognitionLike | null {
 export interface UseSpeechInput {
   supported: boolean;
   listening: boolean;
-  /** Live transcript while speaking (interim + final so far). */
+  /** Live transcript while speaking. */
   transcript: string;
   /** Human-readable error (e.g. mic permission denied) or null when healthy. */
   error: string | null;
-  /** Device-measured time from mic start → usable transcript (ms), or null. */
+  /** Device-measured time from start of the current utterance to usable transcript. */
   lastRecognitionMs: number | null;
   start: () => void;
   stop: () => void;
   abort: () => void;
 }
 
-/**
- * Mobile WebKit/Chrome can end recognition after emitting only interim text.
- * We therefore retain the latest usable transcript and finalize it on `onend`
- * when no final result was emitted. This prevents the common mobile failure
- * where the guest sees their words appear and then TALA silently discards them.
- *
- * @param onFinal called once with the finished utterance.
- * @param onSpeechStart called on the first non-empty recognition result. TALA
- *        uses this for true barge-in so current speech stops as soon as the
- *        guest actually begins talking, not only when the mic button is tapped.
- */
 export function useSpeechInput(
   onFinal: (text: string) => void,
   onSpeechStart?: () => void,
@@ -69,13 +64,14 @@ export function useSpeechInput(
   const [lastRecognitionMs, setLastRecognitionMs] = useState<number | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
-  const finalRef = useRef("");
   const latestTranscriptRef = useRef("");
-  const startedAtRef = useRef(0);
+  const utteranceStartedAtRef = useRef(0);
   const listeningRef = useRef(false);
+  const keepAliveRef = useRef(false);
   const sessionRef = useRef(0);
   const speechStartedRef = useRef(false);
   const suppressFinalizeRef = useRef(false);
+  const restartTimerRef = useRef<number | null>(null);
   const onFinalRef = useRef(onFinal);
   const onSpeechStartRef = useRef(onSpeechStart);
   onFinalRef.current = onFinal;
@@ -85,10 +81,19 @@ export function useSpeechInput(
     setSupported(getRecognizer() !== null);
   }, []);
 
+  const clearRestartTimer = () => {
+    if (restartTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+  };
+
   const abort = useCallback(() => {
     sessionRef.current += 1;
+    keepAliveRef.current = false;
     suppressFinalizeRef.current = true;
     listeningRef.current = false;
+    clearRestartTimer();
     const rec = recRef.current;
     recRef.current = null;
     try {
@@ -96,44 +101,43 @@ export function useSpeechInput(
     } catch {
       /* already ended */
     }
-    finalRef.current = "";
     latestTranscriptRef.current = "";
+    speechStartedRef.current = false;
     setTranscript("");
     setListening(false);
   }, []);
 
   const stop = useCallback(() => {
+    keepAliveRef.current = false;
+    listeningRef.current = false;
+    suppressFinalizeRef.current = true;
+    clearRestartTimer();
     const rec = recRef.current;
-    if (!rec || !listeningRef.current) return;
+    recRef.current = null;
     try {
-      rec.stop();
+      rec?.stop();
     } catch {
-      listeningRef.current = false;
-      setListening(false);
+      /* already ended */
     }
+    latestTranscriptRef.current = "";
+    speechStartedRef.current = false;
+    setTranscript("");
+    setListening(false);
   }, []);
 
-  const start = useCallback(() => {
-    if (listeningRef.current) return;
-
-    if (recRef.current) {
-      try {
-        recRef.current.abort();
-      } catch {
-        /* already ended */
-      }
-      recRef.current = null;
-    }
+  const createAndStartRecognizer = useCallback((session: number) => {
+    if (!keepAliveRef.current || session !== sessionRef.current) return;
 
     const rec = getRecognizer();
     if (!rec) {
+      keepAliveRef.current = false;
+      listeningRef.current = false;
       setSupported(false);
+      setListening(false);
       return;
     }
 
-    const session = ++sessionRef.current;
     recRef.current = rec;
-    finalRef.current = "";
     latestTranscriptRef.current = "";
     speechStartedRef.current = false;
     suppressFinalizeRef.current = false;
@@ -141,42 +145,47 @@ export function useSpeechInput(
     setError(null);
 
     rec.lang = "en-PH";
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
 
     rec.onresult = (event) => {
-      if (session !== sessionRef.current) return;
+      if (session !== sessionRef.current || !keepAliveRef.current) return;
 
       let interim = "";
-      let gotFinal = false;
+      const finals: string[] = [];
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        const piece = result[0]?.transcript ?? "";
-        if (result.isFinal) {
-          finalRef.current += piece;
-          gotFinal = true;
-        } else {
-          interim += piece;
-        }
+        const piece = result[0]?.transcript?.trim() ?? "";
+        if (!piece) continue;
+        if (result.isFinal) finals.push(piece);
+        else interim += `${piece} `;
       }
 
-      const latest = (finalRef.current + interim).trim();
+      const latest = interim.trim();
       latestTranscriptRef.current = latest;
       setTranscript(latest);
 
-      if (latest && !speechStartedRef.current) {
+      const audibleText = finals.join(" ").trim() || latest;
+      if (audibleText && !speechStartedRef.current) {
         speechStartedRef.current = true;
+        utteranceStartedAtRef.current = performance.now();
         if (typeof window !== "undefined" && "speechSynthesis" in window) {
           window.speechSynthesis.cancel();
         }
         onSpeechStartRef.current?.();
       }
 
-      if (gotFinal) {
-        try {
-          rec.stop();
-        } catch {
-          /* recognizer already ending */
+      if (finals.length) {
+        const text = finals.join(" ").trim();
+        latestTranscriptRef.current = "";
+        speechStartedRef.current = false;
+        setTranscript("");
+        if (text) {
+          const ms = Math.round(performance.now() - utteranceStartedAtRef.current);
+          console.debug(`[TALA] speech → transcript in ${ms}ms`, text.slice(0, 60));
+          setLastRecognitionMs(ms);
+          onFinalRef.current(text);
         }
       }
     };
@@ -184,57 +193,79 @@ export function useSpeechInput(
     rec.onerror = (event) => {
       if (session !== sessionRef.current) return;
       const err = event?.error;
-      listeningRef.current = false;
-      setListening(false);
-
-      if (err === "not-allowed" || err === "service-not-allowed" || err === "network" || err === "aborted") {
-        suppressFinalizeRef.current = true;
-      }
+      recRef.current = null;
 
       if (err === "not-allowed" || err === "service-not-allowed") {
+        keepAliveRef.current = false;
+        listeningRef.current = false;
+        setListening(false);
         setError("Microphone access was denied. Enable it in your browser settings to speak to TALA.");
-      } else if (err === "network") {
-        setError("Speech recognition needs a connection. Check your network and try again.");
-      } else if (err && err !== "no-speech" && err !== "aborted") {
-        setError("The microphone had a problem. Please try again.");
+        return;
+      }
+
+      if (err === "network") {
+        // Web Speech can briefly lose its recognition backend on mobile. Keep
+        // the user's one-tap session alive and let onend restart once.
+        setError("Speech recognition connection was interrupted. Reconnecting…");
+        return;
+      }
+
+      if (err && err !== "no-speech" && err !== "aborted") {
+        setError("The microphone had a problem. Reconnecting…");
       }
     };
 
     rec.onend = () => {
       if (session !== sessionRef.current) return;
-
-      listeningRef.current = false;
       recRef.current = null;
-      setListening(false);
 
-      const text = suppressFinalizeRef.current
-        ? ""
-        : (finalRef.current.trim() || latestTranscriptRef.current.trim());
-
-      finalRef.current = "";
-      latestTranscriptRef.current = "";
-      setTranscript("");
-
-      if (text) {
-        const ms = Math.round(performance.now() - startedAtRef.current);
-        console.debug(`[TALA] speech → transcript in ${ms}ms`, text.slice(0, 60));
-        setLastRecognitionMs(ms);
-        onFinalRef.current(text);
+      // Some mobile browsers end recognition even in continuous mode. If the
+      // guest has not pressed Stop, restart transparently instead of forcing a
+      // second mic tap.
+      if (keepAliveRef.current) {
+        listeningRef.current = true;
+        setListening(true);
+        if (typeof window !== "undefined") {
+          clearRestartTimer();
+          restartTimerRef.current = window.setTimeout(() => {
+            if (keepAliveRef.current && session === sessionRef.current && !recRef.current) {
+              createAndStartRecognizer(session);
+            }
+          }, 180);
+        }
+      } else {
+        listeningRef.current = false;
+        setListening(false);
       }
     };
 
     try {
       listeningRef.current = true;
-      startedAtRef.current = performance.now();
-      rec.start();
       setListening(true);
+      rec.start();
     } catch {
-      listeningRef.current = false;
       recRef.current = null;
-      setListening(false);
-      setError("Could not start the microphone. Please try again.");
+      if (keepAliveRef.current && typeof window !== "undefined") {
+        restartTimerRef.current = window.setTimeout(() => createAndStartRecognizer(session), 250);
+      } else {
+        listeningRef.current = false;
+        setListening(false);
+        setError("Could not start the microphone. Please try again.");
+      }
     }
   }, []);
+
+  const start = useCallback(() => {
+    if (keepAliveRef.current || listeningRef.current) return;
+    clearRestartTimer();
+    const session = ++sessionRef.current;
+    keepAliveRef.current = true;
+    listeningRef.current = true;
+    suppressFinalizeRef.current = false;
+    setError(null);
+    setListening(true);
+    createAndStartRecognizer(session);
+  }, [createAndStartRecognizer]);
 
   useEffect(() => abort, [abort]);
 
