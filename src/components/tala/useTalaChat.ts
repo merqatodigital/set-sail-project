@@ -1,9 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { TALA_STORAGE, type TalaMessage } from "./talaConfig";
-import {
-  captureGuestLead,
-  confirmBookingDraft,
-} from "./talaTools";
+import { captureGuestLead, confirmBookingDraft } from "./talaTools";
 import {
   classifyHeuristically,
   writeAuditEntry,
@@ -36,17 +33,10 @@ export function setDevApiKey(key: string) {
     if (key) localStorage.setItem(TALA_STORAGE.devApiKey, key);
     else localStorage.removeItem(TALA_STORAGE.devApiKey);
   } catch {
-    /* storage unavailable (private mode) — dev key just won't persist */
+    /* storage unavailable */
   }
 }
 
-/**
- * Stable per-browser guest session id. The public orb is unauthenticated, so
- * we mint a random id stored in localStorage and reuse it for the chat
- * session. This isolates each visitor's conversation in the Cloudflare
- * TallaAgent Durable Object (keyed tenantId:userId) so two guests never share
- * history or private context.
- */
 export function getGuestSessionId(): string {
   try {
     const KEY = "tala.guestSessionId";
@@ -61,22 +51,6 @@ export function getGuestSessionId(): string {
   }
 }
 
-/**
- * THE single TALA path — every surface (guest text, voice transcript, CTA
- * intent, Day Pass, owner Ask TALA) goes through the centralized Cloudflare
- * client in src/lib/talaClient.ts:
- *
- *   browser -> ${VITE_TALA_WORKER_URL}/api/talla/chat -> TallaAgent DO -> tools
- *
- * The Worker runs the full prompt build + LLM + tool loop server-side, so the
- * browser sends ONLY the guest's text and renders what streams back. There is
- * no browser-side prompt, tool loop, or context injection. For owner mode we
- * forward the existing Supabase access token; the Worker — not the `role`
- * field — decides whether the caller actually gets owner privileges.
- *
- * When `onDelta` is provided the Worker's SSE endpoint is used so text appears
- * as it is generated; otherwise a single buffered call is made.
- */
 async function askCloudflareAgent(
   text: string,
   opts?: {
@@ -110,24 +84,13 @@ async function askCloudflareAgent(
   return { content, timing: result.timing };
 }
 
-
-/**
- * Workspace Day Pass — a structured, single-purpose request sent to the SAME
- * Cloudflare TallaAgent used by chat. The worker resolves it through
- * requestRoomBooking (roomType "Day Pass", checkIn = the chosen day, checkOut =
- * the next day, guests 1), which hard-enforces all required fields server-side,
- * dedupes a pending request, and persists ONE row to tala_booking_requests
- * (status pending, MT- reference). We never craft pricing client-side — the
- * day pass price shown in the form comes from cms_data.pricing, and the worker
- * ignores any guest-supplied amount.
- */
 export interface RequestDayPassInput {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
-  day: string; // ISO YYYY-MM-DD
-  guests?: number; // people on the pass (>= 1)
-  notes?: string; // arrival time, allergies, dietary needs, food add-on fallback
+  day: string;
+  guests?: number;
+  notes?: string;
 }
 
 export async function requestDayPass(
@@ -154,18 +117,7 @@ export async function requestDayPass(
   return { content: reply.content || "", reference: match ? match[0] : null };
 }
 
-/**
- * Stay / plan / package booking request — the structured sibling of
- * requestDayPass. The EXACT offer the visitor clicked on the website (room
- * name, advertised stay plan, or all-inclusive package) is passed through to
- * the same Cloudflare TallaAgent, which resolves it with requestRoomBooking:
- * required fields validated server-side, pricing derived from backend data
- * (never from the browser), ONE pending row in tala_booking_requests with an
- * MT- reference, duplicate replay prevented. No confirmation is ever implied
- * unless the worker returns a reference.
- */
 export interface RequestStayBookingInput {
-  /** Exactly what the guest selected on the site. */
   offerLabel: string;
   offerKind: "room" | "plan" | "package" | "none";
   guestName: string;
@@ -208,43 +160,9 @@ export async function requestStayBooking(
   return { content: reply.content || "", reference: match ? match[0] : null };
 }
 
-/**
- * Classify node of the agent graph — uses deterministic keyword rules only.
- * No extra LLM call needed. Fast, free, and reliable.
- */
 export interface TalaRunInfo {
   classification: TalaClassification;
   toolsUsed: string[];
-}
-
-export interface UseTalaChat {
-  messages: TalaMessage[];
-  thinking: boolean;
-  error: string | null;
-  /** Booking draft returned by request_booking (guest mode) awaiting confirm. */
-  pendingDraft: BookingDraft | null;
-  /** Classification + tools from the most recent completed turn (agent-graph telemetry). */
-  lastRun: TalaRunInfo | null;
-  /** Device-measured round-trip of the most recent turn (send → final reply), in ms. */
-  lastTurn: { ms: number; text: string } | null;
-  send: (
-    text: string,
-    systemPrompt: string,
-    options?: {
-      model?: string;
-      adminApiKey?: string;
-      cms?: CmsData;
-      /** Operator face only — allows TALA to write bookings/tours/rentals. */
-      owner?: boolean;
-    },
-  ) => Promise<string | null>;
-  /** Persists a guest-confirmed booking draft (the human Confirm action). */
-  confirmDraft: (
-    extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
-  ) => void;
-  /** Dismisses the pending draft card without confirming. */
-  clearDraft: () => void;
-  reset: () => void;
 }
 
 interface BookingDraft {
@@ -260,6 +178,30 @@ interface BookingDraft {
   notes: string;
 }
 
+export interface TalaSendOptions {
+  model?: string;
+  adminApiKey?: string;
+  cms?: CmsData;
+  owner?: boolean;
+  /** Called for each Cloudflare SSE text delta as soon as it arrives. */
+  onDelta?: (delta: string) => void;
+}
+
+export interface UseTalaChat {
+  messages: TalaMessage[];
+  thinking: boolean;
+  error: string | null;
+  pendingDraft: BookingDraft | null;
+  lastRun: TalaRunInfo | null;
+  lastTurn: { ms: number; text: string } | null;
+  send: (text: string, systemPrompt: string, options?: TalaSendOptions) => Promise<string | null>;
+  confirmDraft: (
+    extra?: { email?: string; nomad?: boolean; working?: boolean; tours?: string[] },
+  ) => void;
+  clearDraft: () => void;
+  reset: () => void;
+}
+
 export function useTalaChat(): UseTalaChat {
   const [messages, setMessages] = useState<TalaMessage[]>([]);
   const [thinking, setThinking] = useState(false);
@@ -268,24 +210,15 @@ export function useTalaChat(): UseTalaChat {
   const [pendingDraft, setPendingDraft] = useState<BookingDraft | null>(null);
   const [lastTurn, setLastTurn] = useState<{ ms: number; text: string } | null>(null);
   const inFlight = useRef(false);
-  // Live stream of the current turn — aborted when a new turn starts or the
-  // conversation resets, so a stale reply can never overwrite a newer one.
   const abortRef = useRef<AbortController | null>(null);
-  // Use the shared CMS store so owner-mode writes persist exactly like the
-  // admin managers do (through CmsContext -> cms_data).
   const { update: persistCms } = useCms();
-  // Authoritative copy of the conversation. React state updaters are NOT
-  // guaranteed to run synchronously at the setMessages() call site, so
-  // building the outgoing request from inside one silently dropped the
-  // user's newest message whenever React deferred the updater — the model
-  // then answered a conversation containing only the system prompt.
   const messagesRef = useRef<TalaMessage[]>([]);
 
   const send = useCallback(
     async (
       text: string,
-      systemPrompt: string,
-      options?: { model?: string; adminApiKey?: string; cms?: CmsData; owner?: boolean },
+      _systemPrompt: string,
+      options?: TalaSendOptions,
     ): Promise<string | null> => {
       const trimmed = text.trim();
       if (!trimmed || inFlight.current) return null;
@@ -300,27 +233,16 @@ export function useTalaChat(): UseTalaChat {
       messagesRef.current = history;
       setMessages(history);
 
-      // Auto-capture a lead whenever a guest shares a contact/name — even if
-      // the chat never reaches a booking. Skipped for the operator face.
       if (!options?.owner) {
         void captureGuestLead(trimmed, options?.cms?.settings?.siteName || "guest");
       }
 
-      // Local (network-free) sentiment — kept ONLY for the audit entry below.
-      // It is never injected into a prompt: the Worker owns the prompt.
       const sentiment = detectSentiment(trimmed);
-
-      // Cancel any still-open stream from a previous turn.
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
       try {
-        // ONE brain: guest and owner turns both stream from the Cloudflare
-        // TallaAgent. No browser prompt build, no browser tool loop, no
-        // weather/time/sentiment injection, no direct browser->OpenRouter call
-        // and no Supabase tala-chat edge function. Owner privileges are
-        // verified by the Worker from the forwarded Supabase bearer token.
         const assistantId = newId();
         let streamed = "";
         let firstTokenMs: number | null = null;
@@ -332,7 +254,6 @@ export function useTalaChat(): UseTalaChat {
           onDelta: (delta) => {
             if (firstTokenMs === null) {
               firstTokenMs = Math.round(performance.now() - turnStart);
-              // First visible token — drop the thinking indicator immediately.
               setThinking(false);
               messagesRef.current = [
                 ...messagesRef.current,
@@ -344,24 +265,22 @@ export function useTalaChat(): UseTalaChat {
               m.id === assistantId ? { ...m, content: streamed } : m,
             );
             setMessages(messagesRef.current);
+            options?.onDelta?.(delta);
           },
         });
 
         const finalText = reply.content?.trim();
         if (!finalText) throw new Error("TALA didn't have a reply.");
 
-        // Reconcile the streamed placeholder with the Worker's final text
-        // (identical in the normal case; the Worker sanitizes the final copy).
         const hasPlaceholder = messagesRef.current.some((m) => m.id === assistantId);
         messagesRef.current = hasPlaceholder
-          ? messagesRef.current.map((m) => (m.id === assistantId ? { ...m, content: finalText } : m))
+          ? messagesRef.current.map((m) =>
+              m.id === assistantId ? { ...m, content: finalText } : m,
+            )
           : [...messagesRef.current, { id: newId(), role: "assistant", content: finalText }];
         setMessages(messagesRef.current);
 
         const toolsUsed: string[] = [];
-
-        // Graph node 3 — audit. Never blocks or breaks the reply.
-        // Use deterministic heuristics only — no extra LLM call needed.
         const classification = classifyHeuristically(trimmed);
         setLastRun({ classification, toolsUsed });
         writeAuditEntry({
@@ -373,7 +292,6 @@ export function useTalaChat(): UseTalaChat {
         });
 
         const turnMs = Math.round(performance.now() - turnStart);
-        // Latency telemetry — no internal reasoning, only timings.
         console.debug(
           `[TALA] first token ${firstTokenMs ?? "n/a"}ms · complete ${turnMs}ms`,
           reply.timing
@@ -381,18 +299,17 @@ export function useTalaChat(): UseTalaChat {
             : "",
         );
         setLastTurn({ ms: turnMs, text: finalText.slice(0, 80) });
-
         return finalText;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Something went wrong.";
-        setError(msg);
+        if (msg !== "The operation was aborted.") setError(msg);
         return null;
       } finally {
         inFlight.current = false;
         setThinking(false);
       }
     },
-    [persistCms],
+    [],
   );
 
   const reset = useCallback(() => {
@@ -432,5 +349,16 @@ export function useTalaChat(): UseTalaChat {
     [pendingDraft, persistCms],
   );
 
-  return { messages, thinking, error, lastRun, lastTurn, send, reset, clearDraft, pendingDraft, confirmDraft };
+  return {
+    messages,
+    thinking,
+    error,
+    lastRun,
+    lastTurn,
+    send,
+    reset,
+    clearDraft,
+    pendingDraft,
+    confirmDraft,
+  };
 }
