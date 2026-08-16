@@ -1,10 +1,12 @@
 """
 TALA TOOL DEFINITIONS
 Each tool is a function Tala can call during conversation.
+Matches existing TEXT-ID Supabase schema.
 """
 
 import json
 import os
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -23,6 +25,12 @@ supabase_headers = {
 }
 
 
+def _uid(prefix: str = "") -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}" if prefix else uuid.uuid4().hex[:12]
+
+
+# ── ROOMS (new TEXT-ID table) ──────────────────────────────────────
+
 def check_availability(check_in: str, check_out: str, num_guests: int = 2) -> dict:
     """Check which rooms are available for given dates."""
     try:
@@ -31,23 +39,18 @@ def check_availability(check_in: str, check_out: str, num_guests: int = 2) -> di
             headers=supabase_headers,
         ).json()
 
-        available_rooms = []
+        available = []
         for room in rooms:
             if room["capacity"] < num_guests:
                 continue
-
             blocked = httpx.get(
                 f"{SUPABASE_URL}/rest/v1/room_availability?"
-                f"room_id=eq.{room['id']}"
-                f"&date=gte.{check_in}"
-                f"&date=lt.{check_out}"
-                f"&status=in.(booked,blocked,maintenance)"
-                f"&select=id",
+                f"room_id=eq.{room['id']}&date=gte.{check_in}&date=lt.{check_out}"
+                f"&status=in.(booked,blocked,maintenance)&select=id",
                 headers=supabase_headers,
             ).json()
-
             if len(blocked) == 0:
-                available_rooms.append({
+                available.append({
                     "room_id": room["id"],
                     "name": room["name"],
                     "type": room["type"],
@@ -55,29 +58,16 @@ def check_availability(check_in: str, check_out: str, num_guests: int = 2) -> di
                     "rate_php": room["rate_php"],
                     "amenities": room["amenities"],
                 })
-
-        return {
-            "available": len(available_rooms) > 0,
-            "rooms": available_rooms,
-            "check_in": check_in,
-            "check_out": check_out,
-            "num_guests": num_guests,
-        }
+        return {"available": len(available) > 0, "rooms": available, "check_in": check_in, "check_out": check_out}
     except Exception as e:
         return {"error": str(e)}
 
 
 def create_booking(
-    guest_name: str,
-    guest_email: str,
-    guest_phone: str,
-    room_id: str,
-    check_in: str,
-    check_out: str,
-    num_guests: int = 2,
-    special_requests: str = "",
+    guest_name: str, guest_email: str, guest_phone: str, room_id: str,
+    check_in: str, check_out: str, num_guests: int = 2, special_requests: str = "",
 ) -> dict:
-    """Create a new booking and block the dates."""
+    """Create a booking request (guest-facing tala_booking_requests table)."""
     try:
         ci = datetime.strptime(check_in, "%Y-%m-%d")
         co = datetime.strptime(check_out, "%Y-%m-%d")
@@ -88,131 +78,240 @@ def create_booking(
             headers=supabase_headers,
         ).json()[0]
 
-        total_php = room["rate_php"] * nights
-        deposit_php = total_php * 0.5
-        ref = f"MT-{datetime.now().year}-{datetime.now().strftime('%m%d')}-{os.urandom(2).hex().upper()}"
+        total_php = float(room["rate_php"]) * nights
+        ref = f"MT-{datetime.now().strftime('%Y%m%d')}-{_uid()[:6].upper()}"
 
-        guest_resp = httpx.post(
-            f"{SUPABASE_URL}/rest/v1/guests?on_conflict=email",
-            headers={**supabase_headers, "Prefer": "return=representation,resolution=merge-duplicates"},
+        # Insert guest record if new
+        httpx.post(
+            f"{SUPABASE_URL}/rest/v1/guests",
+            headers={**supabase_headers, "Prefer": "resolution=merge-duplicates"},
+            json={"id": _uid("guest"), "name": guest_name, "email": guest_email, "phone": guest_phone},
+        )
+
+        booking = httpx.post(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?select=*",
+            headers={**supabase_headers, "Prefer": "return=representation"},
             json={
-                "email": guest_email,
-                "phone": guest_phone,
-                "first_name": guest_name.split()[0],
-                "last_name": " ".join(guest_name.split()[1:]) or "",
+                "guest_name": guest_name,
+                "guest_phone": guest_phone,
+                "guest_email": guest_email,
+                "room_type": room["name"],
+                "check_in": check_in,
+                "check_out": check_out,
+                "guests": num_guests,
+                "amount": total_php,
+                "notes": special_requests,
+                "status": "pending",
+                "source": "tala_chat",
+                "reference": ref,
             },
         ).json()[0]
 
-        booking = httpx.post(
+        dispatch_staff_task(
+            title=f"Prepare {room['name']} for {guest_name}",
+            description=f"Booking {ref}: {check_in} to {check_out}. {num_guests} guests.",
+            category="housekeeping",
+            room_id=room_id,
+        )
+
+        return {
+            "success": True, "booking_reference": ref, "room": room["name"],
+            "check_in": check_in, "check_out": check_out, "nights": nights,
+            "total_php": total_php,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def list_bookings(status: str = None) -> dict:
+    """List admin-managed bookings."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/bookings?order=created_at.desc&limit=50"
+        if status:
+            url += f"&status=eq.{status}"
+        rows = httpx.get(url, headers=supabase_headers).json()
+        return {"bookings": rows, "count": len(rows)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def confirm_booking(booking_request_id: str) -> dict:
+    """Confirm a tala_booking_requests entry and create an admin booking."""
+    try:
+        req = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?id=eq.{booking_request_id}&select=*",
+            headers=supabase_headers,
+        ).json()[0]
+
+        # Look up room by name
+        rooms = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/rooms?select=id,name,slug",
+            headers=supabase_headers,
+        ).json()
+        room = next((r for r in rooms if r["name"] == req["room_type"]), None)
+
+        booking_id = _uid("bk")
+        httpx.post(
             f"{SUPABASE_URL}/rest/v1/bookings?select=*",
             headers={**supabase_headers, "Prefer": "return=representation"},
             json={
-                "reference": ref,
-                "guest_id": guest_resp["id"],
-                "room_id": room_id,
-                "check_in": check_in,
-                "check_out": check_out,
-                "num_guests": num_guests,
-                "status": "pending",
-                "total_php": total_php,
-                "deposit_php": deposit_php,
-                "balance_php": total_php - deposit_php,
-                "special_requests": special_requests,
-                "source": "website",
+                "id": booking_id,
+                "reference": req["reference"],
+                "guest_id": "",
+                "guest_name": req["guest_name"],
+                "guest_phone": req["guest_phone"],
+                "room_type": req["room_type"],
+                "check_in": req["check_in"],
+                "check_out": req["check_out"],
+                "guests": req["guests"],
+                "amount": req["amount"],
+                "paid_amount": 0,
+                "status": "confirmed",
+                "source": "tala_chat",
+                "notes": req["notes"],
             },
-        ).json()[0]
+        )
 
+        httpx.patch(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?id=eq.{booking_request_id}",
+            headers=supabase_headers,
+            json={"status": "confirmed", "confirmed_at": datetime.now().isoformat()},
+        )
+
+        # Block room dates
+        ci = datetime.strptime(req["check_in"], "%Y-%m-%d")
+        co = datetime.strptime(req["check_out"], "%Y-%m-%d")
         current = ci
         while current < co:
             httpx.post(
                 f"{SUPABASE_URL}/rest/v1/room_availability",
                 headers=supabase_headers,
-                json={
-                    "room_id": room_id,
-                    "date": current.strftime("%Y-%m-%d"),
-                    "status": "booked",
-                    "booking_id": booking["id"],
-                },
+                json={"room_id": room["id"] if room else "", "date": current.strftime("%Y-%m-%d"), "status": "booked", "booking_id": booking_id},
             )
             current += timedelta(days=1)
 
-        dispatch_staff_task(
-            title=f"Prepare {room['name']} for {guest_name}",
-            description=f"Booking {ref}: {check_in} to {check_out}. {num_guests} guests. Requests: {special_requests}",
-            category="housekeeping",
-            priority="normal",
-            room_id=room_id,
-        )
-
-        return {
-            "success": True,
-            "booking_reference": ref,
-            "room": room["name"],
-            "check_in": check_in,
-            "check_out": check_out,
-            "nights": nights,
-            "total_php": total_php,
-            "deposit_php": deposit_php,
-            "balance_php": total_php - deposit_php,
-            "guest_id": guest_resp["id"],
-            "booking_id": booking["id"],
-        }
+        return {"success": True, "booking_id": booking_id, "reference": req["reference"]}
     except Exception as e:
         return {"error": str(e)}
 
 
-def send_payment_link(booking_id: str, amount_php: float, method: str = "gcash") -> dict:
-    """Generate and send payment instructions."""
+# ── TOURS (uses existing tours_catalog) ─────────────────────────────
+
+def get_tour_packages() -> dict:
+    """Get all active tour packages from tours_catalog."""
     try:
-        booking = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/bookings?id=eq.{booking_id}&select=*,guests(email,first_name)",
+        tours = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tours_catalog?active=eq.true&select=*&order=sort_order",
             headers=supabase_headers,
+        ).json()
+        return {"tours": tours}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def request_tour_booking(
+    guest_name: str, guest_phone: str, tour_name: str,
+    tour_date: str, num_pax: int = 2, notes: str = "",
+) -> dict:
+    """Create a tour booking request."""
+    try:
+        tours = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tours_catalog?name=eq.{tour_name}&select=price,id",
+            headers=supabase_headers,
+        ).json()
+        tour = tours[0] if tours else None
+        price = float(tour["price"]) if tour else 0
+        total = price * num_pax
+        ref = f"TOUR-{datetime.now().strftime('%Y%m%d')}-{_uid()[:6].upper()}"
+
+        result = httpx.post(
+            f"{SUPABASE_URL}/rest/v1/tala_tour_requests?select=*",
+            headers={**supabase_headers, "Prefer": "return=representation"},
+            json={
+                "guest_name": guest_name,
+                "guest_phone": guest_phone,
+                "tour_name": tour_name,
+                "tour_date": tour_date,
+                "guests": num_pax,
+                "amount": total,
+                "notes": notes,
+                "status": "requested",
+                "source": "tala_chat",
+                "reference": ref,
+            },
         ).json()[0]
 
-        guest = booking["guests"]
-        instructions = {
-            "gcash": f"Send ₱{amount_php:,.0f} to GCash. Reference: {booking['reference']}",
-            "maya": f"Send ₱{amount_php:,.0f} via Maya. Reference: {booking['reference']}",
-            "bank_transfer": f"Transfer ₱{amount_php:,.0f} to BDO. Reference: {booking['reference']}",
-        }
-
-        httpx.post(
-            f"{SUPABASE_URL}/rest/v1/payments",
-            headers=supabase_headers,
-            json={
-                "booking_id": booking_id,
-                "guest_id": booking["guest_id"],
-                "amount_php": amount_php,
-                "method": method,
-                "type": "charge",
-                "status": "pending",
-            },
+        dispatch_staff_task(
+            title=f"Tour request: {tour_name} — {tour_date}",
+            description=f"{num_pax} pax. ₱{total:,.0f}. Guest: {guest_name}",
+            category="front_desk",
+            priority="high",
         )
 
-        if RESEND_API_KEY and guest.get("email"):
-            send_guest_email(
-                to=guest["email"],
-                subject=f"Payment Instructions — {booking['reference']}",
-                body=f"Hi {guest['first_name']},\n\nPlease pay ₱{amount_php:,.0f} via {method.upper()}.\nReference: {booking['reference']}\n\nMarina Terrace Team",
-            )
-
-        return {
-            "success": True,
-            "method": method,
-            "amount_php": amount_php,
-            "instructions": instructions.get(method, instructions["gcash"]),
-        }
+        return {"success": True, "reference": ref, "tour_name": tour_name, "total_php": total}
     except Exception as e:
         return {"error": str(e)}
 
 
+# ── MOTORBIKES (uses existing motorbikes + tala_rental_requests) ────
+
+def check_motorbike_availability(start_date: str, end_date: str) -> dict:
+    """Check available motorbikes for given dates."""
+    try:
+        bikes = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/motorbikes?active=eq.true&status=eq.available&select=*",
+            headers=supabase_headers,
+        ).json()
+        return {"available_bikes": bikes, "count": len(bikes)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def request_rental(
+    guest_name: str, guest_phone: str, bike_name: str,
+    start_date: str, end_date: str, notes: str = "",
+) -> dict:
+    """Create a motorbike rental request."""
+    try:
+        ci = datetime.strptime(start_date, "%Y-%m-%d")
+        co = datetime.strptime(end_date, "%Y-%m-%d")
+        days = (co - ci).days
+        ref = f"RENT-{datetime.now().strftime('%Y%m%d')}-{_uid()[:6].upper()}"
+
+        result = httpx.post(
+            f"{SUPABASE_URL}/rest/v1/tala_rental_requests?select=*",
+            headers={**supabase_headers, "Prefer": "return=representation"},
+            json={
+                "guest_name": guest_name,
+                "guest_phone": guest_phone,
+                "bike_name": bike_name,
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": days,
+                "notes": notes,
+                "status": "requested",
+                "source": "tala_chat",
+                "reference": ref,
+            },
+        ).json()[0]
+
+        dispatch_staff_task(
+            title=f"Rental request: {bike_name} — {start_date} to {end_date}",
+            description=f"Guest: {guest_name}. {days} days.",
+            category="front_desk",
+            priority="high",
+        )
+
+        return {"success": True, "reference": ref, "bike": bike_name, "days": days}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── STAFF TASKS (new TEXT-ID table) ─────────────────────────────────
+
 def dispatch_staff_task(
-    title: str,
-    description: str = "",
-    category: str = "housekeeping",
-    priority: str = "normal",
-    room_id: str = None,
-    booking_id: str = None,
+    title: str, description: str = "", category: str = "housekeeping",
+    priority: str = "normal", room_id: str = None, booking_id: str = None,
     due_at: str = None,
 ) -> dict:
     """Create a task and notify staff via Telegram."""
@@ -221,21 +320,15 @@ def dispatch_staff_task(
             f"{SUPABASE_URL}/rest/v1/staff_tasks?select=*",
             headers={**supabase_headers, "Prefer": "return=representation"},
             json={
-                "title": title,
-                "description": description,
-                "category": category,
-                "priority": priority,
-                "room_id": room_id,
-                "booking_id": booking_id,
-                "due_at": due_at,
-                "created_by": "tala",
+                "title": title, "description": description, "category": category,
+                "priority": priority, "room_id": room_id, "booking_id": booking_id,
+                "due_at": due_at, "created_by": "tala",
             },
         ).json()[0]
 
         if TELEGRAM_BOT_TOKEN and TELEGRAM_STAFF_CHAT_ID:
-            priority_emoji = {"urgent": "🚨", "high": "⚠️", "normal": "📋", "low": "📝"}
-            emoji = priority_emoji.get(priority, "📋")
-            msg = f"{emoji} *{title}*\n{category} | {priority}\n{description}\n\n_Task {task['id'][:8]}_"
+            emoji = {"urgent": "🚨", "high": "⚠️", "normal": "📋", "low": "📝"}.get(priority, "📋")
+            msg = f"{emoji} *{title}*\n{category} | {priority}\n{description}\n\n_Task {task['id'][:16]}_"
             httpx.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={"chat_id": TELEGRAM_STAFF_CHAT_ID, "text": msg, "parse_mode": "Markdown"},
@@ -245,6 +338,98 @@ def dispatch_staff_task(
     except Exception as e:
         return {"error": str(e)}
 
+
+def list_tasks(status: str = None, category: str = None) -> dict:
+    """List staff tasks."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/staff_tasks?order=created_at.desc&limit=50"
+        if status:
+            url += f"&status=eq.{status}"
+        if category:
+            url += f"&category=eq.{category}"
+        rows = httpx.get(url, headers=supabase_headers).json()
+        return {"tasks": rows, "count": len(rows)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── FOOD ORDERS (uses tala_food_orders) ─────────────────────────────
+
+def order_food(guest_name: str, guest_phone: str, items: list, notes: str = "") -> dict:
+    """Create a food order."""
+    try:
+        total = sum(item.get("price", 0) * item.get("qty", 1) for item in items)
+        ref = f"FOOD-{datetime.now().strftime('%Y%m%d')}-{_uid()[:6].upper()}"
+        result = httpx.post(
+            f"{SUPABASE_URL}/rest/v1/tala_food_orders?select=*",
+            headers={**supabase_headers, "Prefer": "return=representation"},
+            json={
+                "reference": ref, "guest_name": guest_name, "guest_phone": guest_phone,
+                "items": items, "total": total, "status": "pending", "notes": notes,
+                "source": "tala_chat",
+            },
+        ).json()[0]
+        dispatch_staff_task(
+            title=f"Food order: {ref}", description=f"{len(items)} items, ₱{total:,.0f}. {guest_name}",
+            category="kitchen", priority="high",
+        )
+        return {"success": True, "reference": ref, "total": total}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── GUEST MESSAGES (uses tala_guest_messages) ──────────────────────
+
+def send_guest_message(guest_name: str, guest_phone: str, message: str) -> dict:
+    """Log a guest message to staff."""
+    try:
+        result = httpx.post(
+            f"{SUPABASE_URL}/rest/v1/tala_guest_messages?select=*",
+            headers={**supabase_headers, "Prefer": "return=representation"},
+            json={
+                "guest_name": guest_name, "guest_phone": guest_phone,
+                "message": message, "status": "unread", "source": "tala_chat",
+            },
+        ).json()[0]
+        return {"success": True, "message_id": result["id"]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── GUEST HISTORY ──────────────────────────────────────────────────
+
+def get_guest_history(email: str = None, phone: str = None) -> dict:
+    """Get guest's booking and rental history."""
+    try:
+        if email:
+            guests = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/guests?email=eq.{email}&select=*",
+                headers=supabase_headers,
+            ).json()
+        elif phone:
+            guests = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/guests?phone=eq.{phone}&select=*",
+                headers=supabase_headers,
+            ).json()
+        else:
+            return {"found": False, "error": "Provide email or phone"}
+        if not guests:
+            return {"found": False}
+        guest = guests[0]
+        bookings = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/bookings?guest_name=eq.{guest['name']}&order=created_at.desc&limit=10",
+            headers=supabase_headers,
+        ).json()
+        rentals = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/motorbike_rentals?guest_name=eq.{guest['name']}&order=created_at.desc&limit=10",
+            headers=supabase_headers,
+        ).json()
+        return {"found": True, "guest": guest, "bookings": bookings, "rentals": rentals}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── EMAIL ──────────────────────────────────────────────────────────
 
 def send_guest_email(to: str, subject: str, body: str) -> dict:
     """Send email via Resend."""
@@ -261,143 +446,7 @@ def send_guest_email(to: str, subject: str, body: str) -> dict:
         return {"error": str(e)}
 
 
-def update_room_status(room_id: str, status: str) -> dict:
-    """Update room status."""
-    try:
-        httpx.patch(
-            f"{SUPABASE_URL}/rest/v1/rooms?id=eq.{room_id}",
-            headers=supabase_headers,
-            json={"status": status, "updated_at": datetime.now().isoformat()},
-        )
-        return {"success": True, "room_id": room_id, "new_status": status}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def get_tour_packages() -> dict:
-    """Get all active tour packages."""
-    try:
-        tours = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/tours?is_active=eq.true&select=*",
-            headers=supabase_headers,
-        ).json()
-        return {"tours": tours}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def book_tour(tour_id: str, guest_id: str, date: str, num_pax: int, booking_id: str = None) -> dict:
-    """Book a tour for a guest."""
-    try:
-        tour = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/tours?id=eq.{tour_id}&select=*",
-            headers=supabase_headers,
-        ).json()[0]
-
-        total = tour["price_php"] * num_pax
-        tour_booking = httpx.post(
-            f"{SUPABASE_URL}/rest/v1/tour_bookings?select=*",
-            headers={**supabase_headers, "Prefer": "return=representation"},
-            json={
-                "tour_id": tour_id,
-                "guest_id": guest_id,
-                "booking_id": booking_id,
-                "date": date,
-                "num_pax": num_pax,
-                "total_php": total,
-                "status": "pending",
-            },
-        ).json()[0]
-
-        dispatch_staff_task(
-            title=f"Tour: {tour['name']} — {date}",
-            description=f"{num_pax} pax. ₱{total:,.0f}. Operator: {tour.get('operator_name', 'TBD')}",
-            category="front_desk",
-            priority="high",
-        )
-
-        return {"success": True, "tour_booking_id": tour_booking["id"], "tour_name": tour["name"], "total_php": total}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def arrange_transport(
-    guest_id: str,
-    transport_type: str,
-    date: str,
-    time: str = "",
-    pickup: str = "",
-    dropoff: str = "",
-    num_pax: int = 1,
-    booking_id: str = None,
-) -> dict:
-    """Arrange transportation for a guest."""
-    try:
-        transport = httpx.post(
-            f"{SUPABASE_URL}/rest/v1/transport_bookings?select=*",
-            headers={**supabase_headers, "Prefer": "return=representation"},
-            json={
-                "guest_id": guest_id,
-                "booking_id": booking_id,
-                "type": transport_type,
-                "date": date,
-                "time": time,
-                "pickup_location": pickup,
-                "dropoff_location": dropoff,
-                "num_pax": num_pax,
-                "status": "pending",
-            },
-        ).json()[0]
-
-        dispatch_staff_task(
-            title=f"Transport: {transport_type} on {date}",
-            description=f"{pickup or 'TBD'} → {dropoff or 'TBD'}. {num_pax} pax. {time or 'TBD'}",
-            category="front_desk",
-            priority="high",
-        )
-
-        return {"success": True, "transport_id": transport["id"], "type": transport_type, "status": "pending"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def get_guest_history(email: str) -> dict:
-    """Get a guest's booking history."""
-    try:
-        guest = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/guests?email=eq.{email}&select=*",
-            headers=supabase_headers,
-        ).json()
-        if not guest:
-            return {"found": False}
-        guest = guest[0]
-        bookings = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/bookings?guest_id=eq.{guest['id']}&select=*,rooms(name)&order=created_at.desc",
-            headers=supabase_headers,
-        ).json()
-        return {"found": True, "guest": guest, "bookings": bookings, "total_stays": guest["total_stays"], "is_vip": guest["is_vip"]}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def apply_discount(booking_id: str, discount_percent: float, reason: str) -> dict:
-    """Apply a discount to a booking."""
-    try:
-        booking = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/bookings?id=eq.{booking_id}&select=*",
-            headers=supabase_headers,
-        ).json()[0]
-        discount_amount = booking["total_php"] * (discount_percent / 100)
-        new_total = booking["total_php"] - discount_amount
-        httpx.patch(
-            f"{SUPABASE_URL}/rest/v1/bookings?id=eq.{booking_id}",
-            headers=supabase_headers,
-            json={"total_php": new_total, "balance_php": new_total - booking["deposit_php"]},
-        )
-        return {"success": True, "original_total": booking["total_php"], "discount_amount": discount_amount, "new_total": new_total}
-    except Exception as e:
-        return {"error": str(e)}
-
+# ── ESCALATION ─────────────────────────────────────────────────────
 
 def escalate_to_human(reason: str, guest_message: str = "", guest_email: str = "") -> dict:
     """Escalate to a human team member."""
@@ -416,31 +465,99 @@ def escalate_to_human(reason: str, guest_message: str = "", guest_email: str = "
         return {"error": str(e)}
 
 
+# ── PAYMENTS ───────────────────────────────────────────────────────
+
+def record_payment(booking_request_id: str, amount: float, method: str = "cash") -> dict:
+    """Record a payment against a booking request."""
+    try:
+        req = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?id=eq.{booking_request_id}&select=*",
+            headers=supabase_headers,
+        ).json()[0]
+
+        new_paid = float(req.get("paid_amount", 0)) + amount
+        httpx.patch(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?id=eq.{booking_request_id}",
+            headers=supabase_headers,
+            json={
+                "paid_amount": new_paid,
+                "paid_at": datetime.now().isoformat(),
+            },
+        )
+
+        # Also log in payments table
+        httpx.post(
+            f"{SUPABASE_URL}/rest/v1/payments",
+            headers=supabase_headers,
+            json={
+                "reference": req["reference"],
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "category": "room",
+                "direction": "in",
+                "amount": amount,
+                "method": method,
+                "related_id": booking_request_id,
+                "description": f"Payment for {req['reference']}",
+            },
+        )
+
+        return {"success": True, "amount": amount, "total_paid": new_paid}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── REPORTS ────────────────────────────────────────────────────────
+
 def generate_report(report_type: str = "daily") -> dict:
-    """Generate occupancy/revenue report."""
+    """Generate daily operations report."""
     try:
         today = datetime.now().strftime("%Y-%m-%d")
-        check_ins = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/bookings?check_in=eq.{today}&status=in.(confirmed,checked_in)&select=*,rooms(name),guests(first_name,last_name)",
+
+        # Today's bookings
+        today_bookings = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/bookings?check_in=eq.{today}&select=id,reference,guest_name,room_type",
             headers=supabase_headers,
         ).json()
-        check_outs = httpx.get(
-            f"{SUPABASE_URL}/rest/v1/bookings?check_out=eq.{today}&status=eq.checked_in&select=*,rooms(name),guests(first_name,last_name)",
+
+        # Pending tasks
+        pending_tasks = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/staff_tasks?status=eq.pending&select=title,priority,category",
             headers=supabase_headers,
         ).json()
-        total_rooms = httpx.get(f"{SUPABASE_URL}/rest/v1/rooms?status=eq.active&select=id", headers=supabase_headers).json()
-        booked_today = httpx.get(f"{SUPABASE_URL}/rest/v1/room_availability?date=eq.{today}&status=eq.booked&select=id", headers=supabase_headers).json()
-        occupancy = (len(booked_today) / max(len(total_rooms), 1)) * 100
-        pending_tasks = httpx.get(f"{SUPABASE_URL}/rest/v1/staff_tasks?status=eq.pending&select=title,priority,category", headers=supabase_headers).json()
+
+        # Pending booking requests
+        pending_requests = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tala_booking_requests?status=eq.pending&select=id,guest_name,room_type,check_in",
+            headers=supabase_headers,
+        ).json()
+
+        # Pending tour requests
+        pending_tours = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tala_tour_requests?status=eq.requested&select=id,guest_name,tour_name,tour_date",
+            headers=supabase_headers,
+        ).json()
+
+        # Unread messages
+        unread = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/tala_guest_messages?status=eq.unread&select=id",
+            headers=supabase_headers,
+        ).json()
+
+        # Motorbike availability
+        bikes = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/motorbikes?active=eq.true&select=id,status",
+            headers=supabase_headers,
+        ).json()
 
         return {
             "date": today,
-            "occupancy_percent": round(occupancy, 1),
-            "rooms_booked": len(booked_today),
-            "total_rooms": len(total_rooms),
-            "check_ins_today": len(check_ins),
-            "check_outs_today": len(check_outs),
+            "arrivals_today": today_bookings,
+            "pending_booking_requests": len(pending_requests),
+            "pending_tour_requests": len(pending_tours),
             "pending_tasks": len(pending_tasks),
+            "unread_messages": len(unread),
+            "motorbikes_available": len([b for b in bikes if b["status"] == "available"]),
+            "motorbikes_total": len(bikes),
         }
     except Exception as e:
         return {"error": str(e)}

@@ -16,17 +16,21 @@ import httpx
 from tools.tala_tools import (
     check_availability,
     create_booking,
-    send_payment_link,
-    dispatch_staff_task,
-    send_guest_email,
-    update_room_status,
+    list_bookings,
+    confirm_booking,
     get_tour_packages,
-    book_tour,
-    arrange_transport,
+    request_tour_booking,
+    check_motorbike_availability,
+    request_rental,
+    dispatch_staff_task,
+    list_tasks,
+    order_food,
+    send_guest_message,
     get_guest_history,
-    apply_discount,
+    record_payment,
     escalate_to_human,
     generate_report,
+    send_guest_email,
 )
 from prompts.tala_system import TALA_SYSTEM_PROMPT
 from chat_cache import get_cached_answer
@@ -46,17 +50,21 @@ OPENROUTER_MODEL = os.environ.get("HERMES_MODEL", "meta-llama/llama-3.1-8b-instr
 TOOLS = {
     "check_availability": check_availability,
     "create_booking": create_booking,
-    "send_payment_link": send_payment_link,
-    "dispatch_staff_task": dispatch_staff_task,
-    "send_guest_email": send_guest_email,
-    "update_room_status": update_room_status,
+    "list_bookings": list_bookings,
+    "confirm_booking": confirm_booking,
     "get_tour_packages": get_tour_packages,
-    "book_tour": book_tour,
-    "arrange_transport": arrange_transport,
+    "request_tour_booking": request_tour_booking,
+    "check_motorbike_availability": check_motorbike_availability,
+    "request_rental": request_rental,
+    "dispatch_staff_task": dispatch_staff_task,
+    "list_tasks": list_tasks,
+    "order_food": order_food,
+    "send_guest_message": send_guest_message,
     "get_guest_history": get_guest_history,
-    "apply_discount": apply_discount,
+    "record_payment": record_payment,
     "escalate_to_human": escalate_to_human,
     "generate_report": generate_report,
+    "send_guest_email": send_guest_email,
 }
 
 TOOL_SCHEMAS = [
@@ -80,7 +88,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "create_booking",
-            "description": "Create a new room booking",
+            "description": "Create a room booking request for a guest",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -88,28 +96,100 @@ TOOL_SCHEMAS = [
                     "guest_email": {"type": "string"},
                     "guest_phone": {"type": "string"},
                     "room_id": {"type": "string"},
-                    "check_in": {"type": "string"},
-                    "check_out": {"type": "string"},
+                    "check_in": {"type": "string", "description": "YYYY-MM-DD"},
+                    "check_out": {"type": "string", "description": "YYYY-MM-DD"},
                     "num_guests": {"type": "integer"},
                     "special_requests": {"type": "string"},
                 },
-                "required": ["guest_name", "guest_email", "room_id", "check_in", "check_out"],
+                "required": ["guest_name", "guest_email", "guest_phone", "room_id", "check_in", "check_out"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "send_payment_link",
-            "description": "Send payment instructions to guest",
+            "name": "list_bookings",
+            "description": "List current bookings, optionally filtered by status",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "booking_id": {"type": "string"},
-                    "amount_php": {"type": "number"},
-                    "method": {"type": "string", "enum": ["gcash", "maya", "bank_transfer"]},
+                    "status": {"type": "string", "description": "Filter by status: pending, confirmed, checked_in, checked_out, cancelled"},
                 },
-                "required": ["booking_id", "amount_php"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "confirm_booking",
+            "description": "Confirm a pending booking request and create an official booking",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_request_id": {"type": "string", "description": "The tala_booking_requests UUID"},
+                },
+                "required": ["booking_request_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tour_packages",
+            "description": "Get all available tour packages",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_tour_booking",
+            "description": "Create a tour booking request for a guest",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "guest_name": {"type": "string"},
+                    "guest_phone": {"type": "string"},
+                    "tour_name": {"type": "string"},
+                    "tour_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "num_pax": {"type": "integer"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["guest_name", "guest_phone", "tour_name", "tour_date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_motorbike_availability",
+            "description": "Check available motorbikes for rental",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"},
+                },
+                "required": ["start_date", "end_date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_rental",
+            "description": "Create a motorbike rental request",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "guest_name": {"type": "string"},
+                    "guest_phone": {"type": "string"},
+                    "bike_name": {"type": "string"},
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["guest_name", "guest_phone", "bike_name", "start_date", "end_date"],
             },
         },
     },
@@ -117,7 +197,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "dispatch_staff_task",
-            "description": "Create a task for staff and notify via Telegram",
+            "description": "Create a task for staff and optionally notify via Telegram",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -133,46 +213,47 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "get_tour_packages",
-            "description": "Get all available tour packages",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "book_tour",
-            "description": "Book a tour for a guest",
+            "name": "list_tasks",
+            "description": "List staff tasks, optionally filtered by status or category",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "tour_id": {"type": "string"},
-                    "guest_id": {"type": "string"},
-                    "date": {"type": "string"},
-                    "num_pax": {"type": "integer"},
-                    "booking_id": {"type": "string"},
+                    "status": {"type": "string"},
+                    "category": {"type": "string"},
                 },
-                "required": ["tour_id", "guest_id", "date", "num_pax"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "arrange_transport",
-            "description": "Arrange transportation for a guest",
+            "name": "order_food",
+            "description": "Create a food order for a guest",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "guest_id": {"type": "string"},
-                    "transport_type": {"type": "string", "enum": ["airport_pickup", "airport_dropoff", "van_rental", "boat"]},
-                    "date": {"type": "string"},
-                    "time": {"type": "string"},
-                    "pickup": {"type": "string"},
-                    "dropoff": {"type": "string"},
-                    "num_pax": {"type": "integer"},
+                    "guest_name": {"type": "string"},
+                    "guest_phone": {"type": "string"},
+                    "items": {"type": "array", "items": {"type": "object"}},
+                    "notes": {"type": "string"},
                 },
-                "required": ["guest_id", "transport_type", "date"],
+                "required": ["guest_name", "guest_phone", "items"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_guest_message",
+            "description": "Log a message from guest to staff",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "guest_name": {"type": "string"},
+                    "guest_phone": {"type": "string"},
+                    "message": {"type": "string"},
+                },
+                "required": ["guest_name", "guest_phone", "message"],
             },
         },
     },
@@ -180,27 +261,29 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "get_guest_history",
-            "description": "Look up a guest's booking history by email",
+            "description": "Look up a guest's booking and rental history",
             "parameters": {
                 "type": "object",
-                "properties": {"email": {"type": "string"}},
-                "required": ["email"],
+                "properties": {
+                    "email": {"type": "string"},
+                    "phone": {"type": "string"},
+                },
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "apply_discount",
-            "description": "Apply a discount to a booking",
+            "name": "record_payment",
+            "description": "Record a payment against a booking",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "booking_id": {"type": "string"},
-                    "discount_percent": {"type": "number"},
-                    "reason": {"type": "string"},
+                    "booking_request_id": {"type": "string"},
+                    "amount": {"type": "number"},
+                    "method": {"type": "string", "enum": ["gcash", "maya", "cash", "bank_transfer"]},
                 },
-                "required": ["booking_id", "discount_percent", "reason"],
+                "required": ["booking_request_id", "amount"],
             },
         },
     },
@@ -224,7 +307,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "generate_report",
-            "description": "Generate daily occupancy report",
+            "description": "Generate daily operations report",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -236,15 +319,16 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "update_room_status",
-            "description": "Update room status (available, maintenance, etc.)",
+            "name": "send_guest_email",
+            "description": "Send an email to a guest via Resend",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "room_id": {"type": "string"},
-                    "status": {"type": "string", "enum": ["active", "maintenance", "inactive"]},
+                    "to": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "body": {"type": "string"},
                 },
-                "required": ["room_id", "status"],
+                "required": ["to", "subject", "body"],
             },
         },
     },
@@ -352,7 +436,7 @@ async def chat(request: Request):
                 "cached": False,
                 "response_time_ms": round((time.time() - start) * 1000),
             })
-        except Exception as e:
+        except Exception:
             return JSONResponse({
                 "response": "I'm having a technical moment. Please try again!",
                 "cached": False,
