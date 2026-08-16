@@ -3,7 +3,7 @@
 // Replaces direct Supabase calls in React components.
 
 import { supabase } from "./supabase";
-import { talaWorkerBase } from "./talaClient";
+import { talaWorkerBase, TALA_TENANT } from "./talaClient";
 
 /**
  * Resolve the owner's Supabase session JWT. Supabase JS v2 persists the
@@ -32,6 +32,10 @@ async function apiFetch<T>(
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    // When Guest Login is used (no Supabase session), forward the dev tenant
+    // header so the Worker's TALA_DEV_MODE bypass grants owner access in staging.
+    headers["X-Dev-Tenant"] = TALA_TENANT;
   }
 
   const res = await fetch(`${talaWorkerBase()}${path}`, {

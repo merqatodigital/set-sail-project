@@ -69,7 +69,13 @@ export interface TalaChatInput {
 export async function talaChat(input: TalaChatInput): Promise<TalaChatResult> {
   const base = talaWorkerBase();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (input.authToken) headers.Authorization = `Bearer ${input.authToken}`;
+  if (input.authToken) {
+    headers.Authorization = `Bearer ${input.authToken}`;
+  } else {
+    // No Supabase session (e.g. admin Guest Login). Forward the dev tenant
+    // header so the Worker's TALA_DEV_MODE bypass grants owner access in staging.
+    headers["X-Dev-Tenant"] = TALA_TENANT;
+  }
   const res = await fetch(`${base}/api/talla/chat`, {
     method: "POST",
     headers,
