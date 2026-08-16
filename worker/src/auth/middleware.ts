@@ -25,6 +25,21 @@ const UNAUTHENTICATED: AuthContext = {
  * Never throws — callers should handle the unauthenticated case.
  */
 export async function resolveAuth(request: Request, env: Env): Promise<AuthContext> {
+  // Development bypass: when TALA_DEV_MODE is "true", allow auth-less owner
+  // access via X-Dev-Tenant header when no Authorization header is present.
+  // This is for staging testing only — NEVER enabled in production.
+  if (env.TALA_DEV_MODE === "true" && !request.headers.get("Authorization")) {
+    const devTenant = request.headers.get("X-Dev-Tenant");
+    if (devTenant) {
+      return {
+        authenticated: true,
+        userId: "dev-owner",
+        tenantId: devTenant,
+        role: "owner",
+      };
+    }
+  }
+
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return UNAUTHENTICATED;

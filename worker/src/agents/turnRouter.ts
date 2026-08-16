@@ -14,7 +14,7 @@ export type TurnMode = "conversational" | "agentic";
 // Guest/owner actions that genuinely require live operational tools or state
 // changes. Anything matching this is routed to the agentic path even if short.
 const ACTION_RE =
-  /\b(book|reserve|cancel|order|request|approve|reject|modify|change|update|create|delete|send|schedule|pay|refund|availability|book a|book the|my booking|my reservation|my stay|check (my|the) (booking|reservation|status)|day pass|place an order|add (a |the )?request|report (a |the )?(issue|problem)|open (a |the )?(ticket|task))\b/i;
+  /\b(book|reserve|cancel|order|request|approve|reject|modify|change|update|create|delete|send|schedule|pay|refund|availability|arrivals|departures|in-house|occupancy|operations|bookings|status|what.*(arrivals|departures|bookings)|today.*arrivals|today.*departures|day pass|check (my|the) (booking|reservation|status))\b/i;
 
 // Greetings / casual chatter — always safe to answer with one model call.
 const GREETING_RE =

@@ -58,6 +58,9 @@ export interface Env {
   // Environment mode: "development" or "production"
   // Set via wrangler.jsonc vars or environment variable
   ENVIRONMENT?: string;
+  // Dev bypass flag — when "true", allows X-Dev-Tenant header for auth-less testing.
+  // Staging only. NEVER set in production.
+  TALA_DEV_MODE?: string;
 }
 
 /**
