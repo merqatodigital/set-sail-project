@@ -253,13 +253,35 @@ function parseResponse(data: OpenRouterResponse): ChatResponse {
     throw new Error("No response from OpenRouter");
   }
 
+  // Some models (e.g. DeepSeek) emit DSML-format tool calls in `content`
+  // instead of the standard OpenAI `tool_calls` array. Parse those when
+  // tool_calls is empty so the agent loop can execute them.
+  const toolCalls = (choice.message.tool_calls || []).map((tc) => ({
+    id: tc.id,
+    name: tc.function.name,
+    arguments: tc.function.arguments,
+  }));
+
+  // If standard tool_calls exist, use them (standard OpenAI format).
+  // Otherwise, check for DSML format in content.
+  let effectiveToolCalls = toolCalls;
+  let effectiveContent = choice.message.content;
+
+  if (effectiveToolCalls.length === 0 && effectiveContent && effectiveContent.length > 0) {
+    const dsmlCalls = parseDsmlToolCalls(effectiveContent);
+    if (dsmlCalls.length > 0) {
+      effectiveToolCalls = dsmlCalls;
+      // Strip DSML tags from content — keep only the user-facing text
+      effectiveContent = stripDsmlTags(effectiveContent);
+      if (effectiveContent && effectiveContent.trim().length === 0) {
+        effectiveContent = null;
+      }
+    }
+  }
+
   return {
-    content: choice.message.content,
-    toolCalls: (choice.message.tool_calls || []).map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: tc.function.arguments,
-    })),
+    content: effectiveContent,
+    toolCalls: effectiveToolCalls,
     finishReason: choice.finish_reason,
     model: data.model,
     usage: data.usage
@@ -270,6 +292,67 @@ function parseResponse(data: OpenRouterResponse): ChatResponse {
         }
       : undefined,
   };
+}
+
+/**
+ * Parse DSML-format tool calls from model content output.
+ * Some models (e.g. DeepSeek) emit tool invocations as:
+ *   <｜DSML｜invoke name="toolName">{"arg": "value"}</｜DSML｜invoke>
+ * or:
+ *   <｜DSML｜invoke name="toolName" args_key>args_value</｜DSML｜invoke>
+ * This extracts them into the standard toolCalls format.
+ */
+function parseDsmlToolCalls(content: string): Array<{ id: string; name: string; arguments: string }> {
+  const results: Array<{ id: string; name: string; arguments: string }> = [];
+  // Match DSML invoke blocks
+  const invokeRe = /<｜DSML｜invoke\s+([^>]+)>(.*?)<｜\/DSML｜invoke>/gs;
+  let m: RegExpExecArray | null;
+  while ((m = invokeRe.exec(content)) !== null) {
+    const attrs = m[1];
+    const body = m[2].trim();
+    // Extract name attribute
+    const nameMatch = attrs.match(/name\s*=\s*"([^"]+)"/);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+
+    // Extract arguments — try JSON first, fall back to key-value parsing
+    let argumentsStr = "{}";
+    try {
+      // Try JSON parse of body
+      JSON.parse(body);
+      argumentsStr = body;
+    } catch {
+      // Parse key-value format: key>value pairs
+      const argPairs: Record<string, string> = {};
+      const argRe = /(\w+)>([^<]+)/g;
+      let am: RegExpExecArray | null;
+      while ((am = argRe.exec(body)) !== null) {
+        argPairs[am[1]] = am[2].trim();
+      }
+      if (Object.keys(argPairs).length > 0) {
+        argumentsStr = JSON.stringify(argPairs);
+      }
+    }
+
+    results.push({
+      id: `dsml_${results.length}_${Date.now()}`,
+      name,
+      arguments: argumentsStr,
+    });
+  }
+  return results;
+}
+
+/**
+ * Strip DSML tool-call tags from content, leaving only user-facing text.
+ */
+function stripDsmlTags(content: string): string | null {
+  // Remove entire DSML blocks including their content
+  const stripped = content
+    .replace(/<｜DSML｜tool_calls>.*?<｜\/DSML｜tool_calls>/gs, "")
+    .replace(/<｜DSML｜invoke[^>]*>.*?<｜\/DSML｜invoke>/gs, "")
+    .trim();
+  return stripped.length > 0 ? stripped : null;
 }
 
 /**
