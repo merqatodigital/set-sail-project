@@ -1,9 +1,8 @@
 import { Suspense, lazy } from "react";
 import {
+  HashRouter,
   Routes,
   Route,
-  unstable_HistoryRouter as HistoryRouter,
-  UNSAFE_createBrowserHistory as createBrowserHistory,
 } from "react-router-dom";
 import { CmsProvider } from "@/context/CmsContext";
 import { ThemeProvider } from "@/context/ThemeProvider";
@@ -25,12 +24,6 @@ const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
-// Created once at module scope. BrowserRouter builds this history INSIDE its
-// render, and stamping the history index there triggered a router state update
-// during React's render phase. Building it outside the render phase keeps the
-// exact same routing behaviour without the illegal mid-render update.
-const history = createBrowserHistory();
-
 export default function App() {
   return (
     <ToastProvider>
@@ -38,7 +31,7 @@ export default function App() {
         <ThemeProvider>
           <CurrencyProvider>
             <AuthProvider>
-            <HistoryRouter history={history}>
+            <HashRouter>
               <Routes>
                 <Route element={<PublicLayout />}>
                   <Route path="/" element={<Home />} />
@@ -108,7 +101,7 @@ export default function App() {
                   }
                 />
               </Routes>
-            </HistoryRouter>
+            </HashRouter>
             <CookieConsent />
           </AuthProvider>
         </CurrencyProvider>
