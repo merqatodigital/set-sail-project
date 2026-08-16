@@ -18,22 +18,16 @@ services:
   tala-agent:
     build:
       context: .
-      dockerfile: services/hermes/Dockerfile
+      dockerfile: services/hermes/Dockerfile.tala
     restart: unless-stopped
     environment:
-      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
-      API_SERVER_KEY: ${HERMES_TALA_API_KEY}
       HERMES_MODEL: ${HERMES_TALA_MODEL:-meta-llama/llama-3.1-8b-instruct}
-      HERMES_ROLE: tala
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      RESORT_CMS_KEY: ${RESORT_CMS_KEY:-marina_terrace_payload}
-      HERMES_HOME: /data/hermes
-    volumes:
-      - tala-agent-data:/data/hermes
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_STAFF_CHAT_ID: ${TELEGRAM_STAFF_CHAT_ID:-}
     ports:
       - "127.0.0.1:8642:8650"
     deploy:
@@ -41,11 +35,11 @@ services:
         limits:
           memory: 512M
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/health', timeout=5)"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8650/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 15s
 
   hermes-workforce:
     build:
