@@ -26,7 +26,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       API_SERVER_KEY: ${HERMES_TALA_API_KEY}
-      HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
+      HERMES_MODEL: ${HERMES_TALA_MODEL:-meta-llama/llama-3.1-8b-instruct}
       HERMES_ROLE: tala
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
@@ -36,12 +36,16 @@ services:
       - tala-agent-data:/data/hermes
     ports:
       - "127.0.0.1:8642:8650"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 90s
+      start_period: 30s
 
   hermes-workforce:
     build:
@@ -54,7 +58,7 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       API_SERVER_KEY: ${HERMES_WORKFORCE_API_KEY}
-      HERMES_MODEL: ${HERMES_MODEL:-openai/gpt-oss-20b}
+      HERMES_MODEL: ${HERMES_WORKFORCE_MODEL:-mistralai/mistral-7b-instruct}
       HERMES_ROLE: workforce
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
@@ -68,12 +72,16 @@ services:
       - .:/workspace/set-sail-project:ro
     ports:
       - "127.0.0.1:8643:8650"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8650/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 90s
+      start_period: 30s
 
 volumes:
   tala-agent-data:

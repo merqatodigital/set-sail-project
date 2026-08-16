@@ -1,4 +1,14 @@
 {$HERMES_DOMAIN} {
   encode zstd gzip
-  reverse_proxy hermes-workforce:8650
+
+  handle_errors {
+    respond `{"status":"warming_up","message":"Our AI concierge is starting up. Please try again in a few seconds."}` 200
+    header Content-Type "application/json"
+  }
+
+  reverse_proxy hermes-workforce:8650 {
+    health_uri /health
+    health_interval 10s
+    health_timeout 5s
+  }
 }

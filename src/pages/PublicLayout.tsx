@@ -9,6 +9,9 @@ const TalaWidget = lazy(() =>
   import("@/components/tala/TalaWidget").then((module) => ({ default: module.TalaWidget })),
 );
 
+// Lightweight text-only chat — loads instantly, no voice, no Kokoro download.
+const ResortChat = lazy(() => import("@/components/chat/ResortChat"));
+
 class TalaWidgetBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
@@ -54,6 +57,9 @@ export default function PublicLayout() {
           <TalaWidget />
         </Suspense>
       </TalaWidgetBoundary>
+      <Suspense fallback={null}>
+        <ResortChat />
+      </Suspense>
     </div>
   );
 }

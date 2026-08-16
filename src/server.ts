@@ -22,9 +22,10 @@ type TalaWireMessage = {
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 function runtimeValue(env: unknown, name: string): string {
-  const runtime = env && typeof env === "object" ? (env as Record<string, unknown>)[name] : undefined;
+  const runtime =
+    env && typeof env === "object" ? (env as Record<string, unknown>)[name] : undefined;
   if (typeof runtime === "string" && runtime) return runtime;
-  return typeof process !== "undefined" ? process.env[name] ?? "" : "";
+  return typeof process !== "undefined" ? (process.env[name] ?? "") : "";
 }
 
 function json(body: unknown, status = 200): Response {
@@ -89,7 +90,9 @@ function normalizeMessages(value: unknown, limit = 32): TalaWireMessage[] {
 async function proxyTalaToHermes(request: Request, env: unknown): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const hermesUrl = (runtimeValue(env, "HERMES_TALA_API_URL") || runtimeValue(env, "HERMES_API_URL")).replace(/\/$/, "");
+  const hermesUrl = (
+    runtimeValue(env, "HERMES_TALA_API_URL") || runtimeValue(env, "HERMES_API_URL")
+  ).replace(/\/$/, "");
   const hermesKey = runtimeValue(env, "HERMES_TALA_API_KEY") || runtimeValue(env, "HERMES_API_KEY");
   const model = runtimeValue(env, "HERMES_TALA_MODEL") || "tala";
   if (!hermesUrl || !hermesKey) {
@@ -141,13 +144,99 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
+const CHAT_SYSTEM_PROMPT = `You are the AI concierge for Marina Terrace, a boutique digital nomad resort in Palawan, Philippines.
+
+RULES:
+- Be warm, helpful, and concise (under 150 words per response)
+- Use emojis sparingly for readability
+- If you don't know something, say "Let me check with our team" and offer to connect them
+- Always try to move toward a booking or action
+- Currency: Philippine Pesos (₱) unless guest asks for USD
+- Never make up prices or availability — if unsure, say you'll confirm
+
+RESORT INFO:
+- Location: El Nido area, Palawan
+- Rooms: Garden View (₱2,500), Sea Breeze (₱3,500), Deluxe Terrace Suite (₱5,000), Full Villa (₱7,500)
+- Amenities: Fiber WiFi, breakfast included, shared kitchen, tour desk
+- Check-in: 2PM, Check-out: 12NN
+- Payment: GCash, Maya, cash, bank transfer, cards (3% fee)`;
+
+async function chatHandler(request: Request, env: unknown): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+
+  let body: { message?: unknown; history?: unknown };
+  try {
+    body = (await request.json()) as { message?: unknown; history?: unknown };
+  } catch {
+    return json({ error: "invalid JSON body" }, 400);
+  }
+
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
+  if (!message) return json({ error: "message is required" }, 400);
+
+  const history = Array.isArray(body?.history)
+    ? (body.history as Array<{ role: string; content: string }>)
+        .slice(-8)
+        .map((m) => ({ role: m.role, content: String(m.content || "").slice(0, 4000) }))
+    : [];
+
+  const messages = [
+    { role: "system", content: CHAT_SYSTEM_PROMPT },
+    ...history,
+    { role: "user", content: message },
+  ];
+
+  const apiKey = runtimeValue(env, "OPENROUTER_API_KEY");
+  if (!apiKey) {
+    return json({ response: "Chat service is not configured. Please try again later." });
+  }
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://marinaterrace.palawan.ph",
+        "X-Title": "Marina Terrace Concierge",
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-3.1-8b-instruct",
+        messages,
+        max_tokens: 300,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("OpenRouter error:", response.status);
+      return json({
+        response: "I'm having a moment of difficulty. Please try again in a few seconds!",
+      });
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content =
+      data.choices?.[0]?.message?.content ||
+      "I'm not sure about that. Let me connect you with our team!";
+
+    return json({ response: content });
+  } catch (error) {
+    console.error("Chat API error:", error);
+    return json({ response: "Connection hiccup! Please try again." });
+  }
+}
+
 async function openRouterModels(request: Request): Promise<Response> {
   if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
   try {
     const response = await fetch("https://openrouter.ai/api/v1/models", {
       headers: { accept: "application/json" },
     });
-    if (!response.ok) return json({ error: "OpenRouter model catalog is temporarily unavailable." }, 502);
+    if (!response.ok)
+      return json({ error: "OpenRouter model catalog is temporarily unavailable." }, 502);
     return new Response(await response.text(), {
       status: 200,
       headers: {
@@ -223,6 +312,9 @@ async function portalRecordsHandler(request: Request, env: unknown): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      if (new URL(request.url).pathname === "/api/chat") {
+        return await chatHandler(request, env);
+      }
       if (new URL(request.url).pathname === "/api/tala/chat") {
         return await proxyTalaToHermes(request, env);
       }
