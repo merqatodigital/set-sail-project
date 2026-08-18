@@ -83,4 +83,15 @@ describe("classifyTurn — conversational fast path routing (Section 3)", () => 
   it("empty message is conversational (safe default)", () => {
     expect(classifyTurn("")).toBe("conversational");
   });
+
+  it("natural-language booking intent (no action verb) enters agentic path", () => {
+    // Regression: these used to fall through to PROPERTY_FAQ_RE's bare
+    // "room"/"table" match and get routed conversational (no tools).
+    expect(classifyTurn("room for 4 this weekend")).toBe("agentic");
+    expect(classifyTurn("table for two tonight")).toBe("agentic");
+    expect(classifyTurn("do you have any rooms available?")).toBe("agentic");
+    expect(classifyTurn("any vacancies for Friday?")).toBe("agentic");
+    expect(classifyTurn("we're 6 people looking for a place this weekend")).toBe("agentic");
+    expect(classifyTurn("checking us in tomorrow, party of 3")).toBe("agentic");
+  });
 });
