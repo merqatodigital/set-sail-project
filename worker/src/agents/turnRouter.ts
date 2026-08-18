@@ -8,6 +8,12 @@
 //
 // The goal: normal voice conversation must not pay the cost of a 5-hop tool
 // orchestration loop. Routing is pure + testable; it never calls the model.
+//
+// Precedence matters: ACTION_RE / INTENT_RE (explicit action verbs and
+// natural-language booking/order intent) are checked BEFORE GREETING_RE and
+// PROPERTY_FAQ_RE. Otherwise a real request like "room for 4 this weekend"
+// gets caught by PROPERTY_FAQ_RE's bare "room" match and silently loses tool
+// access instead of reaching the agentic path.
 
 export type TurnMode = "conversational" | "agentic";
 
@@ -15,6 +21,15 @@ export type TurnMode = "conversational" | "agentic";
 // changes. Anything matching this is routed to the agentic path even if short.
 const ACTION_RE =
   /\b(book|reserve|cancel|order|request|approve|reject|modify|change|update|create|delete|send|schedule|pay|refund|availability|arrivals|departures|in-house|occupancy|operations|bookings|status|what.*(arrivals|departures|bookings)|today.*arrivals|today.*departures|day pass|check (my|the) (booking|reservation|status))\b/i;
+
+// Natural-language booking/order intent that doesn't use an explicit action
+// verb — e.g. "room for 4 this weekend", "table for two tonight", "any
+// vacancies?", "do you have a room". Without this, ACTION_RE misses the
+// request and PROPERTY_FAQ_RE's bare "room"/"table" match wins instead,
+// silently routing a real booking attempt to the no-tools conversational
+// path. Checked before PROPERTY_FAQ_RE for the same reason.
+const INTENT_RE =
+  /\b(vacan(?:cy|cies|t)|any (?:rooms?|availability|vacanc(?:y|ies))|do you have (?:a |any )?(?:room|table|space|availability)|(?:room|table|space|spot) for \S+|party of \d+|\d+\s*(?:people|pax|persons?|guests?|of us)|(?:want|need|looking) (?:to|for) (?:book|reserve|stay|a room|a table)|interested in (?:booking|staying|reserving)|planning to stay|check(?:ing)? (?:us|me) in)\b/i;
 
 // Greetings / casual chatter — always safe to answer with one model call.
 const GREETING_RE =
@@ -34,8 +49,10 @@ export function classifyTurn(message: string): TurnMode {
   const m = (message || "").trim();
   if (!m) return "conversational";
 
-  // Any clear action verb -> agentic (needs tools / live state).
-  if (ACTION_RE.test(m)) return "agentic";
+  // Any clear action verb, or natural-language booking/order intent -> agentic
+  // (needs tools / live state). Checked before FAQ so "room for 4" isn't
+  // swallowed by PROPERTY_FAQ_RE's bare "room" match.
+  if (ACTION_RE.test(m) || INTENT_RE.test(m)) return "agentic";
 
   // Explicit greeting or property/knowledge question -> conversational.
   if (GREETING_RE.test(m)) return "conversational";
