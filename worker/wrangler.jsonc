@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "talla-resort-db",
-      "database_id": "placeholder-will-be-set-on-first-deploy"
+      "database_id": "4cf66029-e11c-4ba9-a974-135adce8abfa"
     }
   ],
   "durable_objects": {
