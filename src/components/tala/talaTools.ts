@@ -542,7 +542,7 @@ export const TALA_TOOL_SCHEMAS = [
     function: {
       name: "query_amuma_tiers",
       description:
-        "Answer questions about the AMUMA Circle investment opportunity. Returns all tier details, pricing, Pebbles allocation, membership model, revenue splits, and ROI projections. Use when a guest or visitor asks about investing, membership tiers, the Founding Circle, returns, or how to join the AMUMA Circle.",
+        "Answer questions about the AMUMA Circle investment opportunity. Returns guided sales responses with tier details, ROI projections, membership model, objection handling, and application guidance. Use when a guest or visitor asks about investing, membership tiers, the Founding Circle, returns, how to join, or raises concerns about the investment. Also use proactively when a conversation about resort stays or pricing presents an opportunity to introduce the investment angle.",
       parameters: {
         type: "object",
         properties: {
@@ -1322,48 +1322,106 @@ async function runDailyOpsFrontend(_args: Record<string, unknown>) {
 
 // ---- AMUMA Investment (frontend) -----------------------------------------
 async function queryAmumaTiersFrontend(args: Record<string, unknown>) {
-  const { AMUMA_TIERS, AMUMA_MEMBERSHIP, AMUMA_REVENUE, AMUMA_RETURNS, AMUMA_PEBBLES, AMUMA_FOUNDING_CIRCLE } = await import("@/lib/amumaData");
+  const {
+    AMUMA_TIERS,
+    AMUMA_MEMBERSHIP,
+    AMUMA_RETURNS,
+    AMUMA_PEBBLES,
+    AMUMA_FOUNDING_CIRCLE,
+    AMUMA_SAN_VICENTE,
+    AMUMA_FLYWHEEL,
+    AMUMA_ROADMAP,
+    AMUMA_TEAM,
+  } = await import("@/lib/amumaData");
+  const {
+    INVESTMENT_STAGES,
+    OBJECTION_HANDLERS,
+    investmentNudge,
+    buildInvestmentPrompt,
+  } = await import("./talaInvestment");
   const query = str(args.query).toLowerCase();
 
+  // Detect which stage the visitor is in
+  let matchedStage = INVESTMENT_STAGES[0]; // default to hook
+  for (const stage of INVESTMENT_STAGES) {
+    if (stage.trigger.some((t) => query.includes(t))) {
+      matchedStage = stage;
+      break;
+    }
+  }
+
+  // Detect objections
+  const objectionKeys = Object.keys(OBJECTION_HANDLERS);
+  const matchedObjection = objectionKeys.find((k) => query.includes(k));
+
+  // Build a structured response
   const parts: string[] = [];
 
-  if (!query || query.includes("tier") || query.includes("invest") || query.includes("price")) {
-    parts.push("## Investment Tiers");
-    parts.push(
-      AMUMA_TIERS.map(
-        (t) => `- **${t.name}**: ${t.investment} | ${t.units} | ${t.pebbles} Pebbles/year | ${t.availability}`,
-      ).join("\n"),
-    );
+  // If there's an objection, address it first
+  if (matchedObjection) {
+    parts.push(`**${matchedObjection.charAt(0).toUpperCase() + matchedObjection.slice(1)}:**`);
+    parts.push(OBJECTION_HANDLERS[matchedObjection]);
+    parts.push("");
   }
 
-  if (!query || query.includes("member") || query.includes("model") || query.includes("share")) {
-    parts.push("\n## Membership Model");
-    parts.push(AMUMA_MEMBERSHIP.intro);
-    parts.push(`Revenue split: ${AMUMA_MEMBERSHIP.revenue}`);
+  // Add the stage-appropriate system prompt
+  parts.push(`[STAGE: ${matchedStage.label}]`);
+  parts.push(matchedStage.systemPrompt);
+
+  // Add tier details if relevant
+  if (query.includes("tier") || query.includes("price") || query.includes("invest") || query.includes("cost") || query.includes("what do i get")) {
+    parts.push("");
+    parts.push("**Investment Tiers:**");
+    for (const t of AMUMA_TIERS) {
+      parts.push(`- ${t.name}: ${t.investment} | ${t.units} | ${t.pebbles} Pebbles/year | ${t.availability}`);
+    }
+    parts.push("");
+    parts.push(`Nova = 1.79% ownership of ${AMUMA_SAN_VICENTE.allocation.rows[2][2]} total Circle Units.`);
   }
 
-  if (!query || query.includes("return") || query.includes("roi") || query.includes("profit")) {
-    parts.push("\n## Projected Returns");
+  // Add returns if relevant
+  if (query.includes("return") || query.includes("roi") || query.includes("profit") || query.includes("earn")) {
+    parts.push("");
+    parts.push("**Projected Returns:**");
     parts.push(AMUMA_RETURNS.intro);
-    parts.push(
-      "Nova example: ₱500,000 investment → ~₱85,000–₱100,000 annual return (17–20% ROI).",
-    );
+    parts.push(`Nova example: ${AMUMA_TIERS[0].investment} investment = ~85,000-100,000 PHP annual return (17-20% ROI).`);
   }
 
-  if (!query || query.includes("pebble") || query.includes("currency")) {
-    parts.push("\n## Pebbles Currency");
-    parts.push(AMUMA_PEBBLES.intro);
+  // Add flywheel if relevant
+  if (query.includes("how") || query.includes("model") || query.includes("work")) {
+    parts.push("");
+    parts.push("**How it works:**");
+    for (const step of AMUMA_FLYWHEEL) {
+      parts.push(`${AMUMA_FLYWHEEL.indexOf(step) + 1}. ${step.title} — ${step.body}`);
+    }
   }
 
-  if (!query || query.includes("founding") || query.includes("apply") || query.includes("join")) {
-    parts.push("\n## Founding Circle");
+  // Add founding circle if relevant
+  if (query.includes("founding") || query.includes("apply") || query.includes("join") || query.includes("spot")) {
+    parts.push("");
+    parts.push("**Founding Circle:**");
     parts.push(AMUMA_FOUNDING_CIRCLE.intro);
-    parts.push("Apply at /investment or ask me to open the application form.");
+    parts.push(`Benefits: ${AMUMA_FOUNDING_CIRCLE.benefits.join("; ")}.`);
+  }
+
+  // If no specific match, give the full guided pitch
+  if (!matchedObjection && !query.includes("tier") && !query.includes("return") && !query.includes("how") && !query.includes("founding")) {
+    parts.push("");
+    parts.push("**Quick Summary:**");
+    parts.push(`- ${AMUMA_TIERS.length} tiers from ${AMUMA_TIERS[0].investment} to ${AMUMA_TIERS[3].investment}`);
+    parts.push(`- Projected 17-20% annual ROI`);
+    parts.push(`- ${AMUMA_FOUNDING_CIRCLE.benefits.length} Founding Circle benefits, only 20 spots`);
+    parts.push(`- First retreat: San Vicente, opens 2028`);
+    parts.push(`- Apply at /investment or ask me to open the form`);
   }
 
   return {
-    answer: parts.join("\n") || "I have information about the AMUMA Circle. What would you like to know?",
-    message: "Here's what I know about the AMUMA Circle investment opportunity.",
+    answer: parts.join("\n"),
+    stage: matchedStage.id,
+    objectionHandled: matchedObjection || null,
+    message: matchedObjection
+      ? `Addressing the ${matchedObjection} concern:`
+      : `Here's what I know about the AMUMA Circle investment opportunity.`,
   };
 }
 
