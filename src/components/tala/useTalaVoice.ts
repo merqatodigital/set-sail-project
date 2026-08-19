@@ -6,8 +6,10 @@ import { useCallback, useState } from "react";
 // To re-enable, restore the Kokoro/browser TTS implementation.
 // ---------------------------------------------------------------------------
 
-export type TalaVoiceEngine = "none";
-export type TalaVoiceStatus = "idle";
+// The unions keep their historical members so admin UI that reports engine /
+// status (TalaManager) still typechecks while voice stays disabled at runtime.
+export type TalaVoiceEngine = "none" | "kokoro" | "browser" | "openrouter";
+export type TalaVoiceStatus = "idle" | "loading" | "speaking" | "error";
 
 export interface UseTalaVoice {
   enabled: boolean;
