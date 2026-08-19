@@ -37,6 +37,7 @@ import {
   Brain,
   BarChart3,
   Package,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCms } from "@/context/CmsContext";
@@ -96,6 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/testimonials", label: "Testimonials", icon: Quote },
       { to: "/admin/faqs", label: "FAQs", icon: HelpCircle },
       { to: "/admin/media", label: "Media Library", icon: FolderOpen },
+      { to: "/admin/amuma-applications", label: "AMUMA Applications", icon: TrendingUp },
     ],
   },
   {

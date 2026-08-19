@@ -21,7 +21,8 @@ export type SectionKey =
   | "pricing"
   | "testimonials"
   | "faqs"
-  | "cta";
+  | "cta"
+  | "investment";
 
 export interface SectionVisibility {
   key: SectionKey;

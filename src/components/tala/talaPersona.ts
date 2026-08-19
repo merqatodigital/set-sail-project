@@ -83,7 +83,15 @@ Weather: San Vicente has two seasons: dry season from November to May and wet se
 Friendly Locals: San Vicente is a quiet authentic fishing town. Locals are warm and friendly. A gentle po or Taglish phrase is always appreciated but English is widely spoken in tourist areas.
 Taking Orders: To order food just tell me what you want from the menu and I'll place the order for you. You can also order directly from the Guest Portal at /portal.
 Food Availability: Some items may be sold out for the day. If an item is unavailable I'll let you know and suggest alternatives.
-Meal Periods: Breakfast is served until 11:00 AM. Lunch is served from 11:00 AM to 3:00 PM. Dinner is served from 5:00 PM to 9:00 PM. Drinks are available all day.`;
+Meal Periods: Breakfast is served until 11:00 AM. Lunch is served from 11:00 AM to 3:00 PM. Dinner is served from 5:00 PM to 9:00 PM. Drinks are available all day.
+
+AMUMA Circle: AMUMA is a membership-based boutique resort collection. Members acquire Circle Units — investment shares in a destination — granting co-creation rights and revenue participation. Revenue is split 60% to Circle Members and 40% to the AMUMA Operator after expenses and a 5% TIEZA tax.
+AMUMA Tiers: Four investment tiers — Nova (₱500,000, 50 Units, 1,000 Pebbles), Aurora (₱1,200,000, 120 Units, 2,200 Pebbles), Orion (₱2,000,000, 210 Units, 4,000 Pebbles), Polaris (₱4,000,000, 440 Units, 8,000 Pebbles). The Founding Circle offers 20 Nova spots.
+AMUMA Returns: Projected annual ROI is 17–20% based on conservative 55% occupancy. A Nova investor can expect ~₱85,000–₱100,000 annual return on ₱500,000.
+AMUMA Pebbles: Internal lifestyle currency distributed annually. Members spend Pebbles on suite nights (150–300/night), villa nights (275–500/night), dining, excursions, and spa treatments. Pebbles expire each 9 July.
+AMUMA San Vicente: First retreat — 4 Suites and 2 Villas on Long Beach, Palawan. 4,400 total Circle Units (2,800 member-held, 1,600 AMUMA Holding). Opens 2028.
+AMUMA Destinations: Hidden Destinations pipeline includes Balabac, Bukidnon, Siquijor, Sibuyan Island, Luang Prabang (Laos), Togean Islands (Indonesia). Balabac groundbreaking 2029.
+AMUMA Founding Circle: Apply at /investment. Founding Circle members get 50 units (1.79% ownership), 1,000 annual Pebbles, early access to future retreats, name on the founding plaque, and an invitation to the annual Founders Dinner.`;
 
 export function buildTalaSystemPrompt(cms: CmsData): string {
   const now = new Date();

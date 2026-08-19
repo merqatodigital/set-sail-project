@@ -74,6 +74,7 @@ export function buildDefaultData(): CmsData {
         { key: "testimonials", label: "Testimonials", visible: true, order: 10 },
         { key: "faqs", label: "FAQs", visible: true, order: 11 },
         { key: "cta", label: "Closing CTA", visible: true, order: 12 },
+        { key: "investment", label: "AMUMA Investment", visible: true, order: 13 },
       ],
       hero: {
         eyebrow: "Poblacion, San Vicente, Palawan",

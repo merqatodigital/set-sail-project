@@ -112,6 +112,7 @@ export function Footer() {
               <li><a href="#accommodation" className="hover:text-[#C6A15B]">Stay</a></li>
               <li><a href="#pricing" className="hover:text-[#C6A15B]">Pricing</a></li>
               <li><Link to="/blog" className="hover:text-[#C6A15B]">Blog</Link></li>
+              <li><Link to="/investment" className="hover:text-[#C6A15B]">Investment</Link></li>
             </ul>
           </div>
 

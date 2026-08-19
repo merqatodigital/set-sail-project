@@ -23,6 +23,7 @@ const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const AccessibilityStatement = lazy(() => import("@/pages/AccessibilityStatement"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const Investment = lazy(() => import("@/pages/Investment"));
 
 export default function App() {
   return (
@@ -72,6 +73,14 @@ export default function App() {
                     element={
                       <Suspense fallback={<AppLoader label="Loading…" />}>
                         <AccessibilityStatement />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/investment"
+                    element={
+                      <Suspense fallback={<AppLoader label="Loading investment…" />}>
+                        <Investment />
                       </Suspense>
                     }
                   />

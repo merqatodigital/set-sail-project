@@ -536,6 +536,26 @@ export const TALA_TOOL_SCHEMAS = [
       },
     },
   },
+  // ---- AMUMA INVESTMENT --------------------------------------------------
+  {
+    type: "function",
+    function: {
+      name: "query_amuma_tiers",
+      description:
+        "Answer questions about the AMUMA Circle investment opportunity. Returns all tier details, pricing, Pebbles allocation, membership model, revenue splits, and ROI projections. Use when a guest or visitor asks about investing, membership tiers, the Founding Circle, returns, or how to join the AMUMA Circle.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "What the visitor wants to know, e.g. 'tell me about the tiers', 'what are the returns', 'how do I join'.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ] as const;
 
 export interface TalaToolCall {
@@ -1300,6 +1320,53 @@ async function runDailyOpsFrontend(_args: Record<string, unknown>) {
 }
 
 
+// ---- AMUMA Investment (frontend) -----------------------------------------
+async function queryAmumaTiersFrontend(args: Record<string, unknown>) {
+  const { AMUMA_TIERS, AMUMA_MEMBERSHIP, AMUMA_REVENUE, AMUMA_RETURNS, AMUMA_PEBBLES, AMUMA_FOUNDING_CIRCLE } = await import("@/lib/amumaData");
+  const query = str(args.query).toLowerCase();
+
+  const parts: string[] = [];
+
+  if (!query || query.includes("tier") || query.includes("invest") || query.includes("price")) {
+    parts.push("## Investment Tiers");
+    parts.push(
+      AMUMA_TIERS.map(
+        (t) => `- **${t.name}**: ${t.investment} | ${t.units} | ${t.pebbles} Pebbles/year | ${t.availability}`,
+      ).join("\n"),
+    );
+  }
+
+  if (!query || query.includes("member") || query.includes("model") || query.includes("share")) {
+    parts.push("\n## Membership Model");
+    parts.push(AMUMA_MEMBERSHIP.intro);
+    parts.push(`Revenue split: ${AMUMA_MEMBERSHIP.revenue}`);
+  }
+
+  if (!query || query.includes("return") || query.includes("roi") || query.includes("profit")) {
+    parts.push("\n## Projected Returns");
+    parts.push(AMUMA_RETURNS.intro);
+    parts.push(
+      "Nova example: ₱500,000 investment → ~₱85,000–₱100,000 annual return (17–20% ROI).",
+    );
+  }
+
+  if (!query || query.includes("pebble") || query.includes("currency")) {
+    parts.push("\n## Pebbles Currency");
+    parts.push(AMUMA_PEBBLES.intro);
+  }
+
+  if (!query || query.includes("founding") || query.includes("apply") || query.includes("join")) {
+    parts.push("\n## Founding Circle");
+    parts.push(AMUMA_FOUNDING_CIRCLE.intro);
+    parts.push("Apply at /investment or ask me to open the application form.");
+  }
+
+  return {
+    answer: parts.join("\n") || "I have information about the AMUMA Circle. What would you like to know?",
+    message: "Here's what I know about the AMUMA Circle investment opportunity.",
+  };
+}
+
 /** Runs one tool call and returns a JSON-serializable result for the model. */
 export async function executeTalaTool(
   call: TalaToolCall,
@@ -1361,6 +1428,8 @@ export async function executeTalaTool(
       return recallGuestFrontend(args);
     case "run_daily_ops":
       return runDailyOpsFrontend(args);
+    case "query_amuma_tiers":
+      return queryAmumaTiersFrontend(args);
     default:
       return { error: `Unknown tool: ${call.name}` };
   }

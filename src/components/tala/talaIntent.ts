@@ -13,7 +13,8 @@ export type TalaIntentKind =
   | "workspace_day_pass"
   | "room_booking"
   | "package_booking"
-  | "general_help";
+  | "general_help"
+  | "amuma_investment";
 
 /** Optional contextual data a CTA can hand the widget for a given intent. */
 export interface TalaIntentContext {
@@ -32,7 +33,7 @@ export interface TalaIntentContext {
   /** Where the click came from (section or page id) — context only. */
   source?: string;
   /** What the visitor is broadly after when no exact offer was clicked. */
-  interest?: "workspace" | "long_stay" | "general";
+  interest?: "workspace" | "long_stay" | "general" | "investment";
 }
 
 export interface TalaIntentPayload {
@@ -77,6 +78,8 @@ export function intentMessage(intent: TalaIntentPayload): string | undefined {
       return `Hi TALA! I'd like to book the ${c.stayPlan || c.packageName || "package"}${c.stayPlan ? " stay plan" : ""}.`;
     case "workspace_day_pass":
       return "Hi TALA! I'd like a Workspace Day Pass.";
+    case "amuma_investment":
+      return "Hi TALA! I'm interested in the AMUMA Circle investment opportunity. Could you tell me about the membership tiers and how to apply?";
     case "general_help":
     default:
       return c.interest === "long_stay"

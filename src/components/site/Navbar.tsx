@@ -13,6 +13,7 @@ const LINKS = [
   { label: "Stay", href: "#accommodation" },
   { label: "Pricing", href: "#pricing" },
   { label: "Field Notes", href: "/blog" },
+  { label: "Invest", href: "/investment" },
 ];
 
 export function Navbar() {

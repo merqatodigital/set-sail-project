@@ -9,6 +9,7 @@ import { RoomsSection } from "@/components/site/RoomsSection";
 import { PricingSection } from "@/components/site/PricingSection";
 import { TestimonialsSection, FaqSection } from "@/components/site/TestimonialsFaq";
 import { CtaSection } from "@/components/site/CtaFooter";
+import { InvestmentTeaser } from "@/components/site/InvestmentTeaser";
 import type { SectionKey } from "@/types/cms";
 
 const SECTION_MAP: Record<SectionKey, React.ComponentType> = {
@@ -25,6 +26,7 @@ const SECTION_MAP: Record<SectionKey, React.ComponentType> = {
   testimonials: TestimonialsSection,
   faqs: FaqSection,
   cta: CtaSection,
+  investment: InvestmentTeaser,
 };
 
 export default function Home() {
