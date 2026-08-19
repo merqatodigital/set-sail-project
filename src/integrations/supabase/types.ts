@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_actions_log: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          session_id: string | null
+          success: boolean | null
+          tool_input: Json | null
+          tool_name: string | null
+          tool_output: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          session_id?: string | null
+          success?: boolean | null
+          tool_input?: Json | null
+          tool_name?: string | null
+          tool_output?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          session_id?: string | null
+          success?: boolean | null
+          tool_input?: Json | null
+          tool_name?: string | null
+          tool_output?: Json | null
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           amount: number
@@ -68,6 +101,45 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_logs: {
+        Row: {
+          cache_hit: boolean | null
+          content: string
+          created_at: string | null
+          guest_id: string | null
+          id: string
+          response_time_ms: number | null
+          role: string
+          session_id: string
+          tool_called: string | null
+          tool_result: Json | null
+        }
+        Insert: {
+          cache_hit?: boolean | null
+          content: string
+          created_at?: string | null
+          guest_id?: string | null
+          id?: string
+          response_time_ms?: number | null
+          role: string
+          session_id: string
+          tool_called?: string | null
+          tool_result?: Json | null
+        }
+        Update: {
+          cache_hit?: boolean | null
+          content?: string
+          created_at?: string | null
+          guest_id?: string | null
+          id?: string
+          response_time_ms?: number | null
+          role?: string
+          session_id?: string
+          tool_called?: string | null
+          tool_result?: Json | null
+        }
+        Relationships: []
+      }
       cms_data: {
         Row: {
           key: string
@@ -83,6 +155,30 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      guest_preferences: {
+        Row: {
+          created_at: string | null
+          guest_id: string
+          id: string
+          preference_type: string
+          preference_value: string
+        }
+        Insert: {
+          created_at?: string | null
+          guest_id: string
+          id?: string
+          preference_type: string
+          preference_value: string
+        }
+        Update: {
+          created_at?: string | null
+          guest_id?: string
+          id?: string
+          preference_type?: string
+          preference_value?: string
         }
         Relationships: []
       }
@@ -425,6 +521,86 @@ export type Database = {
         }
         Relationships: []
       }
+      room_availability: {
+        Row: {
+          booking_id: string | null
+          date: string
+          id: string
+          notes: string | null
+          room_id: string | null
+          status: string | null
+        }
+        Insert: {
+          booking_id?: string | null
+          date: string
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          booking_id?: string | null
+          date?: string
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_availability_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          amenities: Json | null
+          capacity: number
+          created_at: string | null
+          id: string
+          images: Json | null
+          name: string
+          rate_php: number
+          rate_usd: number | null
+          slug: string
+          status: string | null
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          amenities?: Json | null
+          capacity?: number
+          created_at?: string | null
+          id?: string
+          images?: Json | null
+          name: string
+          rate_php: number
+          rate_usd?: number | null
+          slug: string
+          status?: string | null
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          amenities?: Json | null
+          capacity?: number
+          created_at?: string | null
+          id?: string
+          images?: Json | null
+          name?: string
+          rate_php?: number
+          rate_usd?: number | null
+          slug?: string
+          status?: string | null
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       shifts: {
         Row: {
           date: string
@@ -491,6 +667,54 @@ export type Database = {
           pay_type?: string
           phone?: string
           role?: string
+        }
+        Relationships: []
+      }
+      staff_tasks: {
+        Row: {
+          assigned_to: string | null
+          booking_id: string | null
+          category: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          due_at: string | null
+          id: string
+          priority: string | null
+          room_id: string | null
+          status: string | null
+          title: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          booking_id?: string | null
+          category: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: string | null
+          room_id?: string | null
+          status?: string | null
+          title: string
+        }
+        Update: {
+          assigned_to?: string | null
+          booking_id?: string | null
+          category?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: string | null
+          room_id?: string | null
+          status?: string | null
+          title?: string
         }
         Relationships: []
       }
@@ -1154,6 +1378,42 @@ export type Database = {
           name?: string
           price?: number
           sort_order?: number
+        }
+        Relationships: []
+      }
+      transport_bookings: {
+        Row: {
+          booking_id: string | null
+          created_at: string | null
+          dropoff_location: string | null
+          guest_id: string | null
+          id: string
+          pickup_location: string | null
+          scheduled_time: string | null
+          status: string | null
+          transport_type: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string | null
+          dropoff_location?: string | null
+          guest_id?: string | null
+          id?: string
+          pickup_location?: string | null
+          scheduled_time?: string | null
+          status?: string | null
+          transport_type: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string | null
+          dropoff_location?: string | null
+          guest_id?: string | null
+          id?: string
+          pickup_location?: string | null
+          scheduled_time?: string | null
+          status?: string | null
+          transport_type?: string
         }
         Relationships: []
       }
