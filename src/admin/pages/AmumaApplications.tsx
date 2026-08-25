@@ -135,10 +135,11 @@ export default function AmumaApplications() {
 
       {/* KPI cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Total" value={counts.all} />
-        <KpiCard label="New" value={counts.new} />
-        <KpiCard label="Reviewed" value={counts.reviewed} />
-        <KpiCard label="Contacted" value={counts.contacted} />
+        <KpiCard label="Total" value={String(counts.all)} />
+        <KpiCard label="New" value={String(counts.new)} />
+        <KpiCard label="Reviewed" value={String(counts.reviewed)} />
+        <KpiCard label="Contacted" value={String(counts.contacted)} />
+
       </div>
 
       {/* Filters */}
