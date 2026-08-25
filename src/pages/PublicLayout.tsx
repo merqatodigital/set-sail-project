@@ -1,7 +1,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { Component, Suspense, lazy, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Navbar } from "@/components/site/Navbar";
-import { Footer, WhatsAppFloat } from "@/components/site/CtaFooter";
+import { Footer } from "@/components/site/CtaFooter";
 import { useCms } from "@/context/CmsContext";
 
 // Lazy so the TALA bundle can never block or break the site's first paint.
@@ -51,7 +51,7 @@ export default function PublicLayout() {
       <Navbar />
       <Outlet />
       <Footer />
-      <WhatsAppFloat />
+      
       <TalaWidgetBoundary>
         <Suspense fallback={null}>
           <TalaWidget />
