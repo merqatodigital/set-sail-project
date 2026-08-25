@@ -219,7 +219,7 @@ export default function AmumaApplications() {
                     {formatDate(app.created_at)}
                   </OpsTD>
                   <OpsTD>
-                    <StatusPill status={app.status} />
+                    <StatusPill value={app.status} />
                   </OpsTD>
                   <OpsTD>
                     <button
