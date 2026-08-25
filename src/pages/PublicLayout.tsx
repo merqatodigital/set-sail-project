@@ -57,9 +57,6 @@ export default function PublicLayout() {
           <TalaWidget />
         </Suspense>
       </TalaWidgetBoundary>
-      <Suspense fallback={null}>
-        <ResortChat />
-      </Suspense>
     </div>
   );
 }
