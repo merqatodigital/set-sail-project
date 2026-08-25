@@ -196,7 +196,7 @@ export default function AmumaApplications() {
                 <OpsTH>Heard Via</OpsTH>
                 <OpsTH>Date</OpsTH>
                 <OpsTH>Status</OpsTH>
-                <OpsTH></OpsTH>
+                <OpsTH> </OpsTH>
               </tr>
             </thead>
             <tbody>
