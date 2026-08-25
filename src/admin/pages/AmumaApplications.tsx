@@ -135,10 +135,11 @@ export default function AmumaApplications() {
 
       {/* KPI cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Total" value={counts.all} />
-        <KpiCard label="New" value={counts.new} />
-        <KpiCard label="Reviewed" value={counts.reviewed} />
-        <KpiCard label="Contacted" value={counts.contacted} />
+        <KpiCard label="Total" value={String(counts.all)} />
+        <KpiCard label="New" value={String(counts.new)} />
+        <KpiCard label="Reviewed" value={String(counts.reviewed)} />
+        <KpiCard label="Contacted" value={String(counts.contacted)} />
+
       </div>
 
       {/* Filters */}
@@ -195,7 +196,7 @@ export default function AmumaApplications() {
                 <OpsTH>Heard Via</OpsTH>
                 <OpsTH>Date</OpsTH>
                 <OpsTH>Status</OpsTH>
-                <OpsTH></OpsTH>
+                <OpsTH> </OpsTH>
               </tr>
             </thead>
             <tbody>
@@ -218,7 +219,7 @@ export default function AmumaApplications() {
                     {formatDate(app.created_at)}
                   </OpsTD>
                   <OpsTD>
-                    <StatusPill status={app.status} />
+                    <StatusPill value={app.status} />
                   </OpsTD>
                   <OpsTD>
                     <button
