@@ -58,20 +58,20 @@ export function Navbar() {
         <Link
           to="/"
           className={cn(
-            "font-serif text-base font-medium tracking-[0.18em] transition-colors sm:text-xl",
+            "shrink-0 whitespace-nowrap font-serif text-base font-medium tracking-[0.18em] transition-colors sm:text-xl",
             solid ? "text-[#26221C]" : "text-white"
           )}
         >
           {data.settings.logoText}
         </Link>
 
-        <nav className="hidden items-center gap-9 lg:flex" aria-label="Main navigation">
+        <nav className="hidden items-center gap-5 xl:flex xl:gap-7" aria-label="Main navigation">
           {LINKS.map((link) => (
             <button
               key={link.label}
               onClick={() => handleNav(link.href)}
               className={cn(
-                "text-[13px] font-medium uppercase tracking-[0.12em] transition-colors",
+                "whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.12em] transition-colors",
                 solid ? "text-[#26221C]/70 hover:text-[#26221C]" : "text-white/85 hover:text-white"
               )}
             >
@@ -79,7 +79,7 @@ export function Navbar() {
             </button>
           ))}
           {/* Elegant Currency Selector Dropdown */}
-          <div className="relative inline-flex items-center">
+          <div className="relative inline-flex shrink-0 items-center">
             <select
               value={currencyState.currency}
               onChange={(e) => currencyState.setCurrency(e.target.value as any)}
@@ -112,7 +112,7 @@ export function Navbar() {
                 )
               }
               className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
+                "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
                 solid
                   ? "bg-[#26221C] text-[#F5EFE2] hover:bg-[#3a3327] shadow-[0_1px_2px_rgba(0,0,0,0.1)]"
                   : "border border-white/25 bg-white/10 text-white backdrop-blur-sm hover:border-white/50 hover:bg-white/20"
@@ -125,7 +125,7 @@ export function Navbar() {
           <Link
             to="/portal"
             className={cn(
-              "inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
+              "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[12px] font-medium tracking-wide transition-all duration-200 active:scale-[0.97]",
               solid
                 ? "border border-[#C6A15B]/40 bg-[#C6A15B]/10 text-[#C6A15B] hover:bg-[#C6A15B]/20"
                 : "border border-[#C6A15B]/40 bg-[#C6A15B]/10 text-[#C6A15B] backdrop-blur-sm hover:bg-[#C6A15B]/20"
@@ -138,7 +138,7 @@ export function Navbar() {
 
         <button
           onClick={() => setOpen(!open)}
-          className={cn("lg:hidden", solid ? "text-[#26221C]" : "text-white")}
+          className={cn("xl:hidden", solid ? "text-[#26221C]" : "text-white")}
           aria-label="Toggle menu"
         >
           {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -152,7 +152,7 @@ export function Navbar() {
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="overflow-hidden bg-[#FAF6EF] lg:hidden"
+            className="overflow-hidden bg-[#FAF6EF] xl:hidden"
           >
             <div className="flex flex-col gap-0.5 px-5 pb-5 sm:px-6">
               {LINKS.map((link) => (
