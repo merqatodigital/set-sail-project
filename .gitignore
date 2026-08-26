@@ -27,9 +27,10 @@ dist-ssr
 worker/dev.vars
 dist-worker/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 .idea
 .DS_Store
 *.suo
