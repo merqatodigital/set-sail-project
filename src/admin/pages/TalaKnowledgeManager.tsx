@@ -251,6 +251,27 @@ export default function TalaKnowledgeManager() {
         </Card>
       )}
 
+      <Card className="mb-6 p-4">
+        <Field
+          label="Quick Add — teach TALA anything"
+          hint="Paste any text about the property, policies, local tips, directions — anything. Separate facts with a blank line; each becomes an entry TALA knows on her very next reply."
+        >
+          <Textarea
+            rows={4}
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            placeholder={
+              "Example:\nCheck-in is from 2pm, check-out until 11am. Early check-in is free when the room is ready.\n\nThe nearest ATM is at the San Vicente public market, 10 minutes by tricycle, about 20 pesos per ride."
+            }
+          />
+        </Field>
+        <div className="mt-3 flex justify-end">
+          <Button size="sm" onClick={() => void quickAdd()} disabled={quickAdding || !quickText.trim()}>
+            <Plus className="h-4 w-4" /> {quickAdding ? "Teaching…" : "Teach TALA"}
+          </Button>
+        </div>
+      </Card>
+
       <Card className="p-0">
         {knowledge.entries.length === 0 ? (
           <div className="p-10 text-center text-sm text-[#26221C]/50">
