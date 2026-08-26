@@ -31,6 +31,7 @@ import { useTalaChat } from "@/components/tala/useTalaChat";
 import { useTalaVoice } from "@/components/tala/useTalaVoice";
 import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
 import { useTalaKnowledge } from "@/components/tala/useTalaKnowledge";
+import { useTalaLiveContext, withLiveContext } from "@/components/tala/useTalaLiveContext";
 import { TALA_KOKORO_VOICES } from "@/components/tala/talaConfig";
 
 // ---------------------------------------------------------------------------
@@ -285,9 +286,10 @@ export default function TalaManager() {
     ttsVoiceId: tala.ttsVoiceId || undefined,
   });
   const knowledge = useTalaKnowledge();
+  const live = useTalaLiveContext();
   const systemPrompt = useMemo(
-    () => buildTalaSystemPrompt(data),
-    [data],
+    () => withLiveContext(buildTalaSystemPrompt(data), live.context),
+    [data, live.context],
   );
   const [testMessage, setTestMessage] = useState(
     "What rooms do you have and what's the wifi like?",

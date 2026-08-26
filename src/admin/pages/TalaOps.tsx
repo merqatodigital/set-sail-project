@@ -25,6 +25,7 @@ import { Button, Card, Field, Input, Textarea } from "@/components/ui";
 import { PageHeader, TabBar } from "../shared/PageHeader";
 import { useTalaChat } from "@/components/tala/useTalaChat";
 import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
+import { useTalaLiveContext, withLiveContext } from "@/components/tala/useTalaLiveContext";
 import { computeBriefing } from "@/components/tala/buildTalaBriefing";
 import { useOperations } from "../ops/useOperations";
 import type { OperationsSnapshot } from "@/lib/opsRepo";
@@ -727,6 +728,7 @@ function WinsTab({
 
   // Reuse the brain to suggest a weekly summary if asked.
   const tala = useTalaChat();
+  const live = useTalaLiveContext();
   const [digest, setDigest] = useState<string | null>(null);
 
   const summarize = useCallback(async () => {
@@ -739,13 +741,13 @@ function WinsTab({
       .map((w) => `- ${w.text}`)
       .join("\n")}`;
     setDigest(null);
-    const out = await tala.send(prompt, buildTalaSystemPrompt(cms), {
+    const out = await tala.send(prompt, withLiveContext(buildTalaSystemPrompt(cms), live.context), {
       model: cms.settings.tala.modelId || undefined,
       adminApiKey: cms.settings.tala.apiKey?.trim() || undefined,
       cms,
     });
     setDigest(out);
-  }, [wins, tala, cms]);
+  }, [wins, tala, cms, live.context, notify]);
 
   return (
     <div>
