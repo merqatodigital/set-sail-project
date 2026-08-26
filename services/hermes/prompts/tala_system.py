@@ -132,6 +132,8 @@ Your available tools (use them, do not rely on memory for anything that changes)
 - escalate_to_human — escalate an issue to the team
 - generate_report — generate daily operations report
 - send_guest_email — send an email to a guest
+- search_tala_knowledge — search the resort knowledge base (try this FIRST for any guest question about breakfast, WiFi, check-in, pets, etc.)
+- query_supabase — read live data from a Supabase table (use only when no other tool covers it)
 
 ## EVERY INTERACTION
 

@@ -595,6 +595,321 @@ def generate_report(report_type: str = "daily") -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────
+#  KNOWLEDGE / QUERY TOOLS  (resort-facing lookup)
+# ─────────────────────────────────────────────────────────────────────────
+
+def _fetch_tala_knowledge(topic: str = None, label: str = None,
+                          limit: int = 50) -> list[dict]:
+    """Read from the tala_knowledge Supabase table.
+
+    The tala_knowledge table holds resort facts editable via the Admin
+    'TALA Knowledge Base' page.  topic/label/body/tags/enabled/sort_order.
+    """
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/tala_knowledge"
+               f"?enabled=eq.true&order=sort_order.asc&limit={limit}")
+        if topic:
+            url += f"&topic=eq.{topic}"
+        if label:
+            url += f"&label=ilike.{label}"
+        rows = httpx.get(url, headers=supabase_headers, timeout=20).json()
+        return [r for r in rows if r.get("body")]
+    except Exception:
+        return []
+
+
+def search_tala_knowledge(query: str) -> dict:
+    """Search the resort knowledge base for a topic.
+
+    Use this when a guest asks something that might be in the knowledge base:
+    breakfast hours, WiFi policy, check-in time, pet policy, amenities,
+    transport, payment methods, cancellation rules, etc.
+    Always try this BEFORE saying 'I don't know'.
+    """
+    if not query or not query.strip():
+        return {"found": False, "results": [], "error": "Empty query"}
+
+    q = query.strip().lower()
+    # Map common guest phrases to knowledge topics
+    topic_map = {
+        "breakfast": "operations",
+        "breakfast time": "operations",
+        "breakfast hours": "operations",
+        "wifi": "operations",
+        "internet": "operations",
+        "wifi password": "operations",
+        "check in": "operations",
+        "check-in": "operations",
+        "check out": "operations",
+        "check-out": "operations",
+        "pet": "operations",
+        "pets": "operations",
+        "dog": "operations",
+        "cat": "operations",
+        "airport": "transport",
+        "transfer": "transport",
+        "transport": "transport",
+        "tricycle": "transport",
+        "ferry": "transport",
+        "boat": "transport",
+        "bus": "transport",
+        "taxi": "transport",
+        "payment": "operations",
+        "pay": "operations",
+        "cash": "operations",
+        "gcash": "operations",
+        "maya": "operations",
+        "bank": "operations",
+        "cancel": "operations",
+        "cancellation": "operations",
+        "cancel booking": "operations",
+        "cancel reservation": "operations",
+        "refund": "operations",
+        "child": "operations",
+        "children": "operations",
+        "kid": "operations",
+        "infant": "operations",
+        "baby": "operations",
+        "baby cot": "operations",
+        "crib": "operations",
+        "extra bed": "operations",
+        "room": "operations",
+        "rooms": "operations",
+        "suite": "operations",
+        "beach house": "operations",
+        "villa": "operations",
+        "amenit": "operations",
+        "pool": "operations",
+        "gym": "operations",
+        "hot shower": "operations",
+        "aircon": "operations",
+        "air conditioning": "operations",
+        "outlet": "operations",
+        "power": "operations",
+        "electricity": "operations",
+        "medical": "operations",
+        "doctor": "operations",
+        "clinic": "operations",
+        "hospital": "operations",
+        "pharmacy": "operations",
+        "emergency": "operations",
+        "first aid": "operations",
+        "contact": "operations",
+        "manage": "operations",
+        "direction": "location",
+        "how to get": "location",
+        "where is": "location",
+        "location": "location",
+        "maps": "location",
+        "el nido": "location",
+        "palawan": "location",
+        "how to reach": "location",
+        "getting here": "location",
+        "accommodation": "operations",
+        "accommodations": "operations",
+        "room types": "operations",
+        "which room": "operations",
+        "book": "operations",
+        "booking": "operations",
+        "reserve": "operations",
+        "reservation": "operations",
+        "rate": "operations",
+        "price": "operations",
+        "cost": "operations",
+        "fee": "operations",
+        "price list": "operations",
+        "prices": "operations",
+        "rates": "operations",
+        "charge": "operations",
+        "charges": "operations",
+        "fees": "operations",
+        "tour": "operations",
+        "tours": "operations",
+        "island hopping": "operations",
+        "snorkel": "operations",
+        "diving": "operations",
+        "food": "operations",
+        "meal": "operations",
+        "meals": "operations",
+        "food included": "operations",
+        "food not included": "operations",
+        "breakfast included": "operations",
+        "lunch": "operations",
+        "dinner": "operations",
+        "private chef": "operations",
+        "vegetarian": "operations",
+        "vegan": "operations",
+        "dietary": "operations",
+        "gluten": "operations",
+        "allergy": "operations",
+        "halal": "operations",
+        "near": "location",
+        "distance": "location",
+        "minutes": "location",
+        "kms": "location",
+        "km": "location",
+        "kilometer": "location",
+        "who": "staff",
+        "manager": "staff",
+        "staff": "staff",
+        "team": "staff",
+        "owner": "staff",
+        "person": "staff",
+        "phone number": "contact",
+        "phone": "contact",
+        "number": "contact",
+        "email": "contact",
+    }
+
+    target_topic = None
+    for key, topic in topic_map.items():
+        if key in q:
+            target_topic = topic
+            break
+
+    results = []
+    if target_topic:
+        rows = _fetch_tala_knowledge(topic=target_topic, limit=20)
+        for r in rows:
+            body_lower = r.get("body", "").lower()
+            label_lower = r.get("label", "").lower()
+            if (q in body_lower or q in label_lower
+                    or any(word in body_lower for word in q.split()
+                            if len(word) > 2)):
+                results.append({
+                    "topic": r.get("topic", ""),
+                    "label": r.get("label", ""),
+                    "body": r.get("body", ""),
+                })
+    else:
+        rows = _fetch_tala_knowledge(topic="operations", limit=20)
+        for r in rows:
+            body_lower = r.get("body", "").lower()
+            if any(word in body_lower for word in q.split()
+                    if len(word) > 2):
+                results.append({
+                    "topic": r.get("topic", ""),
+                    "label": r.get("label", ""),
+                    "body": r.get("body", ""),
+                })
+
+    return {
+        "found": len(results) > 0,
+        "query": query,
+        "results": results[:5],
+    }
+
+
+def query_supabase(table: str, query: str, *, limit: int = 10) -> dict:
+    """Read rows from any Supabase table.
+
+    Use ONLY for questions you cannot answer from your system prompt,
+    chat cache, or the tala_knowledge table.
+    Prefer more specific tools (search_tala_knowledge, get_tour_packages,
+    check_availability, etc.) whenever they exist.
+
+    table  — Supabase table name, e.g. 'rooms', 'tours_catalog',
+             'motorbikes', 'cms_data', 'shifts'
+    query  — simple English: 'available rooms', 'today's shifts',
+             'active tours', 'food menu', 'staff on duty'
+    """
+    if not table or not table.strip():
+        return {"error": "No table specified"}
+    if not query or not query.strip():
+        return {"error": "No query specified"}
+
+    t = table.strip().lower()
+    q = query.strip().lower()
+
+    # Whitelist of tables TALA may read (no writes via this tool)
+    allowed = {
+        "rooms", "tours_catalog", "motorbikes", "cms_data",
+        "shifts", "room_availability", "inventory_items",
+        "guest_preferences", "resort_members",
+    }
+    if t not in allowed:
+        return {"error": f"Table '{table}' is not in TALA's read-only whitelist."}
+
+    try:
+        if t == "rooms":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/rooms?status=eq.active"
+                f"&select=id,name,type,capacity,rate_php,amenities"
+                f"&order=rate_php.asc",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "tours_catalog":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/tours_catalog"
+                f"?active=eq.true&select=*&order=sort_order",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "motorbikes":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/motorbikes"
+                f"?active=eq.true&select=id,name,status,daily_rate"
+                f"&order=daily_rate.asc",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "cms_data":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/cms_data"
+                f"?select=key,value&order=key",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "shifts":
+            today = datetime.now().strftime("%Y-%m-%d")
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/shifts"
+                f"?date=eq.{today}&select=*&order=start_time",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "room_availability":
+            today = datetime.now().strftime("%Y-%m-%d")
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/room_availability"
+                f"?date=eq.{today}&select=room_id,date,status"
+                f"&order=room_id",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "inventory_items":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/inventory_items"
+                f"?select=*&order=item_name",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "guest_preferences":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/guest_preferences"
+                f"?select=*&order=created_at.desc",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        if t == "resort_members":
+            rows = httpx.get(
+                f"{SUPABASE_URL}/rest/v1/resort_members"
+                f"?select=id,name,role,phone&order=name",
+                headers=supabase_headers, timeout=20).json()
+            return {"table": t, "rows": rows, "count": len(rows)}
+
+        rows = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/{t}"
+            f"?select=*&limit={limit}",
+            headers=supabase_headers, timeout=20).json()
+        return {"table": t, "rows": rows, "count": len(rows)}
+
+    except Exception as e:
+        return {"error": str(e), "table": t}
+
+
+# ─────────────────────────────────────────────────────────────────────────
 #  TOOL REGISTRY  (canonical — both servers use this)
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -616,6 +931,8 @@ TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
     "escalate_to_human": escalate_to_human,
     "generate_report": generate_report,
     "send_guest_email": send_guest_email,
+    "search_tala_knowledge": search_tala_knowledge,
+    "query_supabase": query_supabase,
 }
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -941,6 +1258,78 @@ TOOL_SCHEMAS = [
                     "body": {"type": "string"},
                 },
                 "required": ["to", "subject", "body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_tala_knowledge",
+            "description": (
+                "Search the resort knowledge base for a topic. "
+                "Use this FIRST for any guest question about breakfast, "
+                "WiFi, check-in/out, pets, payment, cancellation, transport, "
+                "amenities, location, staff, contact info, room types, rates, "
+                "tours, food, dietary, medical, or anything resort-operational. "
+                "Always try this before saying 'I don't know' — it has the "
+                "resort's curated answers."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Guest's question in plain English, e.g. "
+                            "'what time is breakfast', 'is there wifi', "
+                            "'can I bring my dog', 'how do I get here', "
+                            "'what are the room rates', 'do you have a pool'. "
+                            "Keep it short.")
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_supabase",
+            "description": (
+                "Read rows from a Supabase table when you need live data "
+                "not covered by other tools or the knowledge base. "
+                "Whitelisted read-only tables: rooms, tours_catalog, "
+                "motorbikes, cms_data, shifts, room_availability, "
+                "inventory_items, guest_preferences, resort_members. "
+                "Always prefer a more specific tool if one exists "
+                "(search_tala_knowledge, get_tour_packages, "
+                "check_availability, etc.)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "table": {
+                        "type": "string",
+                        "description": (
+                            "Supabase table name. One of: rooms, "
+                            "tours_catalog, motorbikes, cms_data, "
+                            "shifts, room_availability, inventory_items, "
+                            "guest_preferences, resort_members.")
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "What you're looking for in plain English, "
+                            "e.g. 'available rooms', 'today's shifts', "
+                            "all tours', 'food menu'. This is a hint — "
+                            "the tool returns the full table.")
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max rows to return (default 10)."
+                    },
+                },
+                "required": ["table", "query"],
             },
         },
     },

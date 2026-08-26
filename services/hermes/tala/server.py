@@ -159,6 +159,9 @@ You have these tools available. Use them — do not rely on memory for anything 
 - generate_report — generate daily operations report
 - send_guest_email — send an email to a guest
 
+- search_tala_knowledge — search the resort knowledge base (try this FIRST for any guest question about breakfast, WiFi, check-in, pets, etc.)
+- query_supabase — read live data from a Supabase table (use only when no other tool covers it)
+
 ## EVERY INTERACTION
 
 - Greet warmly but do not overdo it.
@@ -449,6 +452,27 @@ def format_tool_result_fallback(func_name: str, result: dict) -> str:
                 lines.append(f"- {t.get('name')} - PHP {t.get('price_php', '?'):,.0f}/pax ({t.get('duration', '')})")
             return "\n".join(lines)
         return "No tours available right now. Please check back later!"
+
+    elif func_name == "search_tala_knowledge":
+        if result.get("found") and result.get("results"):
+            lines = []
+            for r in result["results"]:
+                lines.append(f"{r.get('label', 'Knowledge')}: {r.get('body', '')}")
+            return "\n".join(lines)
+        return "I checked our knowledge base but couldn't find that specific info. Let me check with the team!"
+
+    elif func_name == "query_supabase":
+        rows = result.get("rows", [])
+        if rows:
+            if len(rows) == 1:
+                return json.dumps(rows[0], indent=2)
+            lines = [f"Found {len(rows)} entries:"]
+            for r in rows[:10]:
+                lines.append(f"- {json.dumps(r)}")
+            if len(rows) > 10:
+                lines.append(f"... and {len(rows) - 10} more")
+            return "\n".join(lines)
+        return "No results found."
 
     else:
         return json.dumps(result, indent=2)
