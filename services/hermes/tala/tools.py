@@ -603,19 +603,32 @@ def _fetch_tala_knowledge(topic: str = None, label: str = None,
     """Read from the tala_knowledge Supabase table.
 
     The tala_knowledge table holds resort facts editable via the Admin
-    'TALA Knowledge Base' page.  topic/label/body/tags/enabled/sort_order.
+    'TALA Knowledge Base' page.
+    Expected columns: topic, label, body, tags, enabled, sort_order, created_at
+    (id UUID primary key auto-generated).
+    This function is schema-tolerant: if your table uses different column
+    names the first attempt may fail gracefully and return an empty list;
+    in that case check the SQL Editor schema matches below.
     """
     try:
+        # Try the standard schema first
         url = (f"{SUPABASE_URL}/rest/v1/tala_knowledge"
                f"?enabled=eq.true&order=sort_order.asc&limit={limit}")
         if topic:
             url += f"&topic=eq.{topic}"
         if label:
-            url += f"&label=ilike.{label}"
+            url += f"&label=ilike.%{label}%"
         rows = httpx.get(url, headers=supabase_headers, timeout=20).json()
         return [r for r in rows if r.get("body")]
     except Exception:
-        return []
+        # Fallback: read ALL rows unfiltered if the standard query fails
+        try:
+            url = (f"{SUPABASE_URL}/rest/v1/tala_knowledge"
+                   f"?limit={limit}")
+            rows = httpx.get(url, headers=supabase_headers, timeout=20).json()
+            return [r for r in rows if r.get("body")]
+        except Exception:
+            return []
 
 
 def search_tala_knowledge(query: str) -> dict:
@@ -769,28 +782,30 @@ def search_tala_knowledge(query: str) -> dict:
 
     results = []
     if target_topic:
+        # Fetch by topic first; _fetch_tala_knowledge falls back to all rows
         rows = _fetch_tala_knowledge(topic=target_topic, limit=20)
         for r in rows:
-            body_lower = r.get("body", "").lower()
-            label_lower = r.get("label", "").lower()
-            if (q in body_lower or q in label_lower
-                    or any(word in body_lower for word in q.split()
+            body_lower = (r.get("body") or r.get("content") or r.get("answer") or "").lower()
+            label_lower = (r.get("label") or r.get("title") or "").lower()
+            text = body_lower + " " + label_lower
+            if (q in text or any(word in text for word in q.split()
                             if len(word) > 2)):
                 results.append({
-                    "topic": r.get("topic", ""),
-                    "label": r.get("label", ""),
-                    "body": r.get("body", ""),
+                    "topic": r.get("topic") or r.get("category") or "",
+                    "label": r.get("label") or r.get("title") or "",
+                    "body": r.get("body") or r.get("content") or r.get("answer") or "",
                 })
     else:
-        rows = _fetch_tala_knowledge(topic="operations", limit=20)
+        # No topic matched — fetch ALL rows and filter by keyword
+        rows = _fetch_tala_knowledge(limit=50)
         for r in rows:
-            body_lower = r.get("body", "").lower()
+            body_lower = (r.get("body") or r.get("content") or r.get("answer") or "").lower()
             if any(word in body_lower for word in q.split()
                     if len(word) > 2):
                 results.append({
-                    "topic": r.get("topic", ""),
-                    "label": r.get("label", ""),
-                    "body": r.get("body", ""),
+                    "topic": r.get("topic") or r.get("category") or "",
+                    "label": r.get("label") or r.get("title") or "",
+                    "body": r.get("body") or r.get("content") or r.get("answer") or "",
                 })
 
     return {
