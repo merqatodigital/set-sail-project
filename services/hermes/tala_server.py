@@ -1,8 +1,10 @@
 """
 TALA AGENT — Full Site Operator
 FastAPI server with tool-calling via OpenRouter
-"""
 
+Uses the canonical shared tool module (tala.tools) so both servers
+(tala_server.py and tala/server.py) share one set of tools and schemas.
+"""
 import json
 import os
 import time
@@ -13,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import httpx
 
-from tools.tala_tools import (
+from tala.tools import (
     check_availability,
     create_booking,
     list_bookings,
@@ -32,6 +34,7 @@ from tools.tala_tools import (
     generate_report,
     send_guest_email,
 )
+from tala.tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from prompts.tala_system import TALA_SYSTEM_PROMPT
 from chat_cache import get_cached_answer
 
@@ -46,293 +49,6 @@ app.add_middleware(
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("HERMES_MODEL", "meta-llama/llama-3.1-8b-instruct")
-
-TOOLS = {
-    "check_availability": check_availability,
-    "create_booking": create_booking,
-    "list_bookings": list_bookings,
-    "confirm_booking": confirm_booking,
-    "get_tour_packages": get_tour_packages,
-    "request_tour_booking": request_tour_booking,
-    "check_motorbike_availability": check_motorbike_availability,
-    "request_rental": request_rental,
-    "dispatch_staff_task": dispatch_staff_task,
-    "list_tasks": list_tasks,
-    "order_food": order_food,
-    "send_guest_message": send_guest_message,
-    "get_guest_history": get_guest_history,
-    "record_payment": record_payment,
-    "escalate_to_human": escalate_to_human,
-    "generate_report": generate_report,
-    "send_guest_email": send_guest_email,
-}
-
-TOOL_SCHEMAS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "check_availability",
-            "description": "Check which rooms are available for specific dates",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "check_in": {"type": "string", "description": "YYYY-MM-DD"},
-                    "check_out": {"type": "string", "description": "YYYY-MM-DD"},
-                    "num_guests": {"type": "integer"},
-                },
-                "required": ["check_in", "check_out"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_booking",
-            "description": "Create a room booking request for a guest",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_name": {"type": "string"},
-                    "guest_email": {"type": "string"},
-                    "guest_phone": {"type": "string"},
-                    "room_id": {"type": "string"},
-                    "check_in": {"type": "string", "description": "YYYY-MM-DD"},
-                    "check_out": {"type": "string", "description": "YYYY-MM-DD"},
-                    "num_guests": {"type": "integer"},
-                    "special_requests": {"type": "string"},
-                },
-                "required": ["guest_name", "guest_email", "guest_phone", "room_id", "check_in", "check_out"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_bookings",
-            "description": "List current bookings, optionally filtered by status",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string", "description": "Filter by status: pending, confirmed, checked_in, checked_out, cancelled"},
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "confirm_booking",
-            "description": "Confirm a pending booking request and create an official booking",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "booking_request_id": {"type": "string", "description": "The tala_booking_requests UUID"},
-                },
-                "required": ["booking_request_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_tour_packages",
-            "description": "Get all available tour packages",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "request_tour_booking",
-            "description": "Create a tour booking request for a guest",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_name": {"type": "string"},
-                    "guest_phone": {"type": "string"},
-                    "tour_name": {"type": "string"},
-                    "tour_date": {"type": "string", "description": "YYYY-MM-DD"},
-                    "num_pax": {"type": "integer"},
-                    "notes": {"type": "string"},
-                },
-                "required": ["guest_name", "guest_phone", "tour_name", "tour_date"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_motorbike_availability",
-            "description": "Check available motorbikes for rental",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "start_date": {"type": "string"},
-                    "end_date": {"type": "string"},
-                },
-                "required": ["start_date", "end_date"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "request_rental",
-            "description": "Create a motorbike rental request",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_name": {"type": "string"},
-                    "guest_phone": {"type": "string"},
-                    "bike_name": {"type": "string"},
-                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
-                    "end_date": {"type": "string", "description": "YYYY-MM-DD"},
-                    "notes": {"type": "string"},
-                },
-                "required": ["guest_name", "guest_phone", "bike_name", "start_date", "end_date"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "dispatch_staff_task",
-            "description": "Create a task for staff and optionally notify via Telegram",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "description": {"type": "string"},
-                    "category": {"type": "string", "enum": ["housekeeping", "kitchen", "maintenance", "front_desk", "grounds"]},
-                    "priority": {"type": "string", "enum": ["urgent", "high", "normal", "low"]},
-                },
-                "required": ["title", "category"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_tasks",
-            "description": "List staff tasks, optionally filtered by status or category",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string"},
-                    "category": {"type": "string"},
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "order_food",
-            "description": "Create a food order for a guest",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_name": {"type": "string"},
-                    "guest_phone": {"type": "string"},
-                    "items": {"type": "array", "items": {"type": "object"}},
-                    "notes": {"type": "string"},
-                },
-                "required": ["guest_name", "guest_phone", "items"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "send_guest_message",
-            "description": "Log a message from guest to staff",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "guest_name": {"type": "string"},
-                    "guest_phone": {"type": "string"},
-                    "message": {"type": "string"},
-                },
-                "required": ["guest_name", "guest_phone", "message"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_guest_history",
-            "description": "Look up a guest's booking and rental history",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "email": {"type": "string"},
-                    "phone": {"type": "string"},
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "record_payment",
-            "description": "Record a payment against a booking",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "booking_request_id": {"type": "string"},
-                    "amount": {"type": "number"},
-                    "method": {"type": "string", "enum": ["gcash", "maya", "cash", "bank_transfer"]},
-                },
-                "required": ["booking_request_id", "amount"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "escalate_to_human",
-            "description": "Escalate to a human team member",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reason": {"type": "string"},
-                    "guest_message": {"type": "string"},
-                    "guest_email": {"type": "string"},
-                },
-                "required": ["reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_report",
-            "description": "Generate daily operations report",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "report_type": {"type": "string", "enum": ["daily", "weekly"]},
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "send_guest_email",
-            "description": "Send an email to a guest via Resend",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "to": {"type": "string"},
-                    "subject": {"type": "string"},
-                    "body": {"type": "string"},
-                },
-                "required": ["to", "subject", "body"],
-            },
-        },
-    },
-]
 
 
 @app.get("/health")
@@ -418,7 +134,7 @@ async def chat(request: Request):
                 tool_name = fn.get("name", "")
                 tool_args = json.loads(fn.get("arguments", "{}"))
 
-                tool_fn = TOOLS.get(tool_name)
+                tool_fn = TOOL_REGISTRY.get(tool_name)
                 if tool_fn:
                     result = tool_fn(**tool_args)
                 else:
