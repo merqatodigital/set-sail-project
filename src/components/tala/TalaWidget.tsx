@@ -14,6 +14,7 @@ import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { buildTalaSystemPrompt, talaGreeting } from "./talaPersona";
 import { useTalaChat, getDevApiKey, setDevApiKey } from "./useTalaChat";
 import { useTalaVoice } from "./useTalaVoice";
+import { useTalaLiveContext, withLiveContext } from "./useTalaLiveContext";
 import { setTalaOpenListener } from "./talaOpen";
 import {
   normalizeIntent,
@@ -47,12 +48,24 @@ export function TalaWidget() {
 
   const chat = useTalaChat();
   const voice = useTalaVoice({ active: false });
+  // Live data (knowledge base + rooms/tours/bikes from the database) — fetched
+  // fresh every time the widget opens so admin edits are instantly reflected.
+  const live = useTalaLiveContext();
 
   const waHref = buildWhatsAppLink(data.settings.whatsapp, data.settings.contact, {
     message: `Hi Marina Terrace! I was just chatting with TALA and need a hand: `,
   });
-  const systemPrompt = useMemo(() => buildTalaSystemPrompt(data), [data]);
+  const systemPrompt = useMemo(
+    () => withLiveContext(buildTalaSystemPrompt(data), live.context),
+    [data, live.context],
+  );
   const greeting = useMemo(() => talaGreeting(data), [data]);
+
+  // Refresh live data whenever the widget is opened.
+  useEffect(() => {
+    if (open) void live.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const submit = useCallback(
     async (text: string) => {
