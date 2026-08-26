@@ -31,6 +31,7 @@ import { useTalaChat } from "@/components/tala/useTalaChat";
 import { useTalaVoice } from "@/components/tala/useTalaVoice";
 import { buildTalaSystemPrompt } from "@/components/tala/talaPersona";
 import { useTalaKnowledge } from "@/components/tala/useTalaKnowledge";
+import { useTalaLiveContext, withLiveContext } from "@/components/tala/useTalaLiveContext";
 import { TALA_KOKORO_VOICES } from "@/components/tala/talaConfig";
 
 // ---------------------------------------------------------------------------
