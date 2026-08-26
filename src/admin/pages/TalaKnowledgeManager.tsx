@@ -115,6 +115,69 @@ export default function TalaKnowledgeManager() {
   const downloadAll = () =>
     downloadTextFile("tala-knowledge-export.csv", toKnowledgeCsv(knowledge.entries));
 
+  // ---- Quick Add — paste anything (a policy, a price list, directions,
+  // local tips). Each paragraph separated by a blank line becomes one entry;
+  // TALA knows it on her very next reply.
+  const [quickText, setQuickText] = useState("");
+  const [quickAdding, setQuickAdding] = useState(false);
+
+  const slugify = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4)
+      .join("-") || "note";
+
+  const labelFrom = (text: string) => {
+    const firstSentence = text.split(/[.!?\n]/)[0]?.trim() || text.trim();
+    const words = firstSentence.split(/\s+/).slice(0, 8).join(" ");
+    return words.length > 60 ? `${words.slice(0, 57)}…` : words;
+  };
+
+  const quickAdd = async () => {
+    const paragraphs = quickText
+      .split(/\n\s*\n/)
+      .map((p) => p.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if (!paragraphs.length) {
+      notify("Paste some text first", "info");
+      return;
+    }
+    if (!isSupabaseConnected() || !supabase) {
+      notify("Knowledge base isn't connected right now", "info");
+      return;
+    }
+    setQuickAdding(true);
+    try {
+      const base = knowledge.entries.length * 10;
+      const usedTopics = new Set(knowledge.entries.map((e) => e.topic));
+      const rows = paragraphs.map((body, i) => {
+        let topic = slugify(body);
+        while (usedTopics.has(topic)) topic = `${topic}-${i + 1}`;
+        usedTopics.add(topic);
+        return {
+          topic,
+          label: labelFrom(body),
+          body,
+          tags: "",
+          enabled: true,
+          sort_order: base + i * 10,
+        };
+      });
+      const { error } = await supabase.from("tala_knowledge").insert(rows);
+      if (error) throw error;
+      notify(`TALA learned ${rows.length} new ${rows.length === 1 ? "fact" : "facts"} — live now`);
+      setQuickText("");
+      void knowledge.refresh();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Couldn't save that", "info");
+    } finally {
+      setQuickAdding(false);
+    }
+  };
+
   const handleBulkUploadFile = async (file: File) => {
     const text = await file.text();
     const { rows, errors } = parseKnowledgeCsv(text);
