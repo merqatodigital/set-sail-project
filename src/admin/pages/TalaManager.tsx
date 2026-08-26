@@ -285,9 +285,10 @@ export default function TalaManager() {
     ttsVoiceId: tala.ttsVoiceId || undefined,
   });
   const knowledge = useTalaKnowledge();
+  const live = useTalaLiveContext();
   const systemPrompt = useMemo(
-    () => buildTalaSystemPrompt(data),
-    [data],
+    () => withLiveContext(buildTalaSystemPrompt(data), live.context),
+    [data, live.context],
   );
   const [testMessage, setTestMessage] = useState(
     "What rooms do you have and what's the wifi like?",
