@@ -619,14 +619,30 @@ export async function checkRoomAvailability(
       },
     );
     const conflicts = rows.filter((r) => String(r.room_type) === opts.roomType).length;
-    if (conflicts > 0) {
+
+    // Also check pending booking requests — they hold a tentative room block
+    // so two guests can't book the same room before either is confirmed.
+    const pendingRows = await sbSelect(
+      env,
+      "tala_booking_requests",
+      "id,room_type,check_in,check_out,status",
+      {
+        room_type: `eq.${opts.roomType}`,
+        status: "eq.pending",
+        and: `(check_in.lt.${opts.checkOut},check_out.gt.${opts.checkIn})`,
+      },
+    ).catch(() => []);
+    const pendingConflicts = pendingRows.filter((r) => String(r.room_type) === opts.roomType).length;
+
+    const totalConflicts = conflicts + pendingConflicts;
+    if (totalConflicts > 0) {
       return {
         status: "unavailable",
         roomType: opts.roomType,
         checkIn: opts.checkIn,
         checkOut: opts.checkOut,
-        conflictingBookings: conflicts,
-        message: `${opts.roomType} is not available for ${opts.checkIn} to ${opts.checkOut} (${conflicts} conflicting reservation(s)).`,
+        conflictingBookings: totalConflicts,
+        message: `${opts.roomType} is not available for ${opts.checkIn} to ${opts.checkOut} (${totalConflicts} conflicting reservation(s)).`,
       };
     }
     return {
